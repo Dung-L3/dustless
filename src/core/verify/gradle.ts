@@ -26,29 +26,75 @@ const DISTRIBUTION_URL = /gradle-([0-9]+(?:\.[0-9]+)*(?:-[A-Za-z0-9.]+)?)-(?:bin
 
 const MAX_ENTRIES = 200_000;
 const MAX_DEPTH = 12;
-const HOME_DEPTH = 2;
 const MAX_LISTED = 5;
 
-export const DEFAULT_SEARCH_ROOTS = [
-  "~/Innotech",
-  "~/Personal",
-  "~/Developer",
-  "~/Projects",
-  "~/repos",
-].map(expand);
+const PROJECT_MARKERS = [
+  ".git",
+  "package.json",
+  "pubspec.yaml",
+  "gradlew",
+  "settings.gradle",
+  "settings.gradle.kts",
+];
+
+const SKIP_DIRS = new Set([
+  "Library",
+  "Applications",
+  ".Trash",
+  ".cache",
+  ".npm",
+  ".gradle",
+  ".pub-cache",
+  "node_modules",
+  "Pictures",
+  "Movies",
+  "Music",
+  "Documents",
+  "Desktop",
+  "Downloads",
+  ".cargo",
+  ".rustup",
+  "go",
+  "vendor",
+]);
+
+export async function discoverProjectRoots(home: string = HOME, depth = 5): Promise<string[]> {
+  const found: string[] = [];
+  const walk = async (dir: string, level: number): Promise<void> => {
+    if (level > depth) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const names = new Set(entries.map((e) => e.name));
+    if (PROJECT_MARKERS.some((marker) => names.has(marker))) {
+      found.push(dir);
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+      await walk(join(dir, entry.name), level + 1);
+    }
+  };
+  await walk(home, 1);
+  return found;
+}
 
 type Project = { wrapper?: string; override?: string };
 
 export async function gradleVersionUnused(
   cacheVersion: string,
-  roots: string[] = [...DEFAULT_SEARCH_ROOTS, HOME],
+  roots?: string[],
 ): Promise<VerifyResult> {
   const budget = { left: MAX_ENTRIES };
   const candidates: string[] = [];
-  for (const root of roots) {
+  const searchRoots = roots ?? (await discoverProjectRoots());
+  for (const root of searchRoots) {
     const absolute = resolve(expand(root));
     if (isVendored(absolute)) continue;
-    candidates.push(...(await findCandidates(absolute, root === HOME ? HOME_DEPTH : MAX_DEPTH, budget)));
+    candidates.push(...(await findCandidates(absolute, MAX_DEPTH, budget)));
   }
 
   const projects = new Map<string, Project>();

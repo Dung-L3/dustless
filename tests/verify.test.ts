@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { DEFAULT_SEARCH_ROOTS, gradleVersionUnused } from "../src/core/verify/gradle.ts";
+import { discoverProjectRoots, gradleVersionUnused } from "../src/core/verify/gradle.ts";
 import { findRepoRoot, gitClean } from "../src/core/verify/git.ts";
 import { verify } from "../src/core/verify/index.ts";
 import { isLiveDependencyTree, npmOrPnpmLinked } from "../src/core/verify/node.ts";
@@ -60,10 +60,15 @@ afterAll(async () => {
 });
 
 describe("gradleVersionUnused", () => {
-  test("default roots cover the standard project homes", () => {
-    for (const expected of ["Innotech", "Personal", "Developer", "Projects", "repos"]) {
-      expect(DEFAULT_SEARCH_ROOTS.some((root) => root.endsWith(expected))).toBe(true);
-    }
+  test("roots are discovered from markers, not from hardcoded folder names", async () => {
+    const home = await fixture();
+    await mkdir(join(home, "work/team/api"), { recursive: true });
+    await writeFile(join(home, "work/team/api/package.json"), "{}");
+    await mkdir(join(home, "Documents/scratch/deep/nest"), { recursive: true });
+    await writeFile(join(home, "Documents/scratch/deep/nest/package.json"), "{}");
+    const roots = await discoverProjectRoots(home);
+    expect(roots).toContain(join(home, "work/team/api"));
+    expect(roots.some((root: string) => root.includes("Documents"))).toBe(false);
   });
 
   test("unused cache version is reported safe, used version is not", async () => {

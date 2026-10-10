@@ -23,6 +23,7 @@ const KEY_PATHS = [
 const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
 
   dustless scan                 quét chéo, in ra những gì có thể dọn
+  dustless ui [--port 4173]     mở giao diện web cục bộ
   dustless apply                xóa GREEN, hỏi từng mục YELLOW
   dustless rule list|show|add|validate
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
@@ -34,6 +35,10 @@ Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
 const argv = process.argv.slice(2);
 const args = argv.filter((arg) => !arg.startsWith("--"));
 const flag = (name: string): boolean => argv.includes(`--${name}`);
+const opt = (name: string): string | undefined => {
+  const at = argv.indexOf(`--${name}`);
+  return at >= 0 ? argv[at + 1] : undefined;
+};
 const color = process.stdout.isTTY === true && !process.env["NO_COLOR"];
 const paint = (hue: string, text: string): string => (color ? `\x1b[${hue}m${text}\x1b[0m` : text);
 const bold = (text: string): string => paint("1", text);
@@ -143,6 +148,24 @@ async function askYellow(finding: Finding): Promise<boolean> {
   return /^y/i.test(answer);
 }
 
+async function runUi(): Promise<number> {
+  const { startServer } = await import("./ui/server.ts");
+  const port = Number(opt("port") ?? 4173);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    say("port không hợp lệ (cần 1024-65535)");
+    return 1;
+  }
+  const server = await startServer({ port, open: !flag("no-open") });
+  say(`\n${bold("Dustless")} đang chạy tại ${bold(server.url)}`);
+  say(dim("chỉ nghe trên 127.0.0.1 · nhấn Ctrl+C để dừng\n"));
+  await new Promise<void>((resolve) => {
+    process.once("SIGINT", () => resolve());
+    process.once("SIGTERM", () => resolve());
+  });
+  await server.close();
+  return 0;
+}
+
 async function runRule(sub: string, rest: string[]): Promise<number> {
   if (sub === "list") {
     const rules = await loadRules();
@@ -226,6 +249,7 @@ async function main(): Promise<number> {
   if (command === "apply") return await runApply();
   if (command === "rule") return await runRule(rest[0] ?? "", rest.slice(1));
   if (command === "doctor") return await runDoctor();
+  if (command === "ui") return await runUi();
   if (command === "mcp") {
     await serveMcp();
     return 0;

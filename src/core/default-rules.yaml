@@ -166,9 +166,7 @@
   tier: yellow
   desc: node_modules của project, bỏ qua nếu git còn thay đổi chưa commit
   paths:
-    mac: [~/Innotech/*/*/node_modules, ~/Personal/*/node_modules, ~/Developer/*/*/node_modules]
-    win: ["%USERPRO%/source/repos/*/*/node_modules"]
-    linux: ["~/repos/*/*/node_modules"]
+    all: ["~/*/*/node_modules", "~/*/node_modules", "~/*/*/*/node_modules"]
   requireVerify: git_clean
   minAgeDays: 30
 
@@ -176,7 +174,5 @@
   tier: yellow
   desc: Build output của project, tái tạo được nhưng build lâu
   paths:
-    mac: [~/Innotech/*/*/build, ~/Personal/*/build, ~/Developer/*/*/build]
-    win: ["%USERPRO%/source/repos/*/*/build"]
-    linux: ["~/repos/*/*/build"]
+    all: ["~/*/*/build", "~/*/build", "~/*/*/*/build"]
   minAgeDays: 30
