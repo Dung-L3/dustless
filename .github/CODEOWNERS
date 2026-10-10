@@ -1,0 +1,6 @@
+# Dustless — Code Owners
+#
+# Mặc định, mọi thay đổi đều cần @Dung-L3 review trước khi merge.
+# Đây là rule ở tầng branch protection `require_code_owner_reviews`.
+
+* @Dung-L3
