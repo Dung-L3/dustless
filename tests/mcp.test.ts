@@ -51,10 +51,8 @@ function fakeCore(over: Partial<Core> = {}): Core & { deleted: string[][] } {
 }
 
 type Reply = {
-  jsonrpc: string;
-  id: string | number | null;
+  jsonrpc: string; id: string | number | null; error?: { code: number; message: string };
   result?: { content?: Array<{ text: string }>; isError?: boolean } & Record<string, unknown>;
-  error?: { code: number; message: string };
 };
 
 async function rpc(tools: Tool[], request: Record<string, unknown>): Promise<Reply> {
@@ -62,7 +60,6 @@ async function rpc(tools: Tool[], request: Record<string, unknown>): Promise<Rep
   if (line === null) throw new Error("expected a response, got none");
   return JSON.parse(line) as Reply;
 }
-
 function textOf(reply: Reply): string {
   return reply.result?.content?.[0]?.text ?? "";
 }
@@ -96,7 +93,6 @@ describe("jsonrpc", () => {
     expect(reply.error?.code).toBe(-32601);
     expect(reply.result).toBeUndefined();
   });
-
   test("malformed payloads return -32600 and never throw", async () => {
     for (const bad of [null, [1, 2], "nope", { id: 4 }, { jsonrpc: "2.0", id: 5, method: "" }]) {
       const response = await handleRpc(bad, createTools(fakeCore()));
@@ -104,7 +100,6 @@ describe("jsonrpc", () => {
       expect(response?.error?.code).toBe(-32600);
     }
   });
-
   test("notifications get no response and ping answers", async () => {
     const tools = createTools(fakeCore());
     expect(await handleRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, tools)).toBeNull();
@@ -125,9 +120,8 @@ describe("tools/list", () => {
       for (const [name, property] of Object.entries(schema.properties)) {
         expect(property["type"]).toBeDefined();
         expect(typeof property["description"]).toBe("string");
-        expect(property["description"]).not.toBe("undefined");
         expect(Object.keys(property).length).toBeGreaterThan(1);
-        expect(name.length).toBeGreaterThan(0);
+        expect(name).not.toBe("");
       }
     }
   });
@@ -150,7 +144,6 @@ describe("scan options", () => {
     await rpc(tools, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "scan", arguments: { roots: ["/tmp/x"] } } });
     expect(seen[2]).toEqual({ roots: ["/tmp/x"], minBytes: 0 });
   });
-
   test("rule_id filters findings and reports a miss instead of an empty success", async () => {
     const tools = createTools(fakeCore());
     const hit = await rpc(tools, {
@@ -258,6 +251,9 @@ describe("stdout purity", () => {
   const realOut = process.stdout.write.bind(process.stdout);
   const realErr = process.stderr.write.bind(process.stderr);
   const realConsole = { ...console };
+  const emit = async (tools: Tool[], request: Record<string, unknown>) => {
+    process.stdout.write(encode(await handleRpc(request, tools)) ?? "");
+  };
 
   beforeAll(() => {
     process.stdout.write = ((chunk: string | Uint8Array) => (captured.push(String(chunk)), true)) as typeof process.stdout.write;
@@ -274,34 +270,23 @@ describe("stdout purity", () => {
     captured.length = 0;
     errors.length = 0;
     guardStdout();
-    console.log("stray log line");
-    console.info("stray info line");
-    console.warn("stray warn line");
-    console.error("stray error line");
+    for (const method of ["log", "info", "warn", "error"] as const) console[method](`stray ${method} line`);
     const tools = createTools(fakeCore());
     for (const name of ["doctor", "list_rules", "free_space"]) {
-      process.stdout.write(encode(await handleRpc({
-        jsonrpc: "2.0", id: 1, method: "tools/call", params: { name },
-      }, tools)) ?? "");
+      await emit(tools, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name } });
     }
     expect(captured.join("")).not.toContain("stray");
     expect(errors.join("")).toContain("stray log line");
     for (const line of captured) expect(JSON.parse(line).jsonrpc).toBe("2.0");
   });
-
   test("a real scan tool call emits only valid JSON-RPC on stdout", async () => {
     captured.length = 0;
     const scratch = await mkdtemp(join(tmpdir(), "dustless-mcp-"));
     try {
       const { scan } = await import("../src/core/scan.ts");
       const tools = createTools({ ...fakeCore(), scan });
-      for (const method of ["initialize", "tools/list"]) {
-        process.stdout.write(encode(await handleRpc({ jsonrpc: "2.0", id: 1, method }, tools)) ?? "");
-      }
-      process.stdout.write(encode(await handleRpc({
-        jsonrpc: "2.0", id: 19, method: "tools/call",
-        params: { name: "scan", arguments: { roots: [scratch] } },
-      }, tools)) ?? "");
+      for (const method of ["initialize", "tools/list"]) await emit(tools, { jsonrpc: "2.0", id: 1, method });
+      await emit(tools, { jsonrpc: "2.0", id: 19, method: "tools/call", params: { name: "scan", arguments: { roots: [scratch] } } });
       const lines = captured.join("").split("\n").filter(Boolean);
       expect(lines.length).toBe(3);
       for (const line of lines) expect(JSON.parse(line).jsonrpc).toBe("2.0");
