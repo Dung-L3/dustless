@@ -7,10 +7,10 @@ import { exec, freeSpace } from "./space.ts";
 
 const RETRYABLE = new Set(["EBUSY", "EPERM", "EACCES", "ENOTEMPTY"]);
 const BUSY_NAMES: Record<string, string[]> = {
-  npm: ["npm", "node"],
-  npx: ["npx", "node"],
-  pnpm: ["pnpm", "node"],
-  yarn: ["yarn", "node"],
+  npm: ["npm"],
+  npx: ["npx"],
+  pnpm: ["pnpm"],
+  yarn: ["yarn"],
 };
 
 type Options = {
@@ -63,8 +63,9 @@ async function run(
   }
   const rule = rules.get(finding.ruleId);
   const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
-  if (native && (BUSY_NAMES[native] ?? [native]).some((name) => busy.has(name))) {
-    outcome.detail = `${rule?.nativeCommand} đang chạy`;
+  const watchers = (BUSY_NAMES[native] ?? [native]).filter((name) => busy.has(name));
+  if (native && watchers.length > 0) {
+    outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
   }
   const action = opts.tiers?.[finding.ruleId] ?? (finding.tier === "green" ? "green" : "yellow");
