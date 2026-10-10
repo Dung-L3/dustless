@@ -1,0 +1,21 @@
+{
+  "name": "dustless",
+  "version": "0.1.0",
+  "description": "Cache dọn sạch trên máy dev. Quét chéo trước khi xóa.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "dustless": "./dist/dustless" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "bun build --compile --minify --sourcemap --outfile dist/dustless src/cli.ts",
+    "build:win": "bun build --compile --minify --outfile dist/dustless.exe src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "release": "bun run build && gh release create"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": { "bun": ">=1.3.0" }
+}
