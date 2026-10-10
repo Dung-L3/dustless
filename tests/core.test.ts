@@ -31,12 +31,13 @@ const finding = (path: string, bytes = 1024): Finding => ({
   atime: 0,
   ageDays: 999,
   verified: true,
+  blocked: false,
   note: "",
 });
 
 const report = (findings: Finding[], freeBefore = 0): ScanReport => ({
   findings,
-  totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 } },
+  totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
   reclaimable: 0,
   freeBefore,
   platform: "mac",
@@ -264,5 +265,26 @@ describe("apply", () => {
     expect(result.freed).toBeGreaterThan(0);
     expect(result.freed).toBeLessThan(64 * 1024 * 1024);
     expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+});
+describe("verification block", () => {
+  test("--yes cannot delete a finding whose verification failed", async () => {
+    const victim = join(sandbox, "gradle-cache-in-use");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "junk.bin"), Buffer.alloc(4 * 1024 * 1024, 7));
+    const blocked = {
+      ...finding(victim, 4 * 1024 * 1024),
+      tier: "yellow" as const,
+      verified: false,
+      blocked: true,
+      note: "KHÔNG XÓA: project /x/android uses Gradle 8.14",
+    };
+    const result = await apply(report([blocked]), {
+      assumeYes: true,
+      tiers: { "test.cache": "yellow" },
+    });
+    expect(result.outcomes[0]?.status).toBe("skipped");
+    expect(result.outcomes[0]?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(await exists(victim)).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 export type Platform = "mac" | "win" | "linux";
-export type Tier = "green" | "yellow" | "red";
+export type Tier = "green" | "yellow" | "red" | "blocked";
 
 export type VerifyName =
   | "gradle_version_unused"
@@ -27,6 +27,7 @@ export type Finding = {
   atime: number;
   ageDays: number;
   verified: boolean;
+  blocked: boolean;
   note: string;
 };
 

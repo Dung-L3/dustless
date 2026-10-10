@@ -68,6 +68,7 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
   const notes: string[] = [];
   let tier: Tier = rule.tier;
   let verified = true;
+  let blocked = false;
   if (rule.minAgeDays !== undefined && ageDays < rule.minAgeDays) {
     tier = "yellow";
     notes.push(`mới ${ageDays.toFixed(1)} ngày, rule yêu cầu ≥ ${rule.minAgeDays} ngày`);
@@ -77,7 +78,8 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
     verified = verdict.ok;
     if (!verdict.ok) {
       tier = "yellow";
-      notes.push(verdict.note);
+      blocked = true;
+      notes.push(`KHÔNG XÓA: ${verdict.note}`);
     }
   }
   return {
@@ -90,6 +92,7 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
     atime: tree.atime,
     ageDays,
     verified,
+    blocked,
     note: notes.join(" · "),
   };
 }
@@ -130,8 +133,14 @@ function tally(findings: Finding[]): Record<Tier, TierStat> {
     green: { count: 0, bytes: 0 },
     yellow: { count: 0, bytes: 0 },
     red: { count: 0, bytes: 0 },
+    blocked: { count: 0, bytes: 0 },
   };
   for (const finding of findings) {
+    if (finding.blocked) {
+      totals.blocked.count += 1;
+      totals.blocked.bytes += finding.bytes;
+      continue;
+    }
     const bucket = totals[finding.tier];
     bucket.count += 1;
     bucket.bytes += finding.bytes;

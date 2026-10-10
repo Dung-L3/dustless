@@ -11,8 +11,8 @@ import { diskUsage, freeSpace } from "./core/space.ts";
 import { serveMcp } from "./mcp/server.ts";
 
 const VERSION = "0.1.0";
-const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴" };
-const HUE: Record<Tier, string> = { green: "32", yellow: "33", red: "31" };
+const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴", blocked: "⛔" };
+const HUE: Record<Tier, string> = { green: "32", yellow: "33", red: "31", blocked: "35" };
 const KEY_PATHS = [
   "~/.config/dustless",
   "~/.gradle/caches",

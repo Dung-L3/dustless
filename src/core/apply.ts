@@ -57,6 +57,10 @@ async function run(
     outcome.detail = guard;
     return outcome;
   }
+  if (finding.blocked) {
+    outcome.detail = `KIỆM SOÁT CHẶN: ${finding.note || "kiểm chứng thất bại"}`;
+    return outcome;
+  }
   const rule = rules.get(finding.ruleId);
   const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
   if (native && (BUSY_NAMES[native] ?? [native]).some((name) => busy.has(name))) {
