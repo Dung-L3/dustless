@@ -10,7 +10,7 @@ export type Rule = {
   id: string;
   tier: Tier;
   desc: string;
-  paths: Partial<Record<Platform | "all", string>>;
+  paths: Partial<Record<Platform | "all", string | string[]>>;
   match?: string;
   requireVerify?: VerifyName;
   minAgeDays?: number;

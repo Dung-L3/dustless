@@ -64,7 +64,7 @@ export async function exists(path: string): Promise<boolean> {
 export function pathsForRule(rule: Rule): string[] {
   const patterns = Object.entries(rule.paths)
     .filter(([key]) => key === "all" || key === platform)
-    .map(([, value]) => value)
+    .flatMap(([, value]) => (Array.isArray(value) ? value : [value]))
     .filter((value): value is string => Boolean(value));
   return [...new Set(patterns.map(expand))];
 }

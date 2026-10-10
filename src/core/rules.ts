@@ -43,7 +43,7 @@ function normalize(raw: unknown, file: string): Rule[] {
     const rule = (item ?? {}) as Record<string, unknown>;
     const problem = defect(rule);
     if (problem) broken.push(`${String(rule["id"] ?? "<thiếu id>")}: ${problem}`);
-    else rules.push(...expand(rule as unknown as Rule));
+    else rules.push(rule as unknown as Rule);
   }
   if (broken.length) throw new Error(`${file}: rule không hợp lệ\n  - ${broken.join("\n  - ")}`);
   const seen = new Set<string>();
@@ -66,17 +66,4 @@ function defect(rule: Record<string, unknown>): string | null {
     }
   }
   return null;
-}
-
-function expand(rule: Rule): Rule[] {
-  if (!Object.values(rule.paths).some((value) => Array.isArray(value))) return [rule];
-  const variants: Rule[] = [];
-  let n = 0;
-  for (const [key, value] of Object.entries(rule.paths)) {
-    for (const entry of value as unknown as string[]) {
-      n += 1;
-      variants.push({ ...rule, id: n === 1 ? rule.id : `${rule.id}.${n}`, paths: { [key]: entry } });
-    }
-  }
-  return variants;
 }

@@ -69,19 +69,14 @@ describe("rules", () => {
     expect(rules.map((rule) => rule.id)).toContain("npm.cacache");
   });
 
-  test("array paths become one rule per path", async () => {
+  test("a rule keeps its id when a platform lists several paths", async () => {
     const rules = await loadRules();
     const homebrew = rules.filter((rule) => rule.id.startsWith("homebrew.cache"));
-    expect(homebrew.length).toBe(6);
-    expect(homebrew.map((rule) => rule.id)).toEqual([
-      "homebrew.cache",
-      "homebrew.cache.2",
-      "homebrew.cache.3",
-      "homebrew.cache.4",
-      "homebrew.cache.5",
-      "homebrew.cache.6",
-    ]);
-    expect(homebrew.every((rule) => Object.values(rule.paths).every((p) => typeof p === "string"))).toBe(true);
+    expect(homebrew).toHaveLength(1);
+    const macPaths = homebrew[0]?.paths.mac;
+    expect(Array.isArray(macPaths)).toBe(true);
+    expect(macPaths).toHaveLength(2);
+    expect(rules.some((rule) => /\.\d$/.test(rule.id))).toBe(false);
   });
 
   test("rejects an unknown tier and names the offending id", async () => {
