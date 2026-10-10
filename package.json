@@ -7,7 +7,7 @@
   "bin": { "dustless": "./dist/dustless" },
   "files": ["dist"],
   "scripts": {
-    "build": "bun build --compile --minify --sourcemap ${BUN_TARGET:+--target=$BUN_TARGET} --outfile dist/dustless src/cli.ts",
+    "build": "bun scripts/build.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
