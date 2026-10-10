@@ -9,7 +9,20 @@ Cảm ơn bạn muốn đóng góp. Vài quy ước ngắn để mọi thứ nh�
 3. Commit và push branch của bạn
 4. Mở **Pull Request** vào `main`
 
-Không thể push thẳng lên `main` — nhánh này được bảo vệ. Mọi thay đổi đều cần ít nhất **1 approving review**.
+Không thể push thẳng lên `main` — nhánh này được bảo vệ và áp dụng cả cho admin.
+
+### Vì sao không có yêu cầu review bắt buộc
+
+Cấu hình ban đầu của repo yêu cầu 1 approving review. Điều đó **không thể hoạt động** trên repo cá nhân của một người duy nhất: GitHub không bao giờ cho phép bạn duyệt PR do chính bạn tạo, kể cả khi bạn là owner và admin. Kết quả là `main` bị khoá vĩnh viễn — không ai merge được, kể cả chủ repo.
+
+Vì vậy `required_approving_review_count` được đặt là `0`. PR vẫn bắt buộc, ai cũng không thể push thẳng, nhưng maintainer không bị chặn bởi một quy tắc không thể thỏa mãn.
+
+Khi repo có thêm 2 người đóng góp, hãy bật lại yêu cầu review:
+
+```bash
+gh api -X PUT repos/Dung-L3/dustless/branches/main/protection \
+  -f required_approving_review_count=1
+```
 
 ## Quy tắc vàng
 
