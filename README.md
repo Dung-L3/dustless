@@ -37,7 +37,11 @@ Nếu một rule **không kiểm chứng được**, nó bị hạ từ GREEN xu
 
 ### 3. Mặc định là an toàn
 
-Không có path nào bị động tới nếu không khớp rule nào. Danh sách RED được tích hợp sẵn và không tắt được. Lệnh xóa luôn mặc định là `--dry-run`.
+`scan` chỉ đọc, không bao giờ ghi. `apply` luôn hiện bảng tổng kết và hỏi xác nhận trước khi xóa bất cứ thứ gì — kể cả khi bạn gõ `apply` trần.
+
+Không có path nào bị động tới nếu không khớp rule nào. Danh sách đỏ được tích hợp sẵn và không tắt được.
+
+Quan trọng hơn: **khi kiểm chứng thất bại, mục đó bị khóa cứng**. Cờ `--yes` chỉ bỏ qua câu hỏi, không bao giờ bỏ qua kết luận an toàn. Nếu Dustless tìm thấy project đang dùng cache, nó từ chối xóa và chỉ ra project nào — kể cả khi bạn yêu cầu xóa tất cả.
 
 ## Cách dùng
 

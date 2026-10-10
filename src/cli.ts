@@ -101,9 +101,37 @@ async function runScan(): Promise<number> {
 async function runApply(): Promise<number> {
   const report = await scan();
   if (!flag("json")) printScan(report);
+  const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
+  if (deletable.length === 0) {
+    say("Không có mục nào đủ điều kiện xóa.");
+    return 0;
+  }
+  if (!flag("yes") && !(await confirmSummary(deletable, report.totals.blocked.count))) {
+    say("Đã hủy. Không có gì bị xóa.");
+    return 0;
+  }
   const result = await apply(report, { assumeYes: flag("yes"), onPrompt: askYellow });
   printApply(result.outcomes, result.freed);
   return result.outcomes.some((o) => o.status === "failed") ? 1 : 0;
+}
+
+async function confirmSummary(findings: Finding[], blockedCount: number): Promise<boolean> {
+  const green = findings.filter((f) => f.tier === "green");
+  const yellow = findings.filter((f) => f.tier === "yellow");
+  const total = findings.reduce((sum, f) => sum + f.bytes, 0);
+  say(
+    `\n${bold("Sẽ xóa")} ${green.length} mục tự động (${bytesOf(green.reduce((s, f) => s + f.bytes, 0))})` +
+      `\n${bold("Sẽ hỏi")}  ${yellow.length} mục (${bytesOf(yellow.reduce((s, f) => s + f.bytes, 0))})` +
+      `\n${bold("Tổng")}   ${bytesOf(total)}`,
+  );
+  if (blockedCount > 0) {
+    say(dim(`⛔ ${blockedCount} mục bị chặn, không thể xóa dù bạn xác nhận`));
+  }
+  if (!process.stdin.isTTY || flag("json")) return false;
+  const answer = await createInterface({ input: process.stdin, output: process.stdout }).question(
+    `\nXóa? [y/N] `,
+  );
+  return /^y/i.test(answer);
 }
 
 async function askYellow(finding: Finding): Promise<boolean> {
