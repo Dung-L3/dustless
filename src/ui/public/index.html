@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Dustless — safe disk cleanup for developer machines." />
+    <title>Dustless</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230a0b0e'/%3E%3Cpath d='M9 20.5 15 26l8-13' fill='none' stroke='%237df9c3' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-mark" viewBox="0 0 24 24">
+        <path
+          d="M4 15.5 9.5 21 20 7"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </symbol>
+      <symbol id="i-green" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8" />
+        <path
+          d="m8 12.2 2.7 2.7L16 9.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </symbol>
+      <symbol id="i-yellow" viewBox="0 0 24 24">
+        <path
+          d="M12 3.6 21.2 20H2.8z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linejoin="round"
+        />
+        <path d="M12 9.6v4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        <circle cx="12" cy="16.8" r="1.05" fill="currentColor" />
+      </symbol>
+      <symbol id="i-red" viewBox="0 0 24 24">
+        <path
+          d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linejoin="round"
+        />
+        <path d="m9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+        <path d="M12 12 19 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-broom" viewBox="0 0 24 24">
+        <path
+          d="M14.5 3.2 20.8 9.5M17.6 6.3 9.9 14l-.6 5.3-5.3.6L10.1 14z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path
+          d="M5 12h13m-5.5-5.5L18 12l-5.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24">
+        <path
+          d="m7 10 5 5 5-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7" />
+        <path d="M8.6 10.5V8a3.4 3.4 0 0 1 6.8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
+      </symbol>
+    </svg>
+
+    <div class="grain" aria-hidden="true"></div>
+    <div class="aurora" aria-hidden="true"></div>
+
+    <a class="skip" href="#findings">Skip to findings</a>
+
+    <header class="island">
+      <div class="island__brand">
+        <span class="island__mark"><svg aria-hidden="true"><use href="#i-mark" /></svg></span>
+        <span class="island__name">Dustless</span>
+      </div>
+      <div class="island__langs" role="group" id="langs" aria-label="Language">
+        <button type="button" class="lang" data-lang="vi" aria-pressed="false">VI</button>
+        <button type="button" class="lang" data-lang="en" aria-pressed="false">EN</button>
+        <button type="button" class="lang" data-lang="zh" aria-pressed="false">中文</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="hero" aria-labelledby="heroTitle">
+        <div class="bezel">
+          <div class="core core--figure">
+            <p class="eyebrow" data-i18n="eyebrow">—</p>
+            <h1 class="figure" id="heroTitle">
+              <span class="figure__label" data-i18n="reclaimable">—</span>
+              <span class="figure__value">
+                <span id="reclaimValue">0</span><span class="figure__unit" id="reclaimUnit">GB</span>
+              </span>
+            </h1>
+            <div class="meter" role="img" id="diskMeter" aria-label="Free space">
+              <span class="meter__fill" id="diskFill"></span>
+            </div>
+            <p class="figure__foot">
+              <span class="figure__free"><span data-i18n="freeSpace">—</span>: <b id="freeValue">—</b></span>
+              <span class="figure__sep" aria-hidden="true"></span>
+              <span><span data-i18n="freeMeter">—</span> <b id="usedPercent">—</b></span>
+            </p>
+          </div>
+        </div>
+
+        <div class="bezel bezel--act">
+          <div class="core core--act">
+            <button type="button" class="cta" id="cleanBtn" disabled>
+              <span class="cta__body">
+                <span class="cta__label" data-i18n="cleanNow">—</span>
+                <span class="cta__hint" id="cleanHint">—</span>
+              </span>
+              <span class="cta__icon"><svg aria-hidden="true"><use href="#i-arrow" /></svg></span>
+            </button>
+            <button type="button" class="ghost" id="scanBtn">
+              <svg aria-hidden="true" class="ghost__icon"><use href="#i-scan" /></svg>
+              <span data-i18n="rescan">—</span>
+            </button>
+            <ul class="safety">
+              <li><svg aria-hidden="true"><use href="#i-lock" /></svg><span data-i18n="safetyReadOnly">—</span></li>
+              <li><svg aria-hidden="true"><use href="#i-red" /></svg><span data-i18n="safetyRed">—</span></li>
+              <li><svg aria-hidden="true"><use href="#i-mark" /></svg><span data-i18n="safetyMeasured">—</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="tiers" id="tiers" aria-label="Safety tiers">
+        <article class="bezel" data-tier="green">
+          <div class="core core--tier">
+            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-green" /></svg></span>
+            <h2 class="core__name" data-i18n="green">—</h2>
+            <p class="core__hint" data-i18n="greenHint">—</p>
+            <p class="core__stat"><b id="greenCount">0</b><span id="greenSize">0 GB</span></p>
+          </div>
+        </article>
+        <article class="bezel" data-tier="yellow">
+          <div class="core core--tier">
+            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-yellow" /></svg></span>
+            <h2 class="core__name" data-i18n="yellow">—</h2>
+            <p class="core__hint" data-i18n="yellowHint">—</p>
+            <p class="core__stat"><b id="yellowCount">0</b><span id="yellowSize">0 GB</span></p>
+          </div>
+        </article>
+        <article class="bezel" data-tier="red">
+          <div class="core core--tier">
+            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-red" /></svg></span>
+            <h2 class="core__name" data-i18n="red">—</h2>
+            <p class="core__hint" data-i18n="redHint">—</p>
+            <p class="core__stat"><b id="redCount">0</b><span id="redSize">0 GB</span></p>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel" id="findings" aria-labelledby="findTitle">
+        <div class="panel__head">
+          <h2 class="panel__title" id="findTitle" data-i18n="findings">—</h2>
+          <p class="panel__meta" id="findMeta">—</p>
+        </div>
+
+        <div class="state state--scan" id="scanState">
+          <div class="radar" aria-hidden="true">
+            <span class="radar__sweep"></span>
+            <span class="radar__core"></span>
+          </div>
+          <p class="state__title" id="scanTitle">—</p>
+          <p class="state__body" id="scanBody">—</p>
+          <div class="progress" aria-hidden="true"><span class="progress__sweep"></span></div>
+          <p class="state__clock" id="scanClock">—</p>
+        </div>
+
+        <div class="state state--empty" id="emptyState" hidden>
+          <span class="state__mark"><svg aria-hidden="true"><use href="#i-mark" /></svg></span>
+          <p class="state__title" id="emptyTitle">—</p>
+          <p class="state__body" id="emptyBody">—</p>
+        </div>
+
+        <div class="state state--error" id="errorState" hidden>
+          <span class="state__mark state__mark--red"><svg aria-hidden="true"><use href="#i-red" /></svg></span>
+          <p class="state__title" id="errorTitle">—</p>
+          <p class="state__body" id="errorBody">—</p>
+          <button type="button" class="ghost" id="retryBtn"><span data-i18n="retry">—</span></button>
+        </div>
+
+        <div id="groups" class="groups"></div>
+      </section>
+
+      <section class="panel panel--result" id="result" aria-labelledby="resultTitle" hidden>
+        <div class="panel__head">
+          <h2 class="panel__title" id="resultTitle">—</h2>
+          <p class="panel__meta" id="resultBody">—</p>
+        </div>
+        <div class="outcome">
+          <div class="bezel">
+            <div class="core core--outcome">
+              <p class="figure__label" data-i18n="freed">—</p>
+              <p class="figure__value figure__value--freed">
+                <span id="freedValue">0</span><span class="figure__unit" id="freedUnit">GB</span>
+              </p>
+            </div>
+          </div>
+          <ul class="tally">
+            <li><span data-i18n="deleted">—</span><b id="outDeleted">0</b></li>
+            <li><span data-i18n="skipped">—</span><b id="outSkipped">0</b></li>
+            <li><span data-i18n="failed">—</span><b id="outFailed">0</b></li>
+            <li><span data-i18n="freeNow">—</span><b id="outFree">—</b></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p data-i18n="footerNote">—</p>
+      <p class="foot__meta"><span data-i18n="platform">—</span>: <b id="platformValue">—</b></p>
+    </footer>
+
+    <dialog class="sheet" id="confirm" aria-labelledby="confirmTitle">
+      <form method="dialog" class="sheet__form">
+        <header class="sheet__head">
+          <h2 class="sheet__title" id="confirmTitle" data-i18n="confirmTitle">—</h2>
+          <p class="sheet__body" id="confirmBody">—</p>
+        </header>
+        <div class="sheet__list" id="confirmList"></div>
+        <p class="sheet__total"><span id="confirmTotal">—</span></p>
+        <footer class="sheet__actions">
+          <button type="submit" value="cancel" class="ghost" id="confirmCancel" data-i18n="confirmCancel">—</button>
+          <button type="submit" value="confirm" class="cta cta--compact" id="confirmGo">
+            <span class="cta__body"><span class="cta__label" data-i18n="confirmGo">—</span></span>
+            <span class="cta__icon"><svg aria-hidden="true"><use href="#i-broom" /></svg></span>
+          </button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>
