@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Node / Bun
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Build output
+build/
+out/
+
+# Dustless runtime data (quarantine + local state)
+.quarantine/
+.dustless/
+*.log
+
+# Credentials — never commit
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/*
+!.vscode/settings.json.example
+.idea/
