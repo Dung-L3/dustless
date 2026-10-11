@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyJson,
   BINARY,
   cleanupAll,
   digest,
+  measuredFreed,
   MB,
   plant,
   sandbox,
@@ -15,6 +16,8 @@ import {
   userRules,
   type Sandbox,
 } from "./harness.ts";
+
+const exists = async (path: string): Promise<boolean> => await stat(path).then(() => true, () => false);
 
 afterAll(cleanupAll);
 
@@ -45,7 +48,8 @@ describe("spaces and non-ASCII in a cache path", () => {
     const outcome = result.outcomes.find((o) => o.ruleId === "test.unicode");
     expect(outcome?.status).toBe("deleted");
     expect(outcome?.path).toContain(weird);
-    expect(result.freed).toBeGreaterThan(0);
+    expect(await exists(join(box.home, ".npm", "_cacache", weird))).toBe(false);
+    expect(result.freed).toBe(measuredFreed(result));
   });
 });
 

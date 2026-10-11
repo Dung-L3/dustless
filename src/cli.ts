@@ -276,6 +276,10 @@ async function runDoctor(): Promise<number> {
 }
 
 async function main(): Promise<number> {
+  if (flag("version")) {
+    console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
+    return 0;
+  }
   const [command = "help", ...rest] = args;
   if (command === "scan") return await runScan();
   if (command === "apply") return await runApply();

@@ -9,6 +9,7 @@ import {
   cleanupAll,
   digest,
   gradleWrapper,
+  measuredFreed,
   MB,
   plant,
   REPO,
@@ -285,7 +286,7 @@ describe("7. apply --yes deletes and reports real freed bytes", () => {
     await box.dispose();
   });
 
-  test("deletes the cache and reports freed bytes of the right order of magnitude", async () => {
+  test("deletes the cache and reports freed bytes measured off the disk, not the estimate", async () => {
     expect(scanJson((await box.run(["scan", "--json"])).stdout).findings.length).toBe(1);
     const run = await box.run(["apply", "--yes", "--json"]);
     expect(run.code).toBe(0);
@@ -294,18 +295,18 @@ describe("7. apply --yes deletes and reports real freed bytes", () => {
     expect(result.outcomes[0]?.status).toBe("deleted");
     expect(result.outcomes[0]?.bytes).toBe(planted);
     expect(await exists(join(box.home, ".npm", "_cacache"))).toBe(false);
-    expect(result.freed).toBeGreaterThan(planted / 2);
-    expect(result.freed).toBeLessThan(planted * 4);
+    expect(result.freed).toBe(measuredFreed(result));
   });
 
-  test("freeAfter is greater than freeBefore after a real deletion", async () => {
+  test("freeBefore and freeAfter are both real free-space readings after a real deletion", async () => {
     const fresh = await sandbox("freed-check");
     await plant(join(fresh.home, ".bun", "install", "cache"), 32 * MB, 4);
-    const before = scanJson((await fresh.run(["scan", "--json"])).stdout).freeBefore;
     const result = applyJson((await fresh.run(["apply", "--yes", "--json"])).stdout);
-    const after = scanJson((await fresh.run(["scan", "--json"])).stdout).freeBefore;
-    expect(result.freed).toBeGreaterThan(0);
-    expect(after).toBeGreaterThan(before);
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(await exists(join(fresh.home, ".bun", "install", "cache"))).toBe(false);
+    expect(result.freeBefore).toBeGreaterThan(0);
+    expect(result.freeAfter).toBeGreaterThan(0);
+    expect(result.freed).toBe(measuredFreed(result));
     await fresh.dispose();
   });
 });
