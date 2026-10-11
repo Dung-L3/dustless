@@ -7,9 +7,23 @@ const pkg = JSON.parse(await readFile(join(REPO, "package.json"), "utf8")) as { 
 const version = pkg.version;
 
 const engine = process.env["ENGINE_EXE"] ?? join(REPO, "dist", "dustless.exe");
-const icon = process.env["ICON_FILE"] ?? join(REPO, "dist", "icons", "dustless.ico");
+const icon = process.env["ICON_FILE"] ?? (await firstExisting([
+  join(REPO, "dist", "icons", "dustless.ico"),
+  join(REPO, "brand", "generated", "dustless.ico"),
+]));
 const script = join(REPO, "packaging", "windows", "installer.nsi");
 const outfile = join(REPO, "dist", `Dustless-${version}-setup.exe`);
+
+async function firstExisting(paths: string[]): Promise<string> {
+  for (const path of paths) {
+    try {
+      if ((await stat(path)).size > 0) return path;
+    } catch {
+      continue;
+    }
+  }
+  return paths[0] ?? "";
+}
 
 async function require(path: string, what: string): Promise<void> {
   try {

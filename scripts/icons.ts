@@ -77,6 +77,11 @@ async function buildPngSet(svg: string, dir: string): Promise<void> {
   }
 }
 
+if (process.platform !== "darwin") {
+  console.error("icons.ts needs macOS (qlmanage, sips, iconutil). Committed icons live in brand/generated/.");
+  process.exit(1);
+}
+
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 const dark = join(BRAND, "icon.svg");
