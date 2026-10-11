@@ -14,6 +14,7 @@ import {
   REPO,
   sandbox,
   scanJson,
+  currentPlatform,
   treeBytes,
   VERSION,
   type Sandbox,
@@ -78,7 +79,7 @@ describe("2. scan on an empty sandbox", () => {
     expect(report.reclaimable).toBe(0);
     expect(report.totals["green"]).toEqual({ count: 0, bytes: 0 });
     expect(report.totals["blocked"]).toEqual({ count: 0, bytes: 0 });
-    expect(report.platform).toBe("mac");
+    expect(report.platform).toBe(currentPlatform());
     expect(report.freeBefore).toBeGreaterThan(0);
   });
 

@@ -9,6 +9,7 @@ import {
   plant,
   sandbox,
   scanJson,
+  currentPlatform,
   treeBytes,
   userRules,
   type Sandbox,
@@ -217,7 +218,7 @@ describe("12. doctor", () => {
   test("exits 0 and names the platform and the rule count", async () => {
     const run = await box.run(["doctor"]);
     expect(run.code).toBe(0);
-    expect(run.stdout).toContain("mac");
+    expect(run.stdout).toContain(currentPlatform());
     expect(run.stdout).toMatch(/rules\s+2\d/);
     expect(run.stdout).toContain("~/.npm/_cacache");
   });
