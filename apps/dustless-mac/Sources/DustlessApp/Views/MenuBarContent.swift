@@ -3,21 +3,23 @@ import SwiftUI
 
 struct MenuBarContent: View {
     @ObservedObject var store: ScanStore
-    @ObservedObject var login: LoginItem
     let onOpenWindow: () -> Void
+
+    @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Group {
             if let report = store.report {
-                Text("Free: \(ByteFormat.string(report.freeBefore))")
-                Text("Reclaimable: \(ByteFormat.string(report.reclaimable))")
+                Text(settings.t("freeStat", ["amount": ByteFormat.string(report.freeBefore)]))
+                Text("\(settings.t("reclaimableMetric")): \(ByteFormat.string(report.reclaimable))")
                 Divider()
-                Button(store.phase == .scanning ? "Scanning…" : "Rescan Now") {
+                Button(store.phase == .scanning ? settings.t("scanningShort") : settings.t("rescan")) {
                     Task { await store.rescan() }
                 }
                 .disabled(store.phase == .scanning || store.phase == .resolvingEngine)
 
-                Button("Clean \(store.selectedFindings.count) Items…") {
+                Button(settings.t("cleanItemsMenu", ["n": "\(store.selectedFindings.count)"])) {
                     onOpenWindow()
                     store.showingConfirmation = true
                 }
@@ -26,34 +28,23 @@ struct MenuBarContent: View {
                 Text("Dustless")
                 if let error = store.engineError {
                     Divider()
-                    Text("Engine unavailable")
-                    Text(error)
+                    Text(settings.t("engineUnavailable"))
+                    Text(settings.text(error))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Not scanned yet")
-                    Button("Scan Now") { Task { await store.rescan() } }
+                    Text(settings.t("nothingScanned"))
+                    Button(settings.t("rescan")) { Task { await store.rescan() } }
                         .disabled(store.phase == .scanning)
                 }
             }
 
             Divider()
-            Button("Open Dustless", action: onOpenWindow)
-
-            Toggle("Launch at Login", isOn: Binding(
-                get: { login.state.isEnabled },
-                set: { login.setEnabled($0) }
-            ))
-            .disabled(!login.isSupported)
-
-            if let error = login.lastError {
-                Text(error)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.orange)
-            }
+            Button(settings.t("openDustless"), action: onOpenWindow)
+            Button(settings.t("settingsOpen")) { openSettings() }
 
             Divider()
-            Button("Quit Dustless") { NSApp.terminate(nil) }
+            Button(settings.t("quitDustless")) { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
     }

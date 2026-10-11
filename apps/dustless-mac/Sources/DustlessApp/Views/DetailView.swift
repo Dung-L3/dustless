@@ -5,12 +5,15 @@ struct DetailView: View {
     @ObservedObject var store: ScanStore
     let onClean: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(spacing: 0) {
             if let message = store.busyMessage {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small).scaleEffect(0.7)
-                    Text(message)
+                    Text(settings.text(message))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
@@ -21,7 +24,7 @@ struct DetailView: View {
             }
 
             if let error = store.engineError {
-                EngineErrorView(message: error) { Task { await store.rescan() } }
+                EngineErrorView(message: settings.text(error)) { Task { await store.rescan() } }
             } else if let report = store.report {
                 tierContent(report)
             } else {
@@ -30,7 +33,7 @@ struct DetailView: View {
                 }
             }
         }
-        .animation(reduceMotionDisabled ? nil : .snappy(duration: 0.28), value: store.busyMessage)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: store.busyMessage)
     }
 
     private func tierContent(_ report: ScanReport) -> some View {
@@ -67,10 +70,12 @@ struct DetailView: View {
             }
         } header: {
             HStack {
-                Text("Will be deleted · \(items.count) item\(items.count == 1 ? "" : "s")")
+                Text(settings.t("willDelete"))
+                Text(settings.t("itemMany", ["n": "\(items.count)"]))
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Button("All") { store.selectAll(in: store.tierTab) }
-                Button("None") { store.selectNone(in: store.tierTab) }
+                Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
+                Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
             }
             .font(.system(size: 10.5))
         }
@@ -88,13 +93,13 @@ struct DetailView: View {
             }
         } header: {
             HStack {
-                Text("Locked · never deleted")
+                Text(settings.t("lockedNeverDeleted"))
                 Spacer()
                 Text("\(items.count)")
             }
             .font(.system(size: 10.5))
         } footer: {
-            Text("These failed cross-verification or sit on the permanent red blocklist. They are excluded from the cleanup total and no delete control is offered.")
+            Text(settings.t("lockedSectionFooter"))
         }
     }
 
@@ -102,51 +107,50 @@ struct DetailView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.selectedBytes > 0
-                     ? "\(store.selectedFindings.count) selected · \(ByteFormat.string(store.selectedBytes))"
-                     : "Nothing selected")
+                     ? settings.t("selectedLine", [
+                         "n": "\(store.selectedFindings.count)",
+                         "size": ByteFormat.string(store.selectedBytes),
+                     ])
+                     : settings.t("selectedNone"))
                     .font(.system(size: 12, weight: .medium))
                 if store.selectedLockedCount > 0 {
-                    Text("\(store.selectedLockedCount) locked item\(store.selectedLockedCount == 1 ? "" : "s") excluded")
+                    Text(settings.t("lockedExcluded", ["n": "\(store.selectedLockedCount)"]))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            Button("Review & Delete…", action: onClean)
+            Button(settings.t("reviewAndDelete"), action: onClean)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(!store.canClean)
                 .keyboardShortcut(.return, modifiers: .command)
-                .help("Opens a list of every path that will be deleted (⌘↩)")
+                .help(settings.t("reviewAndDeleteHelp"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
         .accessibilityElement(children: .contain)
     }
-
-    private var reduceMotionDisabled: Bool { !reduceMotion }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 }
 
 struct TierEmptyView: View {
     let tab: TierTab
     let onScan: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: tab.symbolName)
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text(tab.emptyTitle)
-                .font(.system(size: 15, weight: .medium))
-            Text(tab.emptyMessage)
-                .font(.system(size: 12))
+            Text(settings.tabEmpty(tab))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
-            Button("Scan now", action: onScan)
+            Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -157,17 +161,19 @@ struct TierEmptyView: View {
 struct EmptyStateView: View {
     let onScan: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "internaldrive")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("Nothing scanned yet")
+            Text(settings.t("nothingScanned"))
                 .font(.system(size: 15, weight: .medium))
-            Text("Dustless measures developer caches without deleting anything.")
+            Text(settings.t("emptyStateBody"))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-            Button("Scan now", action: onScan)
+            Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -178,12 +184,14 @@ struct EngineErrorView: View {
     let message: String
     let onRetry: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(.orange)
-            Text("The cleanup engine is unavailable")
+            Text(settings.t("engineUnavailable"))
                 .font(.system(size: 15, weight: .semibold))
             Text(message)
                 .font(.system(size: 11.5, design: .monospaced))
@@ -192,9 +200,9 @@ struct EngineErrorView: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 520)
-            Button("Try again", action: onRetry)
+            Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
-            Text("Nothing has been deleted.")
+            Text(settings.t("nothingDeleted"))
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
         }

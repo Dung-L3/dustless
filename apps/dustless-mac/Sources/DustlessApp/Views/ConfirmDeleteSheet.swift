@@ -7,6 +7,7 @@ struct ConfirmDeleteSheet: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -52,10 +53,10 @@ struct ConfirmDeleteSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                Text("Review before deleting")
+                Text(settings.t("reviewBeforeDeleting"))
                     .font(.system(size: 16, weight: .semibold))
             }
-            Text("These \(findings.count) paths will be permanently deleted from this Mac. Blocked and red-tier items are not listed and cannot be deleted.")
+            Text(settings.t("confirmSheetBody", ["n": "\(findings.count)"]))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -67,7 +68,7 @@ struct ConfirmDeleteSheet: View {
     private var footer: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("Total to delete")
+                Text(settings.t("totalLabel"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -75,15 +76,18 @@ struct ConfirmDeleteSheet: View {
                     .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Total to delete \(ByteFormat.string(totalBytes))")
+            .accessibilityLabel(settings.t("confirmTotal", ["amount": ByteFormat.string(totalBytes)]))
 
             HStack(spacing: 10) {
-                Button("Cancel", action: onCancel)
+                Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(role: .destructive, action: onConfirm) {
-                    Text("Delete \(findings.count) Items · \(ByteFormat.string(totalBytes))")
-                        .frame(minWidth: 190)
+                    Text(settings.t("deleteItemsButton", [
+                        "n": "\(findings.count)",
+                        "size": ByteFormat.string(totalBytes),
+                    ]))
+                    .frame(minWidth: 190)
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -97,15 +101,21 @@ struct ApplyResultSheet: View {
     let report: ApplyReport
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Cleanup finished")
+                Text(settings.t("resultTitle"))
                     .font(.system(size: 16, weight: .semibold))
-                Text("Freed \(ByteFormat.string(report.freed)) in \(Duration.milliseconds(report.elapsedMs)). Free space is now \(ByteFormat.string(report.freeAfter)).")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(settings.t("resultSummary", [
+                    "freed": ByteFormat.string(report.freed),
+                    "elapsed": Duration.milliseconds(report.elapsedMs),
+                    "free": ByteFormat.string(report.freeAfter),
+                ]))
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -151,7 +161,7 @@ struct ApplyResultSheet: View {
 
             HStack {
                 Spacer()
-                Button("Done", action: onDismiss)
+                Button(settings.t("done"), action: onDismiss)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(16)

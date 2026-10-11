@@ -5,6 +5,8 @@ struct TierBadge: View {
     let tier: Tier
     var compact = false
 
+    @EnvironmentObject private var settings: AppSettings
+
     private var tint: Color {
         switch tier {
         case .green: .green
@@ -18,9 +20,10 @@ struct TierBadge: View {
         HStack(spacing: 5) {
             Image(systemName: tier.symbolName)
                 .font(.system(size: compact ? 9 : 10, weight: .bold))
-            Text(tier.label)
+            Text(settings.tierLabel(tier))
                 .font(.system(size: compact ? 9 : 10, weight: .heavy))
                 .tracking(0.7)
+                .textCase(.uppercase)
         }
         .foregroundStyle(tint)
         .padding(.horizontal, compact ? 6 : 8)
@@ -31,6 +34,6 @@ struct TierBadge: View {
                 .strokeBorder(tint.opacity(0.28), lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tier.label): \(tier.explanation)")
+        .accessibilityLabel("\(settings.tierLabel(tier)): \(settings.tierExplanation(tier))")
     }
 }

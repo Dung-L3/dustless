@@ -14,8 +14,8 @@ final class ScanStore: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
     @Published private(set) var lastApply: ApplyReport?
-    @Published private(set) var engineError: String?
-    @Published private(set) var busyMessage: String?
+    @Published private(set) var engineError: L10nText?
+    @Published private(set) var busyMessage: L10nText?
     @Published var showingConfirmation = false
     @Published var showingApplyResult = false
     @Published var selection: Set<String> = []
@@ -46,12 +46,12 @@ final class ScanStore: ObservableObject {
         guard phase != .scanning && phase != .resolvingEngine else { return }
         phase = .resolvingEngine
         engineError = nil
-        busyMessage = "Locating the dustless engine…"
+        busyMessage = L10nText("busyLocating")
         do {
             let cli = try DustlessCLI.resolve()
             self.cli = cli
             phase = .scanning
-            busyMessage = "Measuring caches across every rule…"
+            busyMessage = L10nText("busyScanning")
             let report = try await cli.scan()
             self.report = report
             selection = report.initialSelection
@@ -71,7 +71,7 @@ final class ScanStore: ObservableObject {
         guard let cli, !selectedFindings.isEmpty else { return }
         showingConfirmation = false
         phase = .scanning
-        busyMessage = "Deleting \(selectedFindings.count) items…"
+        busyMessage = L10nText("busyDeleting", ["n": "\(selectedFindings.count)"])
         do {
             let result = try await cli.apply()
             lastApply = result
@@ -107,7 +107,9 @@ final class ScanStore: ObservableObject {
         selection.subtract(tab.findings(in: report).filter(\.isDeletableByEngine).map(\.id))
     }
 
-    static func describe(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    static func describe(_ error: Error) -> L10nText {
+        if let error = error as? DustlessError { return error.localized }
+        if let error = error as? BinaryLocationError { return error.localized }
+        return L10nText("errGeneric", ["detail": error.localizedDescription])
     }
 }
