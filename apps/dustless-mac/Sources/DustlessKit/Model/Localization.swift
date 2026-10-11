@@ -209,6 +209,10 @@ public enum L10n {
         "errUnreadable": "Engine dustless trả về dữ liệu app không đọc được: {reason}",
         "errNotFound": "Không tìm thấy engine dustless. Đã tìm: {list}. Tạo bằng `bun run build`, rồi chạy scripts/bundle.sh để chép vào Dustless.app.",
         "errNotExecutable": "Thấy dustless tại {path} nhưng không thực thi được. Chạy: chmod +x {path}",
+
+        // native app — row actions
+        "revealInFinder": "Hiện trong Finder",
+        "copyPath": "Sao chép đường dẫn",
     ]
 
     static let en: [String: String] = [
@@ -349,6 +353,10 @@ public enum L10n {
         "errUnreadable": "The dustless engine returned output this app could not read: {reason}",
         "errNotFound": "The dustless engine was not found. Searched: {list}. Build it with `bun run build`, then re-run scripts/bundle.sh to copy it into Dustless.app.",
         "errNotExecutable": "Found dustless at {path} but it is not executable. Run: chmod +x {path}",
+
+        // native app — row actions
+        "revealInFinder": "Reveal in Finder",
+        "copyPath": "Copy Path",
     ]
 
     static let zh: [String: String] = [
@@ -489,5 +497,9 @@ public enum L10n {
         "errUnreadable": "dustless 引擎返回了此应用无法读取的数据：{reason}",
         "errNotFound": "未找到 dustless 引擎。已搜索：{list}。请先运行 `bun run build`，再运行 scripts/bundle.sh 复制到 Dustless.app。",
         "errNotExecutable": "在 {path} 找到 dustless，但不可执行。请运行：chmod +x {path}",
+
+        // native app — row actions
+        "revealInFinder": "在访达中显示",
+        "copyPath": "复制路径",
     ]
 }
