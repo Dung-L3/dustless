@@ -86,7 +86,7 @@ Section "${APP_NAME}" SecMain
 SectionEnd
 
 Section "Add to PATH" SecPath
-  ReadRegExpandStr $0 HKCU "Environment" "PATH"
+  ReadRegStr $0 HKCU "Environment" "PATH"
   ${StrStr} $1 "$0" "$INSTDIR"
   ${If} $1 == ""
     ${If} $0 == ""
@@ -116,7 +116,7 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 
-  ReadRegExpandStr $0 HKCU "Environment" "PATH"
+  ReadRegStr $0 HKCU "Environment" "PATH"
   ${UnStrRep} $0 "$0" ";$INSTDIR" ""
   ${UnStrRep} $0 "$0" "$INSTDIR;" ""
   ${UnStrRep} $0 "$0" "$INSTDIR" ""
