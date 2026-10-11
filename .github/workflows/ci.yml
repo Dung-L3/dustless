@@ -26,9 +26,6 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run build
-      - name: Ad-hoc sign so macOS executes the freshly built binary
-        if: runner.os == 'macOS'
-        run: codesign --force --sign - dist/dustless
       - name: Smoke test the compiled binary
         shell: bash
         run: |
