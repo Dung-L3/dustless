@@ -200,6 +200,26 @@ Mọi response còn mang `default-src 'none'; script-src 'self'; base-uri 'none'
 
 Các route: `GET /api/scan`, `GET /api/rules`, `GET /api/space`, `POST /api/apply`.
 
+## macOS app
+
+`apps/dustless-mac` là ứng dụng SwiftUI native nhúng engine Dustless. Chạy trên macOS 14+, được đóng gói như menu-bar extra (`LSUIElement`) có cửa sổ chính.
+
+**Cửa sổ** — `NavigationSplitView` sidebar + detail (`DustlessApp.swift:125-140`). Sidebar (`SidebarView.swift`) hiển thị dung lượng trống, byte có thể thu hồi, và ba tab mức: **GREEN**, **YELLOW**, **LOCKED** (BLOCKED). Mỗi tab hiện số lượng và dung lượng. Detail view (`DetailView.swift`) có ô tìm/lọc, nút **Tất cả / Không** cho GREEN và YELLOW, và thanh hành động dưới cùng hiển thị byte đã chọn cùng nút **Xem lại & Xóa** (Cmd-Return). Mục LOCKED được liệt kê nhưng bị vô hiệu và không bao giờ bị xóa. Một lần scan bắt đầu với chọn rỗng — không có gì được chọn trước.
+
+**Dòng finding** (`FindingRow.swift:85-93`) — menu ngữ cảnh: **Hiện trong Finder**, **Sao chép đường dẫn**.
+
+**Trang xác nhận** (`ConfirmDeleteSheet.swift:14-70`) — liệt kê từng mục đã chọn kèm đường dẫn, rule id, mô tả, dung lượng, và một dòng nguồn gốc trên mỗi mục (trường `note`: ví dụ "rule yêu cầu ≥90 ngày, file mới nhất 0 ngày" hoặc "BLOCKED, ghim bởi /Users/x/repo"). Menu ngữ cảnh giống nhau trên từng dòng.
+
+**Cài đặt** (`SettingsView.swift`, mở qua biểu tượng bánh răng trên toolbar hoặc Cmd-,) — Ngôn ngữ (vi/en/zh), Chủ đề (Hệ thống/Sáng/Tối), **Khởi động cùng đăng nhập**. Ngôn ngữ và chủ đề áp dụng ngay lập tức, không cần khởi động lại. Khởi động cùng đăng nhập nằm trong Cài đặt, không phải sidebar (theo R8 trong `docs/RESEARCH-CLEANER-APPS.md:127-131`).
+
+**Menu bar extra** (`DustlessApp.swift:44-50`) — hiển thị dung lượng trống và byte có thể thu hồi; hành động: **Quét lại**, **Mở cửa sổ**, **Cài đặt**, **Thoát**.
+
+**Phím tắt** (`DustlessApp.swift:25-35`, `DetailView.swift:142`) — Cmd-R: quét lại; Cmd-1/2/3: tab GREEN/YELLOW/LOCKED; Cmd-,: Cài đặt; Cmd-Return: Xem lại & Xóa.
+
+**Build & chạy** — `bun run build` sinh ra `dist/dustless` (engine). Sau đó `bun run bundle:mac` gói thành `dist/Dustless.app` với engine nhúng tại `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`). Script chạy `swift build -c release`, sao chép binary và engine, ghi `Info.plist`, và ký ad-hoc bundle. Tối thiểu macOS 14.0 (`Info.plist:24`).
+
+**Căn cứ thiết kế** — Trục mức (không phải danh mục toolchain) là điều hướng chính vì kết luận an toàn mới chặn hành động phá hủy (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`). Con số tiêu đề là tổng *đã chọn*, cập nhật theo chọn lọc (R2). Mục bị khóa có toàn bộ khung nhìn kèm lý do kiểm chứng thất bại (R3). Trang xác nhận cho thấy lý do quyết định trên từng mục (R5). Không chọn trước — fail-closed theo thiết kế (R4 mục 3). Cài đặt tách khỏi điều hướng chính (R8).
+
 ## AI agent / MCP
 
 `dustless mcp` nói chuyện MCP qua stdio. Tài liệu đầy đủ, cấu hình client cho Claude Code, opencode, Cursor và VS Code, cùng một hội thoại mẫu: **[docs/MCP.md](docs/MCP.md)**. Năm tool: `scan`, `apply`, `list_rules`, `free_space`, `doctor`.

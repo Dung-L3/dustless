@@ -198,6 +198,26 @@ The last two are why a random web page cannot delete your caches while the UI is
 
 Routes: `GET /api/scan`, `GET /api/rules`, `GET /api/space`, `POST /api/apply`.
 
+## macOS app
+
+`apps/dustless-mac` is a native SwiftUI app that embeds the Dustless engine. It runs on macOS 14+ and is built as a menu-bar extra (`LSUIElement`) with a main window.
+
+**Window** — `NavigationSplitView` sidebar + detail (`DustlessApp.swift:125-140`). The sidebar (`SidebarView.swift`) shows free space, reclaimable bytes, and three tier tabs: **GREEN**, **YELLOW**, **LOCKED** (BLOCKED). Each tab shows count and bytes. The detail view (`DetailView.swift`) has a search/filter field, **All / None** buttons for GREEN and YELLOW, and a bottom action bar with selected bytes and **Review & Delete** (Cmd-Return). LOCKED items are listed but disabled and never deleted. A scan starts with an empty selection — nothing is pre-selected.
+
+**Finding row** (`FindingRow.swift:85-93`) — context menu: **Reveal in Finder**, **Copy Path**.
+
+**Confirm sheet** (`ConfirmDeleteSheet.swift:14-70`) — lists every selected item with path, rule id, description, size, and a per-item provenance line (the `note` field: e.g. "rule requires ≥90 days, newest file is 0 days old" or "BLOCKED, pinned by /Users/x/repo"). Same context menu on each row.
+
+**Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Launch at login**. Language and theme apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
+
+**Menu bar extra** (`DustlessApp.swift:44-50`) — shows free space and reclaimable bytes; actions: **Rescan**, **Open Window**, **Settings**, **Quit**.
+
+**Keyboard shortcuts** (`DustlessApp.swift:25-35`, `DetailView.swift:142`) — Cmd-R: rescan; Cmd-1/2/3: GREEN/YELLOW/LOCKED tabs; Cmd-,: Settings; Cmd-Return: Review & Delete.
+
+**Build & run** — `bun run build` produces `dist/dustless` (the engine). Then `bun run bundle:mac` assembles `dist/Dustless.app` with the engine embedded at `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`). The script runs `swift build -c release`, copies the binary and engine, writes `Info.plist`, and ad-hoc signs the bundle. Minimum macOS 14.0 (`Info.plist:24`).
+
+**Design rationale** — The tier axis (not toolchain category) is the primary navigation because the safety verdict gates the destructive act (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`). The headline number is the *selected* total, live to selection (R2). Locked items get a full view with the failed verification reason (R3). The confirm sheet shows the deciding reason per item (R5). No pre-selection — fail-closed by design (R4 item 3). Settings off the main nav (R8).
+
 ## AI agent / MCP
 
 `dustless mcp` speaks MCP over stdio. Full documentation, client configs for Claude Code, opencode, Cursor and VS Code, and a worked conversation: **[docs/MCP.md](docs/MCP.md)**. Five tools: `scan`, `apply`, `list_rules`, `free_space`, `doctor`.
