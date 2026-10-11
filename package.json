@@ -10,7 +10,11 @@
     "build": "bun scripts/build.ts",
     "test": "bun test",
     "test:ui": "bun test tests/e2e-ui",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bundle:mac": "bun scripts/bundle-macos.ts",
+    "dmg": "bun scripts/make-dmg.ts",
+    "package:win": "bun scripts/package-win.ts",
+    "package": "bun scripts/package.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",
