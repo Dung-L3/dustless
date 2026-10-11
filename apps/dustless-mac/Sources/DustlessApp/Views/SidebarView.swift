@@ -8,7 +8,7 @@ struct SidebarView: View {
     let onClean: () -> Void
 
     var body: some View {
-        List {
+        List(selection: $store.tierTab) {
             Section("Storage") {
                 Label("Free space", systemImage: "internaldrive")
                     .badge(ByteFormat.string(store.report?.freeBefore ?? 0))
@@ -18,10 +18,10 @@ struct SidebarView: View {
 
             if let report = store.report {
                 Section("Tiers") {
-                    tierRow("Safe", .green, count: report.totals.green.count, bytes: report.totals.green.bytes)
-                    tierRow("Review", .yellow, count: report.totals.yellow.count, bytes: report.totals.yellow.bytes)
-                    tierRow("Protected", .red, count: report.totals.red.count, bytes: report.totals.red.bytes)
-                    tierRow("Locked", .blocked, count: report.totals.blocked.count, bytes: report.totals.blocked.bytes)
+                    ForEach(TierTab.allCases) { tab in
+                        tierRow(tab, report: report)
+                            .tag(tab)
+                    }
                 }
             }
 
@@ -69,27 +69,24 @@ struct SidebarView: View {
         .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 260)
     }
 
-    private func tierRow(_ title: String, _ tier: Tier, count: Int, bytes: UInt64) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: tier.symbolName)
+    private func tierRow(_ tab: TierTab, report: ScanReport) -> some View {
+        let items = tab.findings(in: report)
+        let bytes = items.reduce(0) { $0 + $1.bytes }
+        return HStack(spacing: 6) {
+            Image(systemName: tab.symbolName)
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(tint(for: tier))
-            Text(title)
+                .foregroundStyle(tab.tint)
+            Text(tab.title)
             Spacer(minLength: 4)
+            Text("\(items.count)")
+                .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(items.isEmpty ? Color.secondary.opacity(0.7) : tab.tint)
             Text(ByteFormat.string(bytes))
                 .font(.system(size: 10.5, design: .rounded).monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(count) items, \(ByteFormat.string(bytes))")
-    }
-
-    private func tint(for tier: Tier) -> Color {
-        switch tier {
-        case .green: .green
-        case .yellow: .orange
-        case .red: .red
-        case .blocked: .secondary
-        }
+        .accessibilityLabel("\(tab.title): \(items.count) items, \(ByteFormat.string(bytes))")
+        .accessibilityAddTraits(store.tierTab == tab ? [.isSelected] : [])
     }
 }
