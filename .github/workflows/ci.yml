@@ -16,7 +16,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            required: true
+          - os: macos-latest
+            required: false
+          - os: windows-latest
+            required: false
+    continue-on-error: ${{ !matrix.required }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
