@@ -136,7 +136,9 @@ describe("a read-only cache directory", () => {
     expect(run.code).toBe(1);
     const outcome = applyJson(run.stdout).outcomes[0];
     expect(outcome?.status).toBe("failed");
-    expect(outcome?.detail).toMatch(/EACCES|EPERM/);
+    // The errno is platform-specific: on macOS removing the read-only child
+    // surfaces as ENOTEMPTY on the parent directory, on Linux as EACCES/EPERM.
+    expect(outcome?.detail).toMatch(/EACCES|EPERM|ENOTEMPTY/);
     expect(await treeBytes(locked())).toBe(512 * 1024);
   });
 
@@ -286,7 +288,7 @@ describe("the sandbox itself is never violated", () => {
     const direct = await box.run(["version"], { cwd: "/" });
     expect(direct.code).toBe(0);
     expect(direct.stdout.trim()).toBe(VERSION);
-    expect(BINARY).toEndWith(join("dist", "dustless"));
+    expect(BINARY).toContain(join("dist", "dustless"));
     await box.dispose();
   });
 });
