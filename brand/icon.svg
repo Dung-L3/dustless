@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dustless">
+  <defs>
+    <linearGradient id="leaf" x1="0.15" y1="1" x2="0.85" y2="0">
+      <stop offset="0" stop-color="#1f9d5f"/>
+      <stop offset="1" stop-color="#7df9c3"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="#0a0b0e"/>
+  <path d="M150 404 C170 300 214 214 400 112 C404 300 306 404 150 404 Z" fill="url(#leaf)"/>
+  <path d="M150 404 L96 452" stroke="#1f9d5f" stroke-width="22" stroke-linecap="round"/>
+  <path d="M222 300 L266 342 L330 264" fill="none" stroke="#0a0b0e" stroke-width="32"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
