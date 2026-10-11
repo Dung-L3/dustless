@@ -11,6 +11,7 @@ import {
   sandbox,
   scanJson,
   treeBytes,
+  VERSION,
   userRules,
   type Sandbox,
 } from "./harness.ts";
@@ -280,7 +281,7 @@ describe("the sandbox itself is never violated", () => {
     const box = await sandbox("binary");
     const direct = await box.run(["version"], { cwd: "/" });
     expect(direct.code).toBe(0);
-    expect(direct.stdout.trim()).toBe("0.1.0");
+    expect(direct.stdout.trim()).toBe(VERSION);
     expect(BINARY).toEndWith(join("dist", "dustless"));
     await box.dispose();
   });

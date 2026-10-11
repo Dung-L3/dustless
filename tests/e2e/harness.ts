@@ -8,7 +8,9 @@ export const REPO = resolve(import.meta.dir, "..", "..");
 export const BINARY = join(REPO, "dist", "dustless");
 export const DAY = 86_400_000;
 export const MB = 1024 * 1024;
-export const VERSION = "0.1.0";
+export const VERSION = JSON.parse(
+  await readFile(join(REPO, "package.json"), "utf8"),
+).version as string;
 
 const TMP = resolve(tmpdir());
 const TIMEOUT_MS = 60_000;
