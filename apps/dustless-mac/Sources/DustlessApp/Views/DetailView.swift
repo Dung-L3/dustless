@@ -8,6 +8,8 @@ struct DetailView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var searchQuery = ""
+
     var body: some View {
         VStack(spacing: 0) {
             if let message = store.busyMessage {
@@ -37,25 +39,38 @@ struct DetailView: View {
     }
 
     private func tierContent(_ report: ScanReport) -> some View {
-        let items = store.tierTab.findings(in: report)
+        let allItems = store.tierTab.findings(in: report)
+        let filteredItems = filteredFindings(allItems)
         return VStack(spacing: 0) {
-            if items.isEmpty {
+            if allItems.isEmpty {
                 TierEmptyView(tab: store.tierTab) {
                     Task { await store.rescan() }
                 }
+            } else if filteredItems.isEmpty && !searchQuery.isEmpty {
+                NoMatchesView()
             } else {
                 List {
                     if store.tierTab == .locked {
-                        lockedSection(items)
+                        lockedSection(filteredItems)
                     } else {
-                        deletableSection(items)
+                        deletableSection(filteredItems)
                     }
                 }
                 .listStyle(.inset)
+                .searchable(text: $searchQuery, prompt: settings.t("searchFindings"))
             }
 
             Divider()
             actionBar
+        }
+    }
+
+    private func filteredFindings(_ items: [Finding]) -> [Finding] {
+        guard !searchQuery.isEmpty else { return items }
+        let query = searchQuery.lowercased()
+        return items.filter { finding in
+            finding.ruleId.lowercased().contains(query) ||
+            finding.path.lowercased().contains(query)
         }
     }
 
@@ -152,6 +167,25 @@ struct TierEmptyView: View {
                 .frame(maxWidth: 420)
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct NoMatchesView: View {
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text(settings.t("noMatches"))
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
