@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct DustlessApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = ScanStore()
     @StateObject private var login = LoginItem()
 
@@ -10,6 +11,7 @@ struct DustlessApp: App {
         WindowGroup("Dustless") {
             RootView(store: store, login: login)
                 .frame(minWidth: 940, minHeight: 560)
+                .background(WindowCapture())
                 .task {
                     login.refresh()
                     await store.rescan()
@@ -22,17 +24,84 @@ struct DustlessApp: App {
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(store.phase == .scanning)
             }
+            CommandMenu("Go") {
+                ForEach(TierTab.allCases) { tab in
+                    Button("\(tab.title) Tier") { store.tierTab = tab }
+                        .keyboardShortcut(tab.shortcut)
+                }
+            }
         }
 
         MenuBarExtra {
-            MenuBarContent(store: store, login: login) {
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
-            }
+            MenuBarContent(store: store, login: login, onOpenWindow: openMainWindow)
         } label: {
-            Image(systemName: store.report.map { $0.reclaimable > 0 ? "sparkles" : "checkmark.circle" } ?? "internaldrive")
+            MenuBarLabel()
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+struct MenuBarLabel: View {
+    var body: some View {
+        if let image = MenuBarIcon.image {
+            Image(nsImage: image)
+        } else {
+            Image(systemName: "leaf.fill")
+        }
+    }
+}
+
+@MainActor
+enum MenuBarIcon {
+    static let image: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = true
+        image.accessibilityDescription = "Dustless"
+        return image
+    }()
+}
+
+@MainActor
+func openMainWindow() {
+    NSApp.activate(ignoringOtherApps: true)
+    if let window = MainWindowTracker.shared.window {
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
+    } else {
+        NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
+    }
+    NSApp.activate(ignoringOtherApps: true)
+}
+
+@MainActor
+final class MainWindowTracker {
+    static let shared = MainWindowTracker()
+    weak var window: NSWindow?
+}
+
+final class WindowCaptureView: NSView {
+    override func viewDidMoveToWindow() {
+        MainWindowTracker.shared.window = window
+    }
+}
+
+struct WindowCapture: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { WindowCaptureView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let window = nsView.window {
+            MainWindowTracker.shared.window = window
+        }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { openMainWindow() }
+        return true
     }
 }
 
@@ -45,7 +114,7 @@ struct RootView: View {
             SidebarView(
                 store: store,
                 login: login,
-                onOpenWindow: openWindow,
+                onOpenWindow: openMainWindow,
                 onClean: { store.showingConfirmation = true }
             )
         } detail: {
@@ -73,14 +142,5 @@ struct RootView: View {
                 ApplyResultSheet(report: report) { store.showingApplyResult = false }
             }
         }
-    }
-
-    private func openWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows where window.isVisible {
-            window.makeKeyAndOrderFront(nil)
-            return
-        }
-        NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
     }
 }

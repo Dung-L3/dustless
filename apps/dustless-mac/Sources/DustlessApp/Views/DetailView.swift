@@ -5,9 +5,6 @@ struct DetailView: View {
     @ObservedObject var store: ScanStore
     let onClean: () -> Void
 
-    private var deletable: [Finding] { store.report?.deletable ?? [] }
-    private var locked: [Finding] { store.report?.locked ?? [] }
-
     var body: some View {
         VStack(spacing: 0) {
             if let message = store.busyMessage {
@@ -25,64 +22,30 @@ struct DetailView: View {
 
             if let error = store.engineError {
                 EngineErrorView(message: error) { Task { await store.rescan() } }
-            } else if store.report == nil {
+            } else if let report = store.report {
+                tierContent(report)
+            } else {
                 EmptyStateView {
                     Task { await store.rescan() }
                 }
-            } else {
-                listContent
             }
         }
         .animation(reduceMotionDisabled ? nil : .snappy(duration: 0.28), value: store.busyMessage)
     }
 
-    private var listContent: some View {
-        VStack(spacing: 0) {
-            if deletable.isEmpty && locked.isEmpty {
-                EmptyStateView {
+    private func tierContent(_ report: ScanReport) -> some View {
+        let items = store.tierTab.findings(in: report)
+        return VStack(spacing: 0) {
+            if items.isEmpty {
+                TierEmptyView(tab: store.tierTab) {
                     Task { await store.rescan() }
                 }
             } else {
                 List {
-                    if !deletable.isEmpty {
-                        Section {
-                            ForEach(deletable) { finding in
-                                FindingRow(
-                                    finding: finding,
-                                    isSelected: store.selection.contains(finding.id),
-                                    onToggle: { store.toggle(finding) }
-                                )
-                            }
-                        } header: {
-                            HStack {
-                                Text("Will be deleted")
-                                Spacer()
-                                Button("All") { store.selectAllDeletable() }
-                                Button("None") { store.selectNone() }
-                            }
-                            .font(.system(size: 10.5))
-                        }
-                    }
-
-                    if !locked.isEmpty {
-                        Section {
-                            ForEach(locked) { finding in
-                                FindingRow(
-                                    finding: finding,
-                                    isSelected: false,
-                                    onToggle: {}
-                                )
-                                .disabled(true)
-                            }
-                        } header: {
-                            HStack {
-                                Text("Locked · never deleted")
-                                Spacer()
-                                Text("\(locked.count)")
-                            }
-                        } footer: {
-                            Text("These failed cross-verification or sit on the permanent red blocklist. They are excluded from the cleanup total and no delete control is offered.")
-                        }
+                    if store.tierTab == .locked {
+                        lockedSection(items)
+                    } else {
+                        deletableSection(items)
                     }
                 }
                 .listStyle(.inset)
@@ -90,6 +53,48 @@ struct DetailView: View {
 
             Divider()
             actionBar
+        }
+    }
+
+    private func deletableSection(_ items: [Finding]) -> some View {
+        Section {
+            ForEach(items) { finding in
+                FindingRow(
+                    finding: finding,
+                    isSelected: store.selection.contains(finding.id),
+                    onToggle: { store.toggle(finding) }
+                )
+            }
+        } header: {
+            HStack {
+                Text("Will be deleted · \(items.count) item\(items.count == 1 ? "" : "s")")
+                Spacer()
+                Button("All") { store.selectAll(in: store.tierTab) }
+                Button("None") { store.selectNone(in: store.tierTab) }
+            }
+            .font(.system(size: 10.5))
+        }
+    }
+
+    private func lockedSection(_ items: [Finding]) -> some View {
+        Section {
+            ForEach(items) { finding in
+                FindingRow(
+                    finding: finding,
+                    isSelected: false,
+                    onToggle: {}
+                )
+                .disabled(true)
+            }
+        } header: {
+            HStack {
+                Text("Locked · never deleted")
+                Spacer()
+                Text("\(items.count)")
+            }
+            .font(.system(size: 10.5))
+        } footer: {
+            Text("These failed cross-verification or sit on the permanent red blocklist. They are excluded from the cleanup total and no delete control is offered.")
         }
     }
 
@@ -123,6 +128,30 @@ struct DetailView: View {
     private var reduceMotionDisabled: Bool { !reduceMotion }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+}
+
+struct TierEmptyView: View {
+    let tab: TierTab
+    let onScan: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: tab.symbolName)
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text(tab.emptyTitle)
+                .font(.system(size: 15, weight: .medium))
+            Text(tab.emptyMessage)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            Button("Scan now", action: onScan)
+                .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
 }
 
 struct EmptyStateView: View {

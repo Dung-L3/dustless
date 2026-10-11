@@ -6,6 +6,7 @@ import { APP_SRC, DIST, fail, readVersion, run, runInherit } from "./lib.ts";
 const APP = join(DIST, "Dustless.app");
 const ENGINE = join(DIST, "dustless");
 const ICON = join(DIST, "icons", "dustless.icns");
+const MENUBAR_ICON = join(APP_SRC, "Assets", "MenuBarIcon.png");
 
 function infoPlist(version: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -32,6 +33,7 @@ const version = await readVersion();
 
 if (!existsSync(ENGINE)) fail(`missing ${ENGINE} — run \`bun run build\` first`);
 if (!existsSync(ICON)) fail(`missing ${ICON} — regenerate icons first`);
+if (!existsSync(MENUBAR_ICON)) fail(`missing ${MENUBAR_ICON} — the menu bar template image is committed under apps/dustless-mac/Assets`);
 
 const started = Date.now();
 
@@ -50,6 +52,7 @@ await mkdir(join(APP, "Contents", "Resources"), { recursive: true });
 await copyFile(swiftBin, join(APP, "Contents", "MacOS", "Dustless"));
 await copyFile(ENGINE, join(APP, "Contents", "Resources", "dustless"));
 await copyFile(ICON, join(APP, "Contents", "Resources", "Dustless.icns"));
+await copyFile(MENUBAR_ICON, join(APP, "Contents", "Resources", "MenuBarIcon.png"));
 
 await chmod(join(APP, "Contents", "MacOS", "Dustless"), 0o755);
 await chmod(join(APP, "Contents", "Resources", "dustless"), 0o755);
