@@ -1,5 +1,6 @@
 import DustlessKit
 import SwiftUI
+import AppKit
 
 struct ConfirmDeleteSheet: View {
     let findings: [Finding]
@@ -38,6 +39,16 @@ struct ConfirmDeleteSheet: View {
                         }
                         .padding(.vertical, 7)
                         .padding(.horizontal, 14)
+                        .contentShape(.rect)
+                        .contextMenu {
+                            Button(settings.t("revealInFinder")) {
+                                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: finding.path)])
+                            }
+                            Button(settings.t("copyPath")) {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(finding.path, forType: .string)
+                            }
+                        }
                         Divider().opacity(0.4)
                     }
                 }
