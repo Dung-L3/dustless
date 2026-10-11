@@ -41,3 +41,18 @@ jobs:
           $BIN scan --json
           $BIN rule list --json
           $BIN doctor || true
+
+  swift:
+    name: swift (macos)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Swift unit tests
+        working-directory: apps/dustless-mac
+        run: swift test
