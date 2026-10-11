@@ -4,7 +4,6 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var login: LoginItem
-    let onOpenWindow: () -> Void
     let onClean: () -> Void
 
     var body: some View {
@@ -35,10 +34,6 @@ struct SidebarView: View {
                     Label("Clean selected", systemImage: "trash")
                 }
                 .disabled(!store.canClean)
-
-                Button(action: onOpenWindow) {
-                    Label("Open Dustless", systemImage: "macwindow")
-                }
             }
 
             Section("Startup") {

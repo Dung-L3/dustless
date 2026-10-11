@@ -114,7 +114,6 @@ struct RootView: View {
             SidebarView(
                 store: store,
                 login: login,
-                onOpenWindow: openMainWindow,
                 onClean: { store.showingConfirmation = true }
             )
         } detail: {
