@@ -1,0 +1,16 @@
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/DustlessApp.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/BinaryLocator.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/DustlessCLI.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/LockedBox.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Formatting.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Reports.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Tier.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Services/LoginItem.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Services/ScanStore.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/ConfirmDeleteSheet.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/DetailView.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/FindingRow.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/MenuBarContent.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/SidebarView.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/SummaryHeader.swift
+/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/TierBadge.swift

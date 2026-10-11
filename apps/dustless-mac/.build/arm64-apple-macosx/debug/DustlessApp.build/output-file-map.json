@@ -1,0 +1,117 @@
+{
+  "": {
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/primary.swiftdeps"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/DustlessApp.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessApp.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessApp.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessApp.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessApp.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/BinaryLocator.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/BinaryLocator.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/BinaryLocator.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/BinaryLocator~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/BinaryLocator.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/BinaryLocator.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/DustlessCLI.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessCLI.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessCLI.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessCLI~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessCLI.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DustlessCLI.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Engine/LockedBox.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LockedBox.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LockedBox.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LockedBox~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LockedBox.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LockedBox.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Formatting.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Formatting.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Formatting.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Formatting~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Formatting.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Formatting.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Reports.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Reports.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Reports.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Reports~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Reports.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Reports.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Model/Tier.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Tier.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Tier.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Tier~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Tier.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/Tier.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Services/LoginItem.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LoginItem.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LoginItem.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LoginItem~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LoginItem.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/LoginItem.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Services/ScanStore.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ScanStore.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ScanStore.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ScanStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ScanStore.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ScanStore.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/ConfirmDeleteSheet.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ConfirmDeleteSheet.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ConfirmDeleteSheet.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ConfirmDeleteSheet~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ConfirmDeleteSheet.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/ConfirmDeleteSheet.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/DetailView.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DetailView.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DetailView.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DetailView~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DetailView.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/DetailView.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/FindingRow.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/FindingRow.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/FindingRow.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/FindingRow~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/FindingRow.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/FindingRow.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/MenuBarContent.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/MenuBarContent.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/MenuBarContent.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/MenuBarContent~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/MenuBarContent.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/MenuBarContent.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/SidebarView.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SidebarView.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SidebarView.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SidebarView~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SidebarView.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SidebarView.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/SummaryHeader.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SummaryHeader.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SummaryHeader.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SummaryHeader~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SummaryHeader.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/SummaryHeader.dia"
+  },
+  "/Users/mac/Developer/dustless/apps/dustless-mac/Sources/DustlessApp/Views/TierBadge.swift": {
+    "dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/TierBadge.d",
+    "object": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/TierBadge.swift.o",
+    "swiftmodule": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/TierBadge~partial.swiftmodule",
+    "swift-dependencies": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/TierBadge.swiftdeps",
+    "diagnostics": "/Users/mac/Developer/dustless/apps/dustless-mac/.build/arm64-apple-macosx/debug/DustlessApp.build/TierBadge.dia"
+  }
+}
