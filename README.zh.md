@@ -204,9 +204,9 @@ dustless ui --no-open              # 启动但不打开浏览器
 
 `apps/dustless-mac` 是内嵌 Dustless 引擎的原生 SwiftUI 应用。支持 macOS 14+，作为菜单栏额外项 (`LSUIElement`) 运行，并拥有一个主窗口。
 
-**窗口** — `NavigationSplitView` 侧边栏 + 详情 (`DustlessApp.swift:125-140`)。侧边栏 (`SidebarView.swift`) 显示剩余空间、可回收字节，以及三个等级标签：**GREEN**、**YELLOW**、**LOCKED**（BLOCKED）。每个标签显示数量与字节数。详情视图 (`DetailView.swift`) 包含搜索/过滤框，**全选 / 全不选** 按钮（针对 GREEN 与 YELLOW），底部操作栏显示已选字节与 **审查并删除** (Cmd-Return)。LOCKED 条目会被列出但处于禁用状态，永不删除。一次扫描以空选择开始 —— 绝不预选任何内容。
+**窗口** — `NavigationSplitView` 侧边栏 + 详情 (`DustlessApp.swift:125-140`)。侧边栏 (`SidebarView.swift`) 显示剩余空间、可回收字节，以及三个等级标签：**GREEN**、**YELLOW**、**LOCKED**（BLOCKED）。每个标签显示数量与字节数。详情视图 (`DetailView.swift`) 包含搜索/过滤框，**全部 / 无** 按钮（针对 GREEN 与 YELLOW），底部操作栏显示已选字节与 **复核并删除** (Cmd-Return)。LOCKED 条目会被列出但处于禁用状态，永不删除。一次扫描以空选择开始 —— 绝不预选任何内容。
 
-**Finding 行** (`FindingRow.swift:85-93`) — 上下文菜单：**在访达中显示**、**拷贝路径**。
+**Finding 行** (`FindingRow.swift:85-93`) — 上下文菜单：**在访达中显示**、**复制路径**。
 
 **确认弹窗** (`ConfirmDeleteSheet.swift:14-70`) — 列出每个已选项目的路径、规则 id、描述、大小，以及逐项的来源说明行（`note` 字段：例如 "rule requires ≥90 days, newest file is 0 days old" 或 "BLOCKED, pinned by /Users/x/repo"）。每行同样带上下文菜单。
 
@@ -214,11 +214,11 @@ dustless ui --no-open              # 启动但不打开浏览器
 
 **菜单栏额外项** (`DustlessApp.swift:44-50`) — 显示剩余空间与可回收字节；操作：**重新扫描**、**打开窗口**、**设置**、**退出**。
 
-**键盘快捷键** (`DustlessApp.swift:25-35`、`DetailView.swift:142`) — Cmd-R：重新扫描；Cmd-1/2/3：GREEN/YELLOW/LOCKED 标签；Cmd-,：设置；Cmd-Return：审查并删除。
+**键盘快捷键** (`DustlessApp.swift:25-35`、`DetailView.swift:142`) — Cmd-R：重新扫描；Cmd-1/2/3：GREEN/YELLOW/LOCKED 标签；Cmd-,：设置；Cmd-Return：复核并删除。
 
 **构建与运行** — `bun run build` 产出 `dist/dustless`（引擎）。随后 `bun run bundle:mac` 组装 `dist/Dustless.app`，引擎内嵌于 `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`)。脚本执行 `swift build -c release`，复制二进制与引擎，写入 `Info.plist`，并对 bundle 进行 ad-hoc 签名。最低 macOS 14.0 (`Info.plist:24`)
 
-**设计依据** — 以等级（而非工具链分类）为主导航轴，因为安全判定才是阻挡破坏性操作的闸门 (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`)。标题数字是 *已选* 总量，随选择实时变化 (R2)。被锁定条目获得完整视图并展示验证失败原因 (R3)。确认弹窗逐项给出决定性理由 (R5)。无预选 —— 设计上即 fail-closed (R4 第 3 点)。设置移出主导航 (R8)。
+**设计依据** — 以等级（而非工具链分类）为主导航轴，因为安全判定才是阻挡破坏性操作的闸门 (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`)。标题显示扫描的可回收总量；底部操作栏显示实时的 *已选* 总量 (R2)。被锁定条目获得完整视图并展示验证失败原因 (R3)。确认弹窗逐项给出决定性理由 (R5)。无预选 —— 设计上即 fail-closed (R4 第 3 点)。设置移出主导航 (R8)。
 
 ## AI agent / MCP
 
