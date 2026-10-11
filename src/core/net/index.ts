@@ -29,6 +29,7 @@ export type NetOptions = {
   force?: boolean;
   run?: Runner;
   isRootUser?: () => boolean;
+  platform?: Platform;
 };
 
 export type NetFlags = {
@@ -59,12 +60,13 @@ export function selectOps(flags: NetFlags): NetOpId[] | undefined {
 export async function net(opts: NetOptions = {}): Promise<NetReport> {
   const run = opts.run ?? systemRun;
   const root = opts.isRootUser ?? isRoot;
-  const info = await inspect(platform, run);
+  const p = opts.platform ?? platform;
+  const info = await inspect(p, run);
   const ops = opts.ops ?? DEFAULT_OPS;
   const outcomes: NetOutcome[] = [];
-  for (const id of ops) outcomes.push(await runOp(id, opts, info, run, root));
+  for (const id of ops) outcomes.push(await runOp(id, opts, info, run, root, p));
   return {
-    platform,
+    platform: p,
     iface: info.iface,
     gateway: info.gateway,
     dns: info.dns,
@@ -79,14 +81,15 @@ async function runOp(
   info: NetInfo,
   run: Runner,
   root: () => boolean,
+  p: Platform,
 ): Promise<NetOutcome> {
   const meta = OPS.find((op) => op.id === id);
   if (!meta) return { op: id, status: "not-applicable", detail: `unknown operation "${id}"` };
-  const steps = buildSteps(id, info, platform);
+  const steps = buildSteps(id, info, p);
   if (steps.length === 0) {
-    return { op: id, status: "not-applicable", detail: notApplicableNote(id, platform) };
+    return { op: id, status: "not-applicable", detail: notApplicableNote(id, p) };
   }
-  const before = await beforeValue(id, info, run);
+  const before = await beforeValue(id, info, run, p);
   if (meta.targetsInterface && !info.iface) {
     return { op: id, status: "refused", detail: "no active interface found", before };
   }
@@ -111,15 +114,15 @@ async function runOp(
   return await execute(id, steps, before, run);
 }
 
-async function beforeValue(id: NetOpId, info: NetInfo, run: Runner): Promise<string | undefined> {
+async function beforeValue(id: NetOpId, info: NetInfo, run: Runner, p: Platform): Promise<string | undefined> {
   if (id === "reset-dns") return info.dns.length > 0 ? info.dns.join(", ") : "no DNS servers set";
   if (id === "renew-dhcp") return `interface ${info.iface ?? "unknown"}`;
-  if (id === "reset-mtu") return await currentMtu(info, run);
+  if (id === "reset-mtu") return await currentMtu(info, run, p);
   return undefined;
 }
 
-async function currentMtu(info: NetInfo, run: Runner): Promise<string> {
-  if (platform !== "mac") return "unknown";
+async function currentMtu(info: NetInfo, run: Runner, p: Platform): Promise<string> {
+  if (p !== "mac") return "unknown";
   const res = await run("networksetup", ["-getMTU", info.service]);
   return firstMatch(res.out, /(\d+)/) ?? "unknown";
 }
