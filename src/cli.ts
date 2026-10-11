@@ -10,6 +10,7 @@ import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
 import { apply } from "./core/apply.ts";
 import { diskUsage, freeSpace } from "./core/space.ts";
+import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
 import { serveMcp } from "./mcp/server.ts";
 
 const VERSION = pkg.version;
@@ -30,6 +31,7 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless rule list|show|add|validate
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
   dustless doctor               chẩn đoán môi trường
+  dustless net                  flush DNS cache; --reset-dns v.v. là nâng cao, từng lệnh một
   dustless version | help
 
 Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
@@ -275,6 +277,45 @@ async function runDoctor(): Promise<number> {
   return mail.includes("EPERM") ? 1 : 0;
 }
 
+async function runNet(): Promise<number> {
+  const flags: NetFlags = {
+    advanced: flag("advanced"),
+    flushDns: flag("flush-dns"),
+    resetDns: flag("reset-dns"),
+    renewDhcp: flag("renew-dhcp"),
+    clearArp: flag("clear-arp"),
+    resetMtu: flag("reset-mtu"),
+    flushRouting: flag("flush-routing"),
+  };
+  const report = await net({ ops: selectOps(flags), dryRun: flag("dry-run"), force: flag("force") });
+  printNet(report);
+  return report.outcomes.some((o) => o.status === "failed") ? 1 : 0;
+}
+
+function printNet(report: NetReport): void {
+  if (flag("json")) {
+    console.log(JSON.stringify(report));
+    return;
+  }
+  say(bold(`\ndustless net — ${report.platform}`));
+  say(`  interface  ${report.iface ?? dim("không rõ")}`);
+  say(`  gateway    ${report.gateway ?? dim("không rõ")}`);
+  say(`  dns        ${report.dns.length ? report.dns.join(", ") : dim("không rõ")}`);
+  if (report.outcomes.length === 0) {
+    say(dim("\nkhông có thao tác nào được chọn — `dustless net` (mặc định) chỉ flush DNS cache."));
+    say(dim("thao tác nâng cao chạy từng cái một: --reset-dns --renew-dhcp --clear-arp --reset-mtu --flush-routing"));
+    return;
+  }
+  say("");
+  for (const o of report.outcomes) {
+    const mark =
+      o.status === "ran" ? paint("32", "✔") : o.status === "failed" ? paint("31", "✖") : o.status === "refused" ? paint("33", "⛔") : paint("33", "–");
+    say(`${mark} ${dim(o.op.padEnd(12))} ${o.detail}`);
+    if (o.before !== undefined && o.after !== undefined) say(`  ${dim(`${o.before} → ${o.after}`)}`);
+  }
+  say("");
+}
+
 async function main(): Promise<number> {
   if (flag("version")) {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
@@ -286,6 +327,7 @@ async function main(): Promise<number> {
   if (command === "rule") return await runRule(rest[0] ?? "", rest.slice(1));
   if (command === "doctor") return await runDoctor();
   if (command === "ui") return await runUi();
+  if (command === "net") return await runNet();
   if (command === "mcp") {
     await serveMcp();
     return 0;
