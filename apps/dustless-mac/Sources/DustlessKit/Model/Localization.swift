@@ -213,6 +213,10 @@ public enum L10n {
         // native app — row actions
         "revealInFinder": "Hiện trong Finder",
         "copyPath": "Sao chép đường dẫn",
+
+        // native app — findings filter
+        "searchFindings": "Lọc kết quả theo rule hoặc đường dẫn",
+        "noMatches": "Không khớp kết quả nào",
     ]
 
     static let en: [String: String] = [
@@ -357,6 +361,10 @@ public enum L10n {
         // native app — row actions
         "revealInFinder": "Reveal in Finder",
         "copyPath": "Copy Path",
+
+        // native app — findings filter
+        "searchFindings": "Filter findings by rule or path",
+        "noMatches": "No matches",
     ]
 
     static let zh: [String: String] = [
@@ -501,5 +509,9 @@ public enum L10n {
         // native app — row actions
         "revealInFinder": "在访达中显示",
         "copyPath": "复制路径",
+
+        // native app — findings filter
+        "searchFindings": "按规则或路径筛选结果",
+        "noMatches": "无匹配结果",
     ]
 }
