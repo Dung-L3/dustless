@@ -32,12 +32,12 @@ public enum BinaryLocator {
     public static func locate() throws -> URL {
         let roots = candidateRoots
         let candidates = roots.map { $0.appendingPathComponent(executableName) }
-        guard let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+        guard let existing = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
             throw BinaryLocationError.notFound(candidates)
         }
-        if candidates.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-            throw BinaryLocationError.notExecutable(found)
+        guard FileManager.default.isExecutableFile(atPath: existing.path) else {
+            throw BinaryLocationError.notExecutable(existing)
         }
-        return found
+        return existing
     }
 }
