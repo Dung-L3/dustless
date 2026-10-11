@@ -6,6 +6,8 @@ struct FindingRow: View {
     let isSelected: Bool
     let onToggle: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     private var deletable: Bool { finding.isDeletableByEngine }
 
     var body: some View {
@@ -17,16 +19,16 @@ struct FindingRow: View {
                         .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
                 }
                 .buttonStyle(.plain)
-                .help(isSelected ? "Include in cleanup" : "Exclude from cleanup")
-                .accessibilityLabel(isSelected ? "Included in cleanup" : "Excluded from cleanup")
+                .help(settings.t(isSelected ? "includeInCleanup" : "excludeFromCleanup"))
+                .accessibilityLabel(settings.t(isSelected ? "includedLabel" : "excludedLabel"))
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             } else {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 15, height: 18)
-                    .help("Locked. The engine will never delete this.")
-                    .accessibilityLabel("Locked, never deleted")
+                    .help(settings.t("lockedTooltip"))
+                    .accessibilityLabel(settings.t("lockedNeverDeleted"))
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -41,7 +43,7 @@ struct FindingRow: View {
                     Text(ByteFormat.string(finding.bytes))
                         .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
                         .foregroundStyle(deletable ? .primary : .secondary)
-                    Text(Duration.days(finding.ageDays))
+                    Text(settings.age(finding.ageDays))
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .frame(width: 58, alignment: .trailing)
@@ -54,7 +56,7 @@ struct FindingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .multilineTextAlignment(.leading)
-                    .accessibilityLabel("Path \(finding.path)")
+                    .accessibilityLabel(settings.t("pathA11y", ["path": finding.path]))
 
                 Text(finding.desc)
                     .font(.system(size: 11))

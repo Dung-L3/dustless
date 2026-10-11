@@ -6,27 +6,29 @@ struct SummaryHeader: View {
     let isScanning: Bool
     let onRescan: () -> Void
 
+    @EnvironmentObject private var settings: AppSettings
+
     var body: some View {
         HStack(alignment: .center, spacing: 20) {
             metric(
-                title: "Reclaimable",
+                title: settings.t("reclaimableMetric"),
                 value: ByteFormat.string(report?.reclaimable ?? 0),
                 symbol: "sparkles",
                 tint: .accentColor
             )
-            .help("Green plus yellow findings, the total the engine may reclaim.")
+            .help(settings.t("reclaimableHelp"))
 
             metric(
-                title: "Free now",
+                title: settings.t("freeNow"),
                 value: ByteFormat.string(report?.freeBefore ?? 0),
                 symbol: "internaldrive",
                 tint: .secondary
             )
-            .help("Free space on the volume holding your home directory, measured by the engine.")
+            .help(settings.t("freeNowHelp"))
 
             if let report {
                 metric(
-                    title: "Scanned",
+                    title: settings.t("scanned"),
                     value: Duration.milliseconds(report.scannedMs),
                     symbol: "clock",
                     tint: .secondary
@@ -45,12 +47,12 @@ struct SummaryHeader: View {
                     } else {
                         Image(systemName: "arrow.clockwise")
                     }
-                    Text(isScanning ? "Scanning…" : "Rescan")
+                    Text(isScanning ? settings.t("scanningShort") : settings.t("rescan"))
                 }
             }
             .disabled(isScanning)
             .keyboardShortcut("r", modifiers: .command)
-            .help("Rescan now (⌘R)")
+            .help(settings.t("rescanHelp"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)

@@ -8,11 +8,21 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    var title: String {
+    /// i18n key for the tab label (`safeTab` / `reviewTab` / `lockedTab`).
+    var titleKey: String {
         switch self {
-        case .safe: "Safe"
-        case .review: "Review"
-        case .locked: "Locked"
+        case .safe: "safeTab"
+        case .review: "reviewTab"
+        case .locked: "lockedTab"
+        }
+    }
+
+    /// i18n key for the empty state (`emptySafe` / `emptyReview` / `emptyLocked`).
+    var emptyKey: String {
+        switch self {
+        case .safe: "emptySafe"
+        case .review: "emptyReview"
+        case .locked: "emptyLocked"
         }
     }
 
@@ -37,16 +47,6 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
         case .safe: KeyboardShortcut("1", modifiers: .command)
         case .review: KeyboardShortcut("2", modifiers: .command)
         case .locked: KeyboardShortcut("3", modifiers: .command)
-        }
-    }
-
-    var emptyTitle: String { "No \(title.lowercased()) findings" }
-
-    var emptyMessage: String {
-        switch self {
-        case .safe: "Regenerable caches that are safe to remove would appear here."
-        case .review: "Items that may still be in use would appear here."
-        case .locked: "Items the engine refuses to delete would appear here."
         }
     }
 

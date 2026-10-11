@@ -6,10 +6,13 @@ struct DustlessApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = ScanStore()
     @StateObject private var login = LoginItem()
+    @StateObject private var settings = AppSettings()
 
     var body: some Scene {
         WindowGroup("Dustless") {
-            RootView(store: store, login: login)
+            RootView(store: store)
+                .environmentObject(settings)
+                .preferredColorScheme(settings.appearance.colorScheme)
                 .frame(minWidth: 940, minHeight: 560)
                 .background(WindowCapture())
                 .task {
@@ -20,20 +23,27 @@ struct DustlessApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Rescan") { Task { await store.rescan() } }
+                Button(settings.t("rescan")) { Task { await store.rescan() } }
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(store.phase == .scanning)
             }
-            CommandMenu("Go") {
+            CommandMenu(settings.t("goMenu")) {
                 ForEach(TierTab.allCases) { tab in
-                    Button("\(tab.title) Tier") { store.tierTab = tab }
+                    Button(settings.tabTitle(tab)) { store.tierTab = tab }
                         .keyboardShortcut(tab.shortcut)
                 }
             }
         }
 
+        Settings {
+            SettingsView(settings: settings, login: login)
+                .environmentObject(settings)
+                .preferredColorScheme(settings.appearance.colorScheme)
+        }
+
         MenuBarExtra {
-            MenuBarContent(store: store, login: login, onOpenWindow: openMainWindow)
+            MenuBarContent(store: store, onOpenWindow: openMainWindow)
+                .environmentObject(settings)
         } label: {
             MenuBarLabel()
         }
@@ -107,13 +117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct RootView: View {
     @ObservedObject var store: ScanStore
-    @ObservedObject var login: LoginItem
 
     var body: some View {
         NavigationSplitView {
             SidebarView(
                 store: store,
-                login: login,
                 onClean: { store.showingConfirmation = true }
             )
         } detail: {

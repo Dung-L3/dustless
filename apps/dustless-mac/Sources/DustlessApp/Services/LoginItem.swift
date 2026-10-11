@@ -14,7 +14,7 @@ enum LoginItemState: Equatable {
 @MainActor
 final class LoginItem: ObservableObject {
     @Published private(set) var state: LoginItemState = .unknown
-    @Published private(set) var lastError: String?
+    @Published private(set) var lastError: L10nText?
 
     private let service = SMAppService.mainApp
 
@@ -24,7 +24,7 @@ final class LoginItem: ObservableObject {
 
     func refresh() {
         guard isSupported else {
-            state = .unsupported("Launch at login needs the packaged Dustless.app. Run scripts/bundle.sh to create it.")
+            state = .unsupported("loginNeedsBundle")
             return
         }
         state = service.status == .enabled ? .registered : .notRegistered
@@ -44,8 +44,8 @@ final class LoginItem: ObservableObject {
             lastError = nil
         } catch {
             lastError = enabled
-                ? "macOS refused to register Dustless as a login item: \(error.localizedDescription)"
-                : "macOS refused to remove the login item: \(error.localizedDescription)"
+                ? L10nText("loginRegisterFailed", ["error": error.localizedDescription])
+                : L10nText("loginRemoveFailed", ["error": error.localizedDescription])
         }
         refresh()
     }

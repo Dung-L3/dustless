@@ -27,8 +27,4 @@ public enum Duration {
     public static func milliseconds(_ value: Int) -> String {
         value < 1000 ? "\(value) ms" : String(format: "%.1f s", Double(value) / 1000)
     }
-
-    public static func days(_ value: Double) -> String {
-        value < 1 ? "today" : "\(Int(value.rounded()))d old"
-    }
 }

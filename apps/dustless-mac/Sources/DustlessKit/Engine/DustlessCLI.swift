@@ -21,6 +21,24 @@ public enum DustlessError: LocalizedError {
             return "The dustless engine returned output this app could not read: \(reason)"
         }
     }
+
+    /// The same message as a translatable key, so the UI can render it in the
+    /// user's language instead of the engine layer hard-coding English.
+    public var localized: L10nText {
+        switch self {
+        case .launchFailed(let reason):
+            return L10nText("errLaunchFailed", ["reason": reason])
+        case .exited(let status, let stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty
+                ? L10nText("errExited", ["status": "\(status)"])
+                : L10nText("errExitedDetail", ["status": "\(status)", "detail": detail])
+        case .timedOut(let seconds):
+            return L10nText("errTimedOut", ["seconds": "\(seconds)"])
+        case .unreadableOutput(let reason):
+            return L10nText("errUnreadable", ["reason": reason])
+        }
+    }
 }
 
 public struct DustlessCLI: Sendable {
