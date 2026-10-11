@@ -48,7 +48,9 @@ async function probeStartup(home: string): Promise<StartupItemProbe[]> {
 }
 
 describe("launch agent hygiene", () => {
-  test("a plist pointing at a deleted binary is flagged as orphaned", async () => {
+  const macOnly = process.platform === "darwin" ? test : test.skip;
+
+  macOnly("a plist pointing at a deleted binary is flagged as orphaned", async () => {
     const home = await sandbox();
     await plist(join(home, "Library", "LaunchAgents"), "com.ghost.test", "/nonexistent/definitely-not-here");
     const ghost = (await probeStartup(home)).find((item) => item.label === "com.ghost.test");
@@ -57,7 +59,7 @@ describe("launch agent hygiene", () => {
     expect(ghost?.note).toContain("xoá");
   });
 
-  test("a plist pointing at a real binary is not flagged", async () => {
+  macOnly("a plist pointing at a real binary is not flagged", async () => {
     const home = await sandbox();
     await plist(join(home, "Library", "LaunchAgents"), "com.alive.test", "/bin/ls");
     const alive = (await probeStartup(home)).find((item) => item.label === "com.alive.test");
@@ -65,7 +67,7 @@ describe("launch agent hygiene", () => {
     expect(alive?.note).not.toContain("xoá");
   });
 
-  test("both cases are visible side by side", async () => {
+  macOnly("both cases are visible side by side", async () => {
     const home = await sandbox();
     const dir = join(home, "Library", "LaunchAgents");
     await plist(dir, "com.ghost.two", "/nonexistent/nope");
