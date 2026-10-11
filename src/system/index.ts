@@ -37,9 +37,9 @@ function startupToHygiene(s: StartupItem): HygieneItem {
     id: s.id,
     kind: "startup",
     label: s.label,
-    detail: `${s.source} · ${s.location}`,
+    detail: s.exists ? s.note : `${s.note} · ${s.target}`,
     ageDays: s.ageDays,
-    severity: s.ageDays !== null && s.ageDays > 365 ? "warn" : "info",
+    severity: s.exists ? "info" : "warn",
   };
 }
 

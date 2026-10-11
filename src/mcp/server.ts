@@ -1,3 +1,4 @@
+import pkg from "../../package.json" with { type: "json" };
 import { createInterface } from "node:readline";
 import { format } from "node:util";
 import { apply } from "../core/apply.ts";
@@ -7,7 +8,7 @@ import { freeSpace } from "../core/space.ts";
 import { createTools, type Core, type Tool } from "./tools.ts";
 
 export const PROTOCOL_VERSION = "2025-06-18";
-export const SERVER_INFO = { name: "dustless", version: "0.1.0" };
+export const SERVER_INFO = { name: "dustless", version: pkg.version };
 
 const SUPPORTED_PROTOCOLS = [PROTOCOL_VERSION, "2025-03-26", "2024-11-05"];
 const INSTRUCTIONS = [
