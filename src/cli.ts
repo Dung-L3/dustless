@@ -3,7 +3,7 @@ import { appendFile, mkdir, readdir } from "node:fs/promises";
 import pkg from "../package.json" with { type: "json" };
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
-import type { ApplyReport, Finding, ScanReport, Tier } from "./types.ts";
+import type { ApplyReport, Finding, ScanReport, Tier, TierChoice } from "./types.ts";
 import { HOME, exists, platform } from "./core/paths.ts";
 import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
@@ -126,9 +126,19 @@ async function runApply(): Promise<number> {
     if (!flag("json")) say("Đã hủy. Không có gì bị xóa.");
     return 0;
   }
-  const result = await apply(report, { assumeYes: flag("yes"), onPrompt: askYellow });
+  const result = await apply(report, { tiers: tierChoicesFor(report), assumeYes: flag("yes"), onPrompt: askYellow });
   printApply(result);
   return result.outcomes.some((o) => o.status === "failed") ? 1 : 0;
+}
+
+function tierChoicesFor(report: ScanReport): TierChoice {
+  const choices: TierChoice = {};
+  for (const finding of report.findings) {
+    if (finding.blocked || finding.tier === "red") continue;
+    if (finding.tier === "green") choices[finding.ruleId] = "green";
+    else if (!(finding.ruleId in choices)) choices[finding.ruleId] = "yellow";
+  }
+  return choices;
 }
 
 async function confirmSummary(findings: Finding[], blockedCount: number): Promise<boolean> {

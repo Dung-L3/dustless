@@ -161,14 +161,11 @@ function buildGroups(report) {
 function tierChoices() {
   const choices = {};
   for (const group of groups) {
-    if (group.items.some((item) => item.blocked)) {
-      choices[group.ruleId] = "skip";
-      continue;
-    }
+    const actionable = group.items.filter((item) => !item.blocked);
     choices[group.ruleId] =
-      group.tier === "green" ? "green"
-      : group.tier === "red" ? "skip"
-      : group.items.some(isApproved) ? "yellow"
+      !actionable.length ? "skip"
+      : actionable.some((item) => item.tier === "green") ? "green"
+      : actionable.some(isApproved) ? "yellow"
       : "skip";
   }
   return choices;

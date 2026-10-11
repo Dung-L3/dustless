@@ -218,7 +218,7 @@ describe("apply", () => {
     const allowed = join(sandbox, "allowed");
     await mkdir(allowed, { recursive: true });
     const targets = [HOME + "/Documents/notes", HOME, dirname(HOME), "/", allowed];
-    const result = await apply(report(targets.map((path) => finding(path))), { assumeYes: true });
+    const result = await apply(report(targets.map((path) => finding(path))), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(result.outcomes.map((o) => o.status)).toEqual(["failed", "failed", "failed", "failed", "deleted"]);
     expect(result.outcomes[0]?.detail).toMatch(/danh sách đỏ/);
     expect(result.outcomes[1]?.detail).toMatch(/HOME/);
@@ -233,17 +233,17 @@ describe("apply", () => {
     await mkdir(victim, { recursive: true });
     const yellow: Finding = { ...finding(victim), tier: "yellow" };
 
-    const quiet = await apply(report([yellow]));
+    const quiet = await apply(report([yellow]), { tiers: { "test.cache": "yellow" } });
     expect(quiet.outcomes[0]?.status).toBe("skipped");
     expect(quiet.outcomes[0]?.detail).toMatch(/cần xác nhận/);
     expect(await exists(victim)).toBe(true);
 
-    const declined = await apply(report([yellow]), { onPrompt: async () => false });
+    const declined = await apply(report([yellow]), { tiers: { "test.cache": "yellow" }, onPrompt: async () => false });
     expect(declined.outcomes[0]?.status).toBe("skipped");
     expect(declined.outcomes[0]?.detail).toMatch(/từ chối/);
     expect(await exists(victim)).toBe(true);
 
-    const accepted = await apply(report([yellow]), { onPrompt: async () => true });
+    const accepted = await apply(report([yellow]), { tiers: { "test.cache": "yellow" }, onPrompt: async () => true });
     expect(accepted.outcomes[0]?.status).toBe("deleted");
     expect(await exists(victim)).toBe(false);
   });
@@ -253,7 +253,7 @@ describe("apply", () => {
     await mkdir(hog, { recursive: true });
     await writeFile(join(hog, "a.bin"), Buffer.alloc(16 * 1024 * 1024, 4));
     const freeBefore = await freeSpace(HOME);
-    const result = await apply(report([finding(hog, 16 * 1024 * 1024)], freeBefore), { assumeYes: true });
+    const result = await apply(report([finding(hog, 16 * 1024 * 1024)], freeBefore), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(result.outcomes[0]?.status).toBe("deleted");
     expect(result.freeBefore).toBe(freeBefore);
     expect(result.freeAfter).toBeGreaterThan(0);
