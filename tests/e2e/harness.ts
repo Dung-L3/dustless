@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
 export const REPO = resolve(import.meta.dir, "..", "..");
-export const BINARY = join(REPO, "dist", "dustless");
+export const BINARY = join(REPO, "dist", process.platform === "win32" ? "dustless.exe" : "dustless");
 export const DAY = 86_400_000;
 export const MB = 1024 * 1024;
 export const VERSION = JSON.parse(
