@@ -1,0 +1,56 @@
+{
+  "outcomes": [
+    {
+      "ruleId": "container.docker",
+      "tier": "yellow",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/Library/Containers/com.docker.docker",
+      "status": "deleted",
+      "bytes": 2457600,
+      "detail": "captured from scan finding 0, never executed"
+    },
+    {
+      "ruleId": "gradle.version_cache",
+      "tier": "yellow",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.gradle/caches/9.0",
+      "status": "skipped",
+      "bytes": 716800,
+      "detail": "captured from scan finding 1, never executed"
+    },
+    {
+      "ruleId": "npm.cacache",
+      "tier": "green",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.npm/_cacache",
+      "status": "failed",
+      "bytes": 307200,
+      "detail": "captured from scan finding 2, never executed"
+    },
+    {
+      "ruleId": "pip.cache",
+      "tier": "green",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.cache/pip",
+      "status": "deleted",
+      "bytes": 122880,
+      "detail": "captured from scan finding 3, never executed"
+    },
+    {
+      "ruleId": "bun.cache",
+      "tier": "green",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.bun/install/cache",
+      "status": "skipped",
+      "bytes": 92160,
+      "detail": "captured from scan finding 4, never executed"
+    },
+    {
+      "ruleId": "gradle.wrapper",
+      "tier": "yellow",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.gradle/wrapper/dists",
+      "status": "failed",
+      "bytes": 1,
+      "detail": "captured from scan finding 5, never executed"
+    }
+  ],
+  "freed": 2580480,
+  "freeBefore": 317558157312,
+  "freeAfter": 317560737792,
+  "elapsedMs": 412
+}
