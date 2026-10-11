@@ -12,6 +12,7 @@ import { apply } from "./core/apply.ts";
 import { diskUsage, freeSpace } from "./core/space.ts";
 import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
 import { serveMcp } from "./mcp/server.ts";
+import { runRam } from "./core/ram/index.ts";
 
 const VERSION = pkg.version;
 const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴", blocked: "⛔" };
@@ -32,6 +33,7 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
   dustless doctor               chẩn đoán môi trường
   dustless net                  flush DNS cache; --reset-dns v.v. là nâng cao, từng lệnh một
+  dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
   dustless version | help
 
 Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
@@ -332,6 +334,7 @@ async function main(): Promise<number> {
     await serveMcp();
     return 0;
   }
+  if (command === "ram") return await runRam();
   if (command === "version") {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;

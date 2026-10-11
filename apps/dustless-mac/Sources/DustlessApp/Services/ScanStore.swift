@@ -19,6 +19,7 @@ final class ScanStore: ObservableObject {
     @Published var showingConfirmation = false
     @Published var showingApplyResult = false
     @Published var selection: Set<String> = []
+    @Published var tierTab: TierTab = .safe
 
     private var cli: DustlessCLI?
 
@@ -96,12 +97,14 @@ final class ScanStore: ObservableObject {
         }
     }
 
-    func selectAllDeletable() {
-        selection = Set((report?.deletable ?? []).map(\.id))
+    func selectAll(in tab: TierTab) {
+        guard let report else { return }
+        selection.formUnion(tab.findings(in: report).filter(\.isDeletableByEngine).map(\.id))
     }
 
-    func selectNone() {
-        selection.removeAll()
+    func selectNone(in tab: TierTab) {
+        guard let report else { return }
+        selection.subtract(tab.findings(in: report).filter(\.isDeletableByEngine).map(\.id))
     }
 
     static func describe(_ error: Error) -> String {
