@@ -288,8 +288,8 @@ b { font-weight: 620; }
 .row[data-chosen="false"] .row__main { opacity: 0.42; }
 .row[data-chosen="false"] .bar__fill { background: var(--text-3); }
 .row__path {
-  overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--text);
-  white-space: nowrap; direction: rtl; text-align: left; text-overflow: ellipsis;
+  overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--text);
+  line-height: 1.45;
 }
 .row__meta { display: flex; flex-wrap: wrap; gap: var(--s2); font-size: var(--fs-micro); color: var(--text-3); }
 .row__tag {
@@ -350,8 +350,8 @@ b { font-weight: 620; }
 }
 .sheet__item svg { width: 16px; height: 16px; flex: none; color: var(--tier); }
 .sheet__item span {
-  flex: 1; min-width: 0; overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-sm);
-  white-space: nowrap; direction: rtl; text-align: left; text-overflow: ellipsis;
+  flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-sm);
+  line-height: 1.45;
 }
 .sheet__item b { flex: none; font-size: var(--fs-sm); color: var(--tier); font-variant-numeric: tabular-nums; }
 .sheet__total { font-size: var(--fs-lead); font-weight: 620; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
