@@ -1,6 +1,6 @@
 {
   "name": "dustless",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cache dọn sạch trên máy dev. Quét chéo trước khi xóa.",
   "type": "module",
   "license": "MIT",
