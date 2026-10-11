@@ -57,12 +57,12 @@ struct DetailView: View {
                     }
                 }
                 .listStyle(.inset)
-                .searchable(text: $searchQuery, prompt: settings.t("searchFindings"))
             }
 
             Divider()
             actionBar
         }
+        .searchable(text: $searchQuery, prompt: settings.t("searchFindings"))
     }
 
     private func filteredFindings(_ items: [Finding]) -> [Finding] {
