@@ -5,6 +5,12 @@ ManifestDPIAware true
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 !include "WinVer.nsh"
+!include "StrFunc.nsh"
+!include "WinMessages.nsh"
+
+${StrStr}
+${StrRep}
+${UnStrRep}
 
 !define APP_NAME "Dustless"
 !define APP_EXE "dustless.exe"
@@ -80,9 +86,16 @@ Section "${APP_NAME}" SecMain
 SectionEnd
 
 Section "Add to PATH" SecPath
-  EnVar::SetHKCU
-  EnVar::AddValue "PATH" "$INSTDIR"
-  Pop $0
+  ReadRegExpandStr $0 HKCU "Environment" "PATH"
+  ${StrStr} $1 "$0" "$INSTDIR"
+  ${If} $1 == ""
+    ${If} $0 == ""
+      WriteRegExpandStr HKCU "Environment" "PATH" "$INSTDIR"
+    ${Else}
+      WriteRegExpandStr HKCU "Environment" "PATH" "$0;$INSTDIR"
+    ${EndIf}
+    SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
+  ${EndIf}
 SectionEnd
 
 Section "Start menu shortcut" SecShortcut
@@ -103,9 +116,16 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 
-  EnVar::SetHKCU
-  EnVar::DeleteValue "PATH" "$INSTDIR"
-  Pop $0
+  ReadRegExpandStr $0 HKCU "Environment" "PATH"
+  ${UnStrRep} $0 "$0" ";$INSTDIR" ""
+  ${UnStrRep} $0 "$0" "$INSTDIR;" ""
+  ${UnStrRep} $0 "$0" "$INSTDIR" ""
+  ${If} $0 == ""
+    DeleteRegValue HKCU "Environment" "PATH"
+  ${Else}
+    WriteRegExpandStr HKCU "Environment" "PATH" "$0"
+  ${EndIf}
+  SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk"
