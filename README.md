@@ -216,7 +216,7 @@ Routes: `GET /api/scan`, `GET /api/rules`, `GET /api/space`, `POST /api/apply`.
 
 **Build & run** — `bun run build` produces `dist/dustless` (the engine). Then `bun run bundle:mac` assembles `dist/Dustless.app` with the engine embedded at `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`). The script runs `swift build -c release`, copies the binary and engine, writes `Info.plist`, and ad-hoc signs the bundle. Minimum macOS 14.0 (`Info.plist:24`).
 
-**Design rationale** — The tier axis (not toolchain category) is the primary navigation because the safety verdict gates the destructive act (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`). The headline number is the *selected* total, live to selection (R2). Locked items get a full view with the failed verification reason (R3). The confirm sheet shows the deciding reason per item (R5). No pre-selection — fail-closed by design (R4 item 3). Settings off the main nav (R8).
+**Design rationale** — The tier axis (not toolchain category) is the primary navigation because the safety verdict gates the destructive act (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`). The header shows the scan's total reclaimable bytes; the action bar shows the live *selected* total (R2). Locked items get a full view with the failed verification reason (R3). The confirm sheet shows the deciding reason per item (R5). No pre-selection — fail-closed by design (R4 item 3). Settings off the main nav (R8).
 
 ## AI agent / MCP
 
