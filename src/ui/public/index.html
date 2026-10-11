@@ -47,7 +47,7 @@
         <path d="M12 9.6v4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
         <circle cx="12" cy="16.8" r="1.05" fill="currentColor" />
       </symbol>
-      <symbol id="i-red" viewBox="0 0 24 24">
+      <symbol id="i-blocked" viewBox="0 0 24 24">
         <path
           d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"
           fill="none"
@@ -152,7 +152,7 @@
             </button>
             <ul class="safety">
               <li><svg aria-hidden="true"><use href="#i-lock" /></svg><span data-i18n="safetyReadOnly">—</span></li>
-              <li><svg aria-hidden="true"><use href="#i-red" /></svg><span data-i18n="safetyRed">—</span></li>
+              <li><svg aria-hidden="true"><use href="#i-blocked" /></svg><span data-i18n="safetyRed">—</span></li>
               <li><svg aria-hidden="true"><use href="#i-mark" /></svg><span data-i18n="safetyMeasured">—</span></li>
             </ul>
           </div>
@@ -176,12 +176,12 @@
             <p class="core__stat"><b id="yellowCount">0</b><span id="yellowSize">0 GB</span></p>
           </div>
         </article>
-        <article class="bezel" data-tier="red">
+        <article class="bezel" data-tier="blocked">
           <div class="core core--tier">
-            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-red" /></svg></span>
-            <h2 class="core__name" data-i18n="red">—</h2>
-            <p class="core__hint" data-i18n="redHint">—</p>
-            <p class="core__stat"><b id="redCount">0</b><span id="redSize">0 GB</span></p>
+            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
+            <h2 class="core__name" data-i18n="blocked">—</h2>
+            <p class="core__hint" data-i18n="blockedHint">—</p>
+            <p class="core__stat"><b id="blockedCount">0</b><span id="blockedSize">0 GB</span></p>
           </div>
         </article>
       </section>
@@ -210,7 +210,7 @@
         </div>
 
         <div class="state state--error" id="errorState" hidden>
-          <span class="state__mark state__mark--red"><svg aria-hidden="true"><use href="#i-red" /></svg></span>
+          <span class="state__mark state__mark--blocked"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
           <p class="state__title" id="errorTitle">—</p>
           <p class="state__body" id="errorBody">—</p>
           <button type="button" class="ghost" id="retryBtn"><span data-i18n="retry">—</span></button>

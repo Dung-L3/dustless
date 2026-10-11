@@ -127,9 +127,14 @@ function findingKey(finding) {
 }
 
 function isApproved(finding) {
+  if (finding.blocked) return false;
   if (finding.tier === "green") return true;
   if (finding.tier === "red") return false;
   return !state.declinedRules.has(finding.ruleId);
+}
+
+function effectiveTier(finding) {
+  return finding.blocked ? "blocked" : finding.tier;
 }
 
 function buildGroups(report) {
@@ -156,6 +161,10 @@ function buildGroups(report) {
 function tierChoices() {
   const choices = {};
   for (const group of groups) {
+    if (group.items.some((item) => item.blocked)) {
+      choices[group.ruleId] = "skip";
+      continue;
+    }
     choices[group.ruleId] =
       group.tier === "green" ? "green"
       : group.tier === "red" ? "skip"
@@ -231,7 +240,7 @@ function paintSummary() {
     dom.reclaimUnit.textContent = hero.unit;
   }
   const totals = state.report?.totals ?? {};
-  for (const tier of ["green", "yellow", "red"]) {
+  for (const tier of ["green", "yellow", "blocked"]) {
     $(`${tier}Count`).textContent = number(totals[tier]?.count ?? 0, 0);
     $(`${tier}Size`).textContent = size(totals[tier]?.bytes ?? 0);
   }
@@ -272,16 +281,17 @@ function startClock() {
 }
 
 function renderRow(finding, index, group, stagger) {
-  const tag = (muted) => h("span", { class: muted ? "row__tag row__tag--muted" : "row__tag" }, glyph(finding.tier), t(finding.tier));
+  const tier = effectiveTier(finding);
+  const tag = (muted) => h("span", { class: muted ? "row__tag row__tag--muted" : "row__tag" }, glyph(tier), t(tier));
   return h("div", {
     class: "row",
-    data: { tier: finding.tier, decision: findingKey(finding), chosen: String(isApproved(finding)) },
+    data: { tier, decision: findingKey(finding), chosen: String(isApproved(finding)) },
     style: { "--i": String(stagger ? Math.min(index, 12) : 0) },
   },
     h("div", { class: "row__main" },
       h("p", { class: "row__path", title: finding.path }, h("bdi", { text: finding.path })),
       h("div", { class: "row__meta" },
-        tag(finding.tier !== "yellow"),
+        tag(tier !== "yellow"),
         h("span", { text: t(finding.verified ? "verified" : "unverified") }),
         h("span", { text: t("ageDays", { n: Math.round(finding.ageDays) }) }),
         finding.note ? h("span", { text: finding.note }) : null)),
@@ -293,8 +303,8 @@ function renderRow(finding, index, group, stagger) {
 }
 
 function decision(finding) {
-  if (finding.tier === "red") {
-    return h("div", { class: "decision" }, h("p", { class: "decision__hint", text: t("blocked") }));
+  if (finding.blocked || finding.tier === "red") {
+    return h("div", { class: "decision" }, h("p", { class: "decision__hint", text: t("blockedNotice") }));
   }
   if (finding.tier !== "yellow") return null;
   const on = isApproved(finding);
