@@ -31,6 +31,22 @@ struct ConfirmDeleteSheet: View {
                                 Text(finding.ruleId)
                                     .font(.system(size: 10.5))
                                     .foregroundStyle(.tertiary)
+                                Text(finding.desc)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineLimit(nil)
+                                if !finding.note.isEmpty {
+                                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                        Image(systemName: "info.circle")
+                                            .font(.system(size: 9))
+                                        Text(finding.note)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .lineLimit(nil)
+                                    }
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(finding.tier == .blocked ? Color.red : Color.secondary)
+                                }
                             }
                             Spacer(minLength: 10)
                             Text(ByteFormat.string(finding.bytes))
