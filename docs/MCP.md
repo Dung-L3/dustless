@@ -34,7 +34,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
   | dustless mcp
 ```
 
-You should get back a single line of JSON with `serverInfo.name` of `dustless`.
+You should get back a single line of JSON with `serverInfo.name` of `dustless`. One wart to know about: `serverInfo.version` is hardcoded to `"0.1.0"` in `src/mcp/server.ts:10`, so it does **not** track `package.json` the way `dustless version` does. Trust `dustless version` for the real number.
 
 ## Client configuration
 
@@ -74,23 +74,21 @@ Without the binary on `PATH`:
 
 ### opencode
 
-opencode V2 configures local servers under `mcp.servers`.
+`opencode mcp add <name> -- <command…>` writes the entry for you:
 
 ```sh
 opencode mcp add dustless -- dustless mcp
 ```
 
-Or by hand in `opencode.jsonc`:
+Or by hand in `opencode.jsonc`. In opencode v2 the `mcp` key **is** the map of servers: there is no `servers` wrapper, and a config that nests one is silently ignored — `opencode mcp list` reports no servers at all.
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "servers": {
-      "dustless": {
-        "type": "local",
-        "command": ["dustless", "mcp"],
-      },
+    "dustless": {
+      "type": "local",
+      "command": ["dustless", "mcp"],
     },
   },
 }
@@ -102,15 +100,15 @@ Without the binary on `PATH`:
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "servers": {
-      "dustless": {
-        "type": "local",
-        "command": ["bun", "/absolute/path/to/dustless/src/cli.ts", "mcp"],
-      },
+    "dustless": {
+      "type": "local",
+      "command": ["bun", "/absolute/path/to/dustless/src/cli.ts", "mcp"],
     },
   },
 }
 ```
+
+Check what actually landed with `opencode mcp list`.
 
 ### Cursor
 
@@ -186,14 +184,10 @@ Results come back both as human-readable text and as `structuredContent`, so the
 
 **You:** clear the npm cache.
 
-**Agent:** the plan is 2.7 GB from `npm.cacache`, tier green, nothing blocked. I need your explicit go-ahead before I delete — want me to proceed with `confirm: true`?
-
-**You:** yes
-
-**Agent:** deleting.
+**Agent:** the plan is 2.7 GB from `npm.cacache`, tier green, nothing blocked in that rule. Let me get the exact plan back first so you are approving a real number.
 
 ```
--> tools/call  {"name":"apply","arguments":{"rule_ids":["npm.cacache"],"tier":"green","confirm":true}}
+-> tools/call  {"name":"apply","arguments":{"rule_ids":["npm.cacache"],"tier":"green"}}
 <- REFUSED - nothing was deleted.
 
    - confirmation: Refusing to delete: confirm is not exactly true, so this call
@@ -205,13 +199,16 @@ Results come back both as human-readable text and as `structuredContent`, so the
    with confirm: true.
 ```
 
-**Agent:** the safety layer rejected that call because `confirm` was missing from the request. Re-sending the identical request with `confirm: true` now that you've approved it.
+**You:** yes, 2.7 GB is fine.
+
+**Agent:** re-sending the identical request with `confirm: true`.
 
 ```
+-> tools/call  {"name":"apply","arguments":{"rule_ids":["npm.cacache"],"tier":"green","confirm":true}}
 <- Deleted 1 of 1 finding(s). Freed 2.7 GB in 310ms.
 ```
 
-Note what happened in the middle: the agent tried the dry run, got a refusal with the exact byte count in it, showed that to you, and only then re-sent with `confirm: true`. That ordering is the intended shape, and the tool description tells the model to do it that way.
+Note the order: the agent asked for the plan first, got a refusal that carried the exact byte count, showed that to you, and only then re-sent the *identical* request with `confirm: true`. That ordering is the intended shape, and the tool description tells the model to do it that way.
 
 ## When something looks wrong
 
@@ -222,15 +219,31 @@ Note what happened in the middle: the agent tried the dry run, got a refusal wit
 
 ## Permissions
 
-You can further restrict what the agent may do. In opencode:
+You can further restrict what the agent may do. opencode registers an MCP tool under
+`<server>_<tool>`, so a Dustless apply call is the tool `dustless_apply`, and its `permission` map
+keys on tool names with `ask`, `allow` or `deny`:
 
 ```jsonc
 {
-  "permissions": [
-    { "action": "dustless_apply", "resource": "*", "effect": "ask" },
-    { "action": "dustless_*", "resource": "*", "effect": "allow" }
-  ]
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "dustless_scan": "allow",
+    "dustless_apply": "ask"
+  }
 }
 ```
 
-Keeping `apply` behind `ask` while the read-only tools stay free is the recommended setup: the agent can scan freely and still cannot delete without a human in the loop.
+To take it away entirely rather than prompt, use the `tools` map instead, which disables a tool by
+name and understands globs:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": { "dustless_apply": false }
+}
+```
+
+Keeping `apply` behind `ask` while the read-only tools stay free is the recommended setup: the agent
+can scan freely and still cannot delete without a human in the loop. See
+[the opencode permissions docs](https://opencode.ai/docs/permissions/) for the current schema — the
+legacy `tools` boolean form is deprecated in favour of `permission`.
