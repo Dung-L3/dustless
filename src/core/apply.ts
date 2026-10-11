@@ -68,9 +68,9 @@ async function run(
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
   }
-  const action = opts.tiers?.[finding.ruleId] ?? (finding.tier === "green" ? "green" : "yellow");
+  const action = opts.tiers?.[finding.ruleId] ?? "skip";
   if (action === "skip") {
-    outcome.detail = "bỏ qua theo yêu cầu";
+    outcome.detail = opts.tiers?.[finding.ruleId] ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
     return outcome;
   }
   if (action === "yellow" && !opts.assumeYes && !(await confirm(finding, opts))) {
