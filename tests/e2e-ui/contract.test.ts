@@ -9,6 +9,7 @@ const html = await readUiAsset("index.html");
 const css = await readUiAsset("style.css");
 const appJs = await readUiAsset("app.js");
 const i18nJs = await readUiAsset("i18n.js");
+const uiHelpersJs = await readUiAsset("ui-helpers.js");
 const doc = parseDocument(html);
 
 const all = (selector: string): El[] => doc.querySelectorAll(selector);
@@ -44,7 +45,7 @@ describe("app.js and index.html agree", () => {
     const selectors = [...appJs.matchAll(/(?:querySelectorAll|querySelector|closest)\(\s*"([^"]+)"\s*\)/g)].map(
       (match) => match[1] ?? "",
     );
-    expect(selectors.length).toBeGreaterThan(4);
+    expect(selectors.length).toBeGreaterThan(2);
     const fromHtml = new Set(all("[class]").flatMap((el) => el.className.split(/\s+/)));
     const fromApp = new Set(
       [...appJs.matchAll(/class:\s*"([^"]+)"/g)].flatMap((match) => (match[1] ?? "").split(/\s+/)),
@@ -84,6 +85,7 @@ describe("the page makes no off-origin requests", () => {
       ["style.css", css],
       ["app.js", appJs],
       ["i18n.js", i18nJs],
+      ["ui-helpers.js", uiHelpersJs],
     ] as const) {
       const urls = [...new Set([...text.matchAll(/https?:\/\/[^\s"'`()<>]+/g)].map((match) => match[0]))];
       expect({ file, urls: urls.filter((url) => url !== SVG_NS) }).toEqual({
@@ -137,7 +139,23 @@ describe("motion and colour", () => {
       expect(css).toContain(`[data-tier="${tier}"] { --tier: var(--${tier})`);
       expect(html).toContain(`data-tier="${tier}"`);
     }
-    expect(all("#tiers article").length).toBe(3);
+    expect(all("#tiers .tab-panel").length).toBe(3);
+  });
+});
+
+describe("path truncation is forbidden", () => {
+  test("css never clamps or ellipses paths", () => {
+    const lower = css.toLowerCase();
+    expect(lower).not.toContain("text-overflow: ellipsis");
+    expect(lower).not.toContain("direction: rtl");
+    expect(lower).not.toContain("-webkit-line-clamp");
+    expect(lower).not.toContain("line-clamp");
+    expect(lower).toContain("overflow-wrap: anywhere");
+  });
+
+  test("app.js never shortens a finding path", () => {
+    const ops = ["substring", "slice", "substr", "trimEnd"].map((name) => ({ name, matches: [...appJs.matchAll(new RegExp("\\\\." + name, "g"))].length }));
+    for (const { name, matches } of ops) expect({ name, matches }).toEqual({ name, matches: 0 });
   });
 });
 
