@@ -111,7 +111,7 @@ describe("app boot", () => {
     expect(rows().length).toBe(MIXED_REPORT.findings.length);
     for (const row of rows()) {
       expect(row.dataset.decision).toMatch(/^[\w.]+ :: \//);
-      expect(["green", "yellow", "red"]).toContain(row.dataset.tier ?? "");
+      expect(["green", "yellow", "blocked"]).toContain(row.dataset.tier ?? "");
       expect(["true", "false"]).toContain(row.dataset.chosen ?? "");
     }
   });
@@ -165,7 +165,7 @@ describe("blocked findings are never sold as deletable", () => {
   });
 
   test("the blocked tier card counts the blocked findings", () => {
-    expect(stub.byId("redCount").textContent).toBe(String(MIXED_REPORT.totals.blocked.count));
+    expect(stub.byId("blockedCount").textContent).toBe(String(MIXED_REPORT.totals.blocked.count));
   });
 });
 
@@ -175,7 +175,7 @@ describe("a red-tier finding is inert", () => {
     stub.click(stub.byId("scanBtn"));
     await waitFor(scanFinished, "the red-only scan");
     const row = rowFor("docs.archive", RED_HOME);
-    expect(row?.textContent).toContain(t("blocked"));
+    expect(row?.textContent).toContain(t("blockedNotice"));
     expect(row?.querySelectorAll(".switch button").length ?? 0).toBe(0);
     expect(row?.dataset.chosen).toBe("false");
   });
@@ -220,13 +220,17 @@ describe("decision controls", () => {
 
   test("the confirm dialog lists exactly the selected findings and their total", () => {
     stub.click(stub.byId("cleanBtn"));
+    const deletable = MIXED_REPORT.findings.filter((f) => !f.blocked);
     const listed = stub.byId("confirmList").children.map((li) => li.textContent);
     expect(stub.byId("confirm").open).toBe(true);
-    expect(listed.length).toBe(MIXED_REPORT.findings.length);
-    for (const finding of MIXED_REPORT.findings) {
+    expect(listed.length).toBe(deletable.length);
+    for (const finding of MIXED_REPORT.findings.filter((f) => f.blocked)) {
+      expect(listed.join(" ")).not.toContain(finding.path);
+    }
+    for (const finding of deletable) {
       expect(listed.some((text) => text.includes(finding.path))).toBe(true);
     }
-    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "26 MB" }));
+    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "20 MB" }));
   });
 });
 

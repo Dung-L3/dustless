@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type El, parseDocument, readUiAsset } from "./dom-stub.ts";
 
-const TIERS = ["green", "yellow", "red"];
+const TIERS = ["green", "yellow", "blocked"];
 const INTERACTIVE = new Set(["button", "a", "input", "select", "textarea"]);
 const SVG_NS = "http://www.w3.org/2000/svg";
 

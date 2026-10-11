@@ -125,13 +125,13 @@ describe("the ui server only serves the local page", () => {
 
 describe("a malformed apply payload is refused and deletes nothing", () => {
   const probes: { name: string; init: RequestInit; status: number }[] = [
-    { name: "malformed json", init: { method: "POST", body: "{not json" }, status: 400 },
+    { name: "malformed json", init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{not json" }, status: 400 },
     { name: "tiers as an array", init: jsonBody([]), status: 400 },
     { name: "tiers as a string", init: jsonBody("green"), status: 400 },
     { name: "tiers as null", init: jsonBody(null), status: 400 },
-    { name: "tiers missing", init: { method: "POST", body: "{}" }, status: 400 },
+    { name: "tiers missing", init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, status: 400 },
     { name: "an unknown tier value", init: jsonBody({ "npm.cacache": "delete-everything" }), status: 400 },
-    { name: "an oversized body", init: { method: "POST", body: "x".repeat(2 * 1024 * 1024) }, status: 413 },
+    { name: "an oversized body", init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "x".repeat(2 * 1024 * 1024) }, status: 413 },
   ];
 
   for (const probe of probes) {

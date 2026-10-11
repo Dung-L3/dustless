@@ -8,7 +8,7 @@ const EN = STRINGS[REFERENCE] as Record<string, string>;
 
 const TERNARY_KEYS = [
   "scanning", "working", "scanningHint", "workingHint",
-  "green", "yellow", "red", "blocked",
+  "green", "yellow", "blocked", "blockedNotice",
   "itemOne", "itemMany",
 ];
 
