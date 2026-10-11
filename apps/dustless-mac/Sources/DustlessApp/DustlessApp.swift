@@ -118,6 +118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct RootView: View {
     @ObservedObject var store: ScanStore
 
+    @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openSettings) private var openSettings
+
     var body: some View {
         NavigationSplitView {
             SidebarView(
@@ -136,6 +139,17 @@ struct RootView: View {
             }
         }
         .navigationTitle("Dustless")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openSettings()
+                } label: {
+                    Label(settings.t("settingsOpen"), systemImage: "gearshape")
+                }
+                .keyboardShortcut(",", modifiers: .command)
+                .help(settings.t("settingsOpen"))
+            }
+        }
         .sheet(isPresented: $store.showingConfirmation) {
             ConfirmDeleteSheet(
                 findings: store.selectedFindings,
