@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="Dustless — safe disk cleanup for developer machines." />
     <title>Dustless</title>
     <link rel="stylesheet" href="/style.css" />
@@ -24,6 +24,17 @@
           stroke-linecap="round"
           stroke-linejoin="round"
         />
+      </symbol>
+      <symbol id="i-leaf" viewBox="0 0 24 24">
+        <path
+          d="M12 3c5.5 2.5 7 7.5 7 11.5a7.5 7.5 0 0 1-7 7.5 7.5 7.5 0 0 1-7-7.5C5 8 7.5 4 12 3z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path d="M12 7v10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
       </symbol>
       <symbol id="i-green" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8" />
@@ -83,8 +94,19 @@
         />
       </symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24">
+        <path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7" />
+        <path d="M8.6 10.5V8a3.4 3.4 0 0 1 6.8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+        <path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24">
         <path
-          d="m7 10 5 5 5-5"
+          d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"
           fill="none"
           stroke="currentColor"
           stroke-width="1.8"
@@ -92,26 +114,33 @@
           stroke-linejoin="round"
         />
       </symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24">
-        <rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7" />
-        <path d="M8.6 10.5V8a3.4 3.4 0 0 1 6.8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7" />
-      </symbol>
     </svg>
 
-    <div class="grain" aria-hidden="true"></div>
-    <div class="aurora" aria-hidden="true"></div>
-
-    <a class="skip" href="#findings">Skip to findings</a>
+    <a class="skip" href="#tabPanels">Skip to findings</a>
 
     <header class="island">
       <div class="island__brand">
-        <span class="island__mark"><svg aria-hidden="true"><use href="#i-mark" /></svg></span>
+        <span class="island__mark"><svg aria-hidden="true"><use href="#i-leaf" /></svg></span>
         <span class="island__name">Dustless</span>
       </div>
-      <div class="island__langs" role="group" id="langs" aria-label="Language">
-        <button type="button" class="lang" data-lang="vi" aria-pressed="false">VI</button>
-        <button type="button" class="lang" data-lang="en" aria-pressed="false">EN</button>
-        <button type="button" class="lang" data-lang="zh" aria-pressed="false">中文</button>
+      <div class="island__stats" aria-live="polite">
+        <span id="freeStat" class="stat">—</span>
+        <span class="stat__sep" aria-hidden="true"></span>
+        <span id="selectStat" class="stat">—</span>
+      </div>
+      <div class="island__tools">
+        <button type="button" class="icon" id="themeBtn" aria-label="Theme" title="Cycle theme">
+          <svg aria-hidden="true"><use href="#i-sun" /></svg>
+        </button>
+        <button type="button" class="ghost" id="scanBtn" data-busy="false">
+          <svg aria-hidden="true" class="ghost__icon"><use href="#i-scan" /></svg>
+          <span data-i18n="rescan">Rescan</span>
+        </button>
+        <div class="langs" id="langs" role="group" aria-label="Language">
+          <button type="button" class="lang" data-lang="vi" aria-pressed="false">VI</button>
+          <button type="button" class="lang" data-lang="en" aria-pressed="false">EN</button>
+          <button type="button" class="lang" data-lang="zh" aria-pressed="false">中文</button>
+        </div>
       </div>
     </header>
 
@@ -146,10 +175,6 @@
               </span>
               <span class="cta__icon"><svg aria-hidden="true"><use href="#i-arrow" /></svg></span>
             </button>
-            <button type="button" class="ghost" id="scanBtn">
-              <svg aria-hidden="true" class="ghost__icon"><use href="#i-scan" /></svg>
-              <span data-i18n="rescan">—</span>
-            </button>
             <ul class="safety">
               <li><svg aria-hidden="true"><use href="#i-lock" /></svg><span data-i18n="safetyReadOnly">—</span></li>
               <li><svg aria-hidden="true"><use href="#i-blocked" /></svg><span data-i18n="safetyRed">—</span></li>
@@ -159,64 +184,114 @@
         </div>
       </section>
 
-      <section class="tiers" id="tiers" aria-label="Safety tiers">
-        <article class="bezel" data-tier="green">
-          <div class="core core--tier">
-            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-green" /></svg></span>
-            <h2 class="core__name" data-i18n="green">—</h2>
-            <p class="core__hint" data-i18n="greenHint">—</p>
-            <p class="core__stat"><b id="greenCount">0</b><span id="greenSize">0 GB</span></p>
+      <section class="tiers" id="tiers" aria-label="Risk tabs">
+        <div class="tabs" role="tablist" aria-label="Risk">
+          <button
+            type="button"
+            class="tab"
+            role="tab"
+            id="tabSafeBtn"
+            aria-controls="tabSafe"
+            data-tab="safe"
+            data-tier="green"
+            aria-selected="true"
+          >
+            <span class="tab__glyph"><svg aria-hidden="true"><use href="#i-green" /></svg></span>
+            <span class="tab__text">
+              <span class="tab__name" data-i18n="safeTab">—</span>
+              <span class="tab__meta"><b id="greenCount">0</b><span id="greenSize">0 GB</span></span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            role="tab"
+            id="tabReviewBtn"
+            aria-controls="tabReview"
+            data-tab="review"
+            data-tier="yellow"
+            aria-selected="false"
+          >
+            <span class="tab__glyph"><svg aria-hidden="true"><use href="#i-yellow" /></svg></span>
+            <span class="tab__text">
+              <span class="tab__name" data-i18n="reviewTab">—</span>
+              <span class="tab__meta"><b id="yellowCount">0</b><span id="yellowSize">0 GB</span></span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="tab"
+            role="tab"
+            id="tabLockedBtn"
+            aria-controls="tabLocked"
+            data-tab="locked"
+            data-tier="blocked"
+            aria-selected="false"
+          >
+            <span class="tab__glyph"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
+            <span class="tab__text">
+              <span class="tab__name" data-i18n="lockedTab">—</span>
+              <span class="tab__meta"><b id="blockedCount">0</b><span id="blockedSize">0 GB</span></span>
+            </span>
+          </button>
+        </div>
+
+        <div class="tab-panels" id="tabPanels">
+          <div id="tabSafe" class="tab-panel" role="tabpanel" aria-labelledby="tabSafeBtn">
+            <div class="panel__head">
+              <h2 class="panel__title" data-i18n="safeTab">—</h2>
+              <p class="panel__meta" id="safeMeta">—</p>
+            </div>
+            <div class="groups" data-tab-group="safe"></div>
+            <div class="tab-empty" id="safeEmpty" hidden>
+              <p data-i18n="emptySafe">—</p>
+            </div>
           </div>
-        </article>
-        <article class="bezel" data-tier="yellow">
-          <div class="core core--tier">
-            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-yellow" /></svg></span>
-            <h2 class="core__name" data-i18n="yellow">—</h2>
-            <p class="core__hint" data-i18n="yellowHint">—</p>
-            <p class="core__stat"><b id="yellowCount">0</b><span id="yellowSize">0 GB</span></p>
+          <div id="tabReview" class="tab-panel" role="tabpanel" aria-labelledby="tabReviewBtn" hidden>
+            <div class="panel__head">
+              <h2 class="panel__title" data-i18n="reviewTab">—</h2>
+              <p class="panel__meta" id="reviewMeta">—</p>
+            </div>
+            <div class="groups" data-tab-group="review"></div>
+            <div class="tab-empty" id="reviewEmpty" hidden>
+              <p data-i18n="emptyReview">—</p>
+            </div>
           </div>
-        </article>
-        <article class="bezel" data-tier="blocked">
-          <div class="core core--tier">
-            <span class="core__glyph"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
-            <h2 class="core__name" data-i18n="blocked">—</h2>
-            <p class="core__hint" data-i18n="blockedHint">—</p>
-            <p class="core__stat"><b id="blockedCount">0</b><span id="blockedSize">0 GB</span></p>
+          <div id="tabLocked" class="tab-panel" role="tabpanel" aria-labelledby="tabLockedBtn" hidden>
+            <div class="panel__head">
+              <h2 class="panel__title" data-i18n="lockedTab">—</h2>
+              <p class="panel__meta" id="lockedMeta">—</p>
+            </div>
+            <div class="groups" data-tab-group="locked"></div>
+            <div class="tab-empty" id="lockedEmpty" hidden>
+              <p data-i18n="emptyLocked">—</p>
+            </div>
           </div>
-        </article>
+        </div>
       </section>
 
-      <section class="panel" id="findings" aria-labelledby="findTitle">
-        <div class="panel__head">
-          <h2 class="panel__title" id="findTitle" data-i18n="findings">—</h2>
-          <p class="panel__meta" id="findMeta">—</p>
+      <section class="state state--scan" id="scanState">
+        <div class="radar" aria-hidden="true">
+          <span class="radar__sweep"></span>
+          <span class="radar__core"></span>
         </div>
+        <p class="state__title" id="scanTitle">—</p>
+        <p class="state__body" id="scanBody">—</p>
+        <div class="progress" aria-hidden="true"><span class="progress__sweep"></span></div>
+        <p class="state__clock" id="scanClock">—</p>
+      </section>
 
-        <div class="state state--scan" id="scanState">
-          <div class="radar" aria-hidden="true">
-            <span class="radar__sweep"></span>
-            <span class="radar__core"></span>
-          </div>
-          <p class="state__title" id="scanTitle">—</p>
-          <p class="state__body" id="scanBody">—</p>
-          <div class="progress" aria-hidden="true"><span class="progress__sweep"></span></div>
-          <p class="state__clock" id="scanClock">—</p>
-        </div>
+      <section class="state state--empty" id="emptyState" hidden>
+        <span class="state__mark"><svg aria-hidden="true"><use href="#i-mark" /></svg></span>
+        <p class="state__title" id="emptyTitle">—</p>
+        <p class="state__body" id="emptyBody">—</p>
+      </section>
 
-        <div class="state state--empty" id="emptyState" hidden>
-          <span class="state__mark"><svg aria-hidden="true"><use href="#i-mark" /></svg></span>
-          <p class="state__title" id="emptyTitle">—</p>
-          <p class="state__body" id="emptyBody">—</p>
-        </div>
-
-        <div class="state state--error" id="errorState" hidden>
-          <span class="state__mark state__mark--blocked"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
-          <p class="state__title" id="errorTitle">—</p>
-          <p class="state__body" id="errorBody">—</p>
-          <button type="button" class="ghost" id="retryBtn"><span data-i18n="retry">—</span></button>
-        </div>
-
-        <div id="groups" class="groups"></div>
+      <section class="state state--error" id="errorState" hidden>
+        <span class="state__mark state__mark--blocked"><svg aria-hidden="true"><use href="#i-blocked" /></svg></span>
+        <p class="state__title" id="errorTitle">—</p>
+        <p class="state__body" id="errorBody">—</p>
+        <button type="button" class="ghost" id="retryBtn"><span data-i18n="retry">—</span></button>
       </section>
 
       <section class="panel panel--result" id="result" aria-labelledby="resultTitle" hidden>
@@ -252,13 +327,19 @@
       <form method="dialog" class="sheet__form">
         <header class="sheet__head">
           <h2 class="sheet__title" id="confirmTitle" data-i18n="confirmTitle">—</h2>
-          <p class="sheet__body" id="confirmBody">—</p>
+          <p class="sheet__body" id="confirmBody" data-i18n="confirmBody">—</p>
+          <p class="sheet__summary">
+            <span id="confirmSelectedCount">—</span>
+            <span class="sheet__sep" aria-hidden="true"></span>
+            <span id="confirmLockedCount">—</span>
+            <span class="sheet__sep" aria-hidden="true"></span>
+            <span id="confirmTotal">—</span>
+          </p>
         </header>
         <div class="sheet__list" id="confirmList"></div>
-        <p class="sheet__total"><span id="confirmTotal">—</span></p>
         <footer class="sheet__actions">
           <button type="submit" value="cancel" class="ghost" id="confirmCancel" data-i18n="confirmCancel">—</button>
-          <button type="submit" value="confirm" class="cta cta--compact" id="confirmGo">
+          <button type="submit" value="confirm" class="cta cta--compact" id="confirmGo" disabled>
             <span class="cta__body"><span class="cta__label" data-i18n="confirmGo">—</span></span>
             <span class="cta__icon"><svg aria-hidden="true"><use href="#i-broom" /></svg></span>
           </button>

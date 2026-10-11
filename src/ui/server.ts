@@ -15,6 +15,7 @@ import appJs from "./public/app.js" with { type: "text" };
 import i18nJs from "./public/i18n.js" with { type: "text" };
 import indexHtml from "./public/index.html" with { type: "text" };
 import styleCss from "./public/style.css" with { type: "text" };
+import uiHelpersJs from "./public/ui-helpers.js" with { type: "text" };
 
 const HOST = "127.0.0.1";
 const PREFERRED_PORT = 4477;
@@ -38,6 +39,7 @@ const ASSETS = new Map<string, readonly [string, string]>([
   ["/style.css", ["text/css; charset=utf-8", styleCss]],
   ["/app.js", ["text/javascript; charset=utf-8", appJs]],
   ["/i18n.js", ["text/javascript; charset=utf-8", i18nJs]],
+  ["/ui-helpers.js", ["text/javascript; charset=utf-8", uiHelpersJs]],
 ]);
 
 const CHOICES = new Set(["green", "yellow", "skip"]);
