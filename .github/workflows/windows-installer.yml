@@ -41,8 +41,11 @@ jobs:
           BUN_TARGET: bun-windows-x64
         run: bun run build
 
-      - name: Generate the icon
-        run: bun scripts/icons.ts
+      - name: Copy the committed icon
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/icons | Out-Null
+          Copy-Item brand/generated/dustless.ico dist/icons/dustless.ico
 
       - name: Build the installer
         run: bun run installer:win
