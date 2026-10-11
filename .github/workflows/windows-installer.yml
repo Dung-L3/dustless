@@ -1,0 +1,98 @@
+name: Windows installer
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Locate NSIS
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) {
+            Write-Host "NSIS not preinstalled; installing with Chocolatey"
+            choco install nsis -y --no-progress
+            $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $found) { throw "makensis not found after install" }
+          Write-Host "makensis: $found"
+          "MAKENSIS=$found" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build the Windows engine
+        env:
+          OUTFILE: dist/dustless.exe
+          BUN_TARGET: bun-windows-x64
+        run: bun run build
+
+      - name: Generate the icon
+        run: bun scripts/icons.ts
+
+      - name: Build the installer
+        run: bun run installer:win
+
+      - name: Verify the installer is a real Windows executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist -Filter "Dustless-*-setup.exe" | Select-Object -First 1
+          if (-not $exe) { throw "installer was not produced" }
+          if ($exe.Length -lt 20MB) { throw "installer is suspiciously small: $($exe.Length)" }
+          $sig = [System.IO.File]::ReadAllBytes($exe.FullName)[0..1]
+          if ($sig[0] -ne 0x4D -or $sig[1] -ne 0x5A) { throw "installer is not a Windows PE (missing MZ header)" }
+          Write-Host "installer ok: $($exe.Name) ($([math]::Round($exe.Length/1MB,1)) MB)"
+
+      - name: Silently install, run, then uninstall
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist -Filter "Dustless-*-setup.exe" | Select-Object -First 1).FullName
+          $dir = "$env:LOCALAPPDATA\Programs\Dustless"
+
+          Start-Process -FilePath $exe -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+
+          if (-not (Test-Path "$dir\dustless.exe")) { throw "silent install did not place the engine" }
+          if (-not (Test-Path "$dir\Uninstall.exe")) { throw "uninstaller was not written" }
+
+          $version = & "$dir\dustless.exe" version
+          Write-Host "installed engine reports: $version"
+
+          $json = & "$dir\dustless.exe" scan --json
+          if ($LASTEXITCODE -ne 0) { throw "scan failed after install" }
+          $parsed = $json | ConvertFrom-Json
+          if (-not $parsed.PSObject.Properties.Name.Contains("findings")) { throw "scan --json has no findings key" }
+          Write-Host "scan ok, findings: $($parsed.findings.Count)"
+
+          Start-Process -FilePath "$dir\Uninstall.exe" -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\dustless.exe") { throw "uninstall left the engine behind" }
+          Write-Host "uninstall ok"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dustless-windows-installer
+          path: dist/Dustless-*-setup.exe
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exe = Get-ChildItem dist -Filter "Dustless-*-setup.exe" | Select-Object -First 1
+          gh release upload "${{ github.ref_name }}" $exe.FullName --clobber
