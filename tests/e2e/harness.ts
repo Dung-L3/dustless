@@ -224,3 +224,8 @@ export function gradleWrapper(file: string, version: string): Promise<void> {
     `distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-${version}-bin.zip\nzipStoreBase=GRADLE_USER_HOME\n`,
   );
 }
+export function currentPlatform(): "mac" | "win" | "linux" {
+  if (process.platform === "darwin") return "mac";
+  if (process.platform === "win32") return "win";
+  return "linux";
+}
