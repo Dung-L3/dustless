@@ -3,6 +3,11 @@ name: Windows installer
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - "packaging/windows/**"
+      - "scripts/make-win-installer.ts"
+      - ".github/workflows/windows-installer.yml"
   workflow_dispatch:
 
 permissions:
