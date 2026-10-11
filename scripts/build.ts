@@ -21,4 +21,12 @@ const code = await new Promise<number>((resolve) => {
   spawn(process.execPath, args, { stdio: "inherit" }).on("close", (c) => resolve(c ?? 1));
 });
 
+if (code === 0 && process.platform === "darwin" && !outfile.endsWith(".exe")) {
+  await new Promise<void>((resolve) => {
+    spawn("codesign", ["--force", "--sign", "-", outfile], { stdio: "inherit" }).on("close", () =>
+      resolve(),
+    );
+  });
+}
+
 process.exit(code);

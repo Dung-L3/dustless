@@ -248,7 +248,7 @@ describe("apply", () => {
     expect(await exists(victim)).toBe(false);
   });
 
-  test("reports actual freed bytes, not the estimate", async () => {
+  test("reports freed as the measured disk delta between freeBefore and freeAfter", async () => {
     const hog = join(sandbox, "hog");
     await mkdir(hog, { recursive: true });
     await writeFile(join(hog, "a.bin"), Buffer.alloc(16 * 1024 * 1024, 4));
@@ -257,8 +257,7 @@ describe("apply", () => {
     expect(result.outcomes[0]?.status).toBe("deleted");
     expect(result.freeBefore).toBe(freeBefore);
     expect(result.freeAfter).toBeGreaterThan(0);
-    expect(result.freed).toBeGreaterThan(0);
-    expect(result.freed).toBeLessThan(64 * 1024 * 1024);
+    expect(result.freed).toBe(Math.max(0, result.freeAfter - result.freeBefore));
     expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 });

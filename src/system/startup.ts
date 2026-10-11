@@ -55,28 +55,34 @@ async function readPlist(
   const label = path.split(/[/\\]/).pop()!.replace(/\.plist$/, "");
   let target: string | null = null;
   let ageDays: number | null = null;
-  let lastRun: number | null = null;
   try {
     const text = await readFile(path, "utf8");
     target = pick(text, /<key>Program<\/key>\s*<string>([^<]+)<\/string>/)
       ?? pick(text, /<key>ProgramArguments<\/key>\s*<array>\s*<string>([^<]+)<\/string>/);
-    const start = pick(text, /<key>StartInterval<\/key>\s*<integer>(\d+)<\/integer>/);
-    lastRun = start ? Date.now() - Number(start) * 1000 : null;
     ageDays = await dirAgeDays(path);
   } catch {
     ageDays = null;
   }
+  const orphaned = target !== null && !(await fileExists(target));
   return {
     id: `plist:${label}`,
     label,
     source,
     location: path,
-    lastRun,
+    lastRun: null,
     ageDays,
     target,
-    exists: target !== null,
-    note: staleNote(ageDays),
+    exists: !orphaned,
+    note: orphaned ? "file đích đã bị xoá — có thể gỡ" : staleNote(ageDays),
   };
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 async function collectWindows(): Promise<StartupItem[]> {

@@ -56,9 +56,18 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          merge-multiple: true
+      - name: Collect every built binary
+        run: |
+          mkdir -p out
+          find artifacts -type f -name 'dustless*' -exec cp {} out/ \;
+          ls -l out
+          test "$(find out -type f | wc -l)" -eq 4
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
-          generate_release_notes: true
-          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: out/*
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

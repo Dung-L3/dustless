@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import type { ApplyReport, Finding, ScanReport, Tier, TierChoice } from "./types.ts";
 import { HOME, exists, platform } from "./core/paths.ts";
+import { inspectSystem } from "./system/index.ts";
 import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
 import { apply } from "./core/apply.ts";
@@ -237,6 +238,7 @@ async function probe(path: string): Promise<string> {
 
 async function runDoctor(): Promise<number> {
   const usage = await diskUsage(HOME);
+  const hygiene = await inspectSystem();
   const report = {
     platform,
     home: HOME,
@@ -245,6 +247,7 @@ async function runDoctor(): Promise<number> {
     total: usage.bytes,
     free: await freeSpace(),
     paths: Object.fromEntries(await Promise.all(KEY_PATHS.map(async (p) => [p, await probe(p)] as const))),
+    hygiene,
   };
   if (flag("json")) {
     console.log(JSON.stringify(report, null, 2));
@@ -262,10 +265,21 @@ async function runDoctor(): Promise<number> {
       ? `\n${paint("31", "✖ thiếu Full Disk Access")} — cấp trong System Settings › Privacy & Security › Full Disk Access`
       : "\n" + paint("32", "✔ không thấy dấu hiệu thiếu Full Disk Access"),
   );
+  const stale = hygiene.items.filter((item) => item.severity === "warn");
+  say(bold(`\n  vệ sinh hệ thống  ${hygiene.startupCount} khởi động · ${hygiene.toolchainCount} toolchain`));
+  for (const item of stale.slice(0, 8)) {
+    say(`  ${paint("33", "!")} ${dim(`${item.kind}/${item.label}`.padEnd(34))} ${item.detail}`);
+  }
+  if (stale.length > 8) say(dim(`  … và ${stale.length - 8} mục nữa, xem --json`));
+  if (hygiene.items.length === 0) say(dim("  không có mục nào đáng ngờ"));
   return mail.includes("EPERM") ? 1 : 0;
 }
 
 async function main(): Promise<number> {
+  if (flag("version")) {
+    console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
+    return 0;
+  }
   const [command = "help", ...rest] = args;
   if (command === "scan") return await runScan();
   if (command === "apply") return await runApply();

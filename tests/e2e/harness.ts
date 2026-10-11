@@ -45,7 +45,19 @@ export type Outcome = {
   detail: string;
 };
 
+export type ApplyReport = {
+  outcomes: Outcome[];
+  freed: number;
+  freeBefore: number;
+  freeAfter: number;
+  elapsedMs: number;
+};
+
 export type Result = { code: number; stdout: string; stderr: string };
+
+export function measuredFreed(report: Pick<ApplyReport, "freeBefore" | "freeAfter">): number {
+  return Math.max(0, report.freeAfter - report.freeBefore);
+}
 
 export type Sandbox = {
   home: string;
@@ -216,8 +228,8 @@ export function findByRule(report: ScanReport, ruleId: string, pathSuffix: strin
   return report.findings.find((f) => f.ruleId === ruleId && f.path.endsWith(pathSuffix));
 }
 
-export function applyJson(stdout: string): { outcomes: Outcome[]; freed: number } {
-  return JSON.parse(stdout) as { outcomes: Outcome[]; freed: number };
+export function applyJson(stdout: string): ApplyReport {
+  return JSON.parse(stdout) as ApplyReport;
 }
 
 export function gradleWrapper(file: string, version: string): Promise<void> {

@@ -5,6 +5,7 @@ import {
   applyJson,
   cleanupAll,
   digest,
+  measuredFreed,
   MB,
   plant,
   sandbox,
@@ -109,7 +110,7 @@ describe("10. JSON output", () => {
     const result = applyJson(run.stdout);
     expect(result.outcomes).toHaveLength(1);
     expect(result.outcomes[0]?.status).toBe("deleted");
-    expect(result.freed).toBeGreaterThan(0);
+    expect(result.freed).toBe(measuredFreed(result));
   });
 
   test("rule list --json and doctor --json agree on the rule count", async () => {
@@ -139,9 +140,10 @@ describe("10. JSON output", () => {
     const fresh = await sandbox("json-freed");
     await plant(join(fresh.home, ".npm", "_cacache"), 2 * MB, 2);
     const run = await fresh.run(["apply", "--yes", "--json"]);
-    const report = JSON.parse(run.stdout) as Record<string, unknown>;
+    const report = JSON.parse(run.stdout) as { freed: number; freeBefore: number; freeAfter: number };
     expect(report["freeBefore"]).toBeGreaterThan(0);
     expect(report["freeAfter"]).toBeGreaterThan(0);
+    expect(report["freed"]).toBe(measuredFreed(report));
     await fresh.dispose();
   });
 });

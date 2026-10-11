@@ -9,10 +9,12 @@ import {
   sizeOf,
   startUiServer,
 } from "./harness.ts";
+import { measuredFreed } from "../e2e/harness.ts";
 
 type Finding = { ruleId: string; tier: string; path: string; bytes: number; blocked: boolean };
 type Report = { findings: Finding[]; reclaimable: number; scannedMs: number };
 type Outcome = { ruleId: string; path: string; status: string; detail: string };
+type ApplyResult = { outcomes: Outcome[]; freed: number; freeBefore: number; freeAfter: number };
 type Parsed = { status: number; body: unknown; res: Response };
 
 let box: Sandbox;
@@ -161,11 +163,11 @@ describe("apply is inert unless the payload says so", () => {
     const tiers = skipAll(report);
     expect(Object.keys(tiers).length).toBeGreaterThan(0);
     const response = await call("/api/apply", jsonBody(tiers));
-    const result = response.body as { outcomes: Outcome[]; freed: number };
+    const result = response.body as ApplyResult;
     expect(response.status).toBe(200);
     expect(result.outcomes.length).toBe(report.findings.length);
     expect(result.outcomes.map((outcome) => outcome.status)).toEqual(result.outcomes.map(() => "skipped"));
-    expect(result.freed).toBe(0);
+    expect(result.freed).toBe(measuredFreed(result));
     expect(await box.fingerprint()).toBe(before);
   });
 

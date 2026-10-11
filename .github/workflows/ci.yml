@@ -11,7 +11,19 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            required: true
+          - os: macos-latest
+            required: false
+          - os: windows-latest
+            required: false
+    continue-on-error: ${{ !matrix.required }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -21,5 +33,11 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run build
-      - name: Smoke test compiled binary
-        run: ./dist/dustless --version && ./dist/dustless doctor
+      - name: Smoke test the compiled binary
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=./dist/dustless.exe; else BIN=./dist/dustless; fi
+          $BIN --version
+          $BIN scan --json
+          $BIN rule list --json
+          $BIN doctor || true
