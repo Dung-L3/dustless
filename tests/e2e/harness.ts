@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -11,6 +11,18 @@ export const MB = 1024 * 1024;
 export const VERSION = JSON.parse(
   await readFile(join(REPO, "package.json"), "utf8"),
 ).version as string;
+
+// Every e2e test drives the compiled binary. Build it once here if it is
+// missing, so the suite does not depend on CI's step order or on which test
+// file the runner happens to load first. That missing guarantee made the
+// deep-tree and concurrent-scan tests fail on the macOS and Windows runners,
+// where the binary had not been produced before those files ran.
+if (!(await stat(BINARY).then(() => true, () => false))) {
+  const built = await Bun.$`bun run build`.cwd(REPO).quiet().nothrow();
+  if (built.exitCode !== 0 || !(await stat(BINARY).then(() => true, () => false))) {
+    throw new Error(`could not build the e2e binary ${BINARY} (exit ${built.exitCode}):\n${built.stderr.toString()}`);
+  }
+}
 
 const TMP = resolve(tmpdir());
 const TIMEOUT_MS = 60_000;
