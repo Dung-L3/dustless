@@ -1,11 +1,15 @@
 {
   "name": "dustless",
   "version": "0.2.0",
-  "description": "Cache dọn sạch trên máy dev. Quét chéo trước khi xóa.",
+  "description": "Cache d\u1ecdn s\u1ea1ch tr\u00ean m\u00e1y dev. Qu\u00e9t ch\u00e9o tr\u01b0\u1edbc khi x\u00f3a.",
   "type": "module",
   "license": "MIT",
-  "bin": { "dustless": "./dist/dustless" },
-  "files": ["dist"],
+  "bin": {
+    "dustless": "./dist/dustless"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "bun scripts/build.ts",
     "test": "bun test",
@@ -14,11 +18,14 @@
     "bundle:mac": "bun scripts/bundle-macos.ts",
     "dmg": "bun scripts/make-dmg.ts",
     "package:win": "bun scripts/package-win.ts",
-    "package": "bun scripts/package.ts"
+    "package": "bun scripts/package.ts",
+    "installer:win": "bun scripts/make-win-installer.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",
     "typescript": "^5.9.0"
   },
-  "engines": { "bun": ">=1.3.0" }
+  "engines": {
+    "bun": ">=1.3.0"
+  }
 }
