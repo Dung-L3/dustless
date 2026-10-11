@@ -71,11 +71,24 @@ async function diskSpace(): Promise<{ free: number; total: number }> {
 async function readChoices(req: IncomingMessage): Promise<TierChoice> {
   const chunks: Buffer[] = [];
   let bytes = 0;
-  for await (const chunk of req) {
-    const buffer = chunk as Buffer;
-    bytes += buffer.length;
-    if (bytes > MAX_BODY_BYTES) throw new HttpError(413, "request body too large");
-    chunks.push(buffer);
+  let overflow = false;
+  await new Promise<void>((resolve, reject) => {
+    req.on("data", (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > MAX_BODY_BYTES) {
+        overflow = true;
+        req.pause();
+        resolve();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", resolve);
+    req.on("error", reject);
+  });
+  if (overflow) {
+    req.resume();
+    throw new HttpError(413, "request body too large");
   }
   let body: unknown;
   try {
@@ -105,13 +118,25 @@ function isLoopback(req: IncomingMessage): boolean {
   return LOOPBACK_HOSTS.has(host);
 }
 
-function sendJson(res: ServerResponse, status: number, payload: unknown): void {
+function crossOrigin(req: IncomingMessage): string | null {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost" || /^127\./.test(url.hostname)) return null;
+    return origin;
+  } catch {
+    return origin;
+  }
+}
+
+function sendJson(res: ServerResponse, status: number, payload: unknown, done?: () => void): void {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
   });
-  res.end(body);
+  res.end(body, done);
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -126,6 +151,19 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
   const path = new URL(req.url ?? "/", `http://${HOST}`).pathname;
   const method = req.method ?? "GET";
+  if (method !== "GET" && method !== "HEAD") {
+    const origin = crossOrigin(req);
+    if (origin) {
+      res.setHeader("Connection", "close");
+      sendJson(res, 403, { error: `cross-origin ${method} refused from ${origin}` });
+      return;
+    }
+    if (!/^application\/json\b/i.test(req.headers["content-type"] ?? "")) {
+      res.setHeader("Connection", "close");
+      sendJson(res, 415, { error: "Content-Type must be application/json" });
+      return;
+    }
+  }
   const asset = ASSETS.get(path);
   try {
     if (method === "GET" && asset) {
@@ -150,7 +188,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     sendJson(res, 404, { error: `no route for ${method} ${path}` });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
-    sendJson(res, status, { error: error instanceof Error ? error.message : "internal error" });
+    if (status === 413) res.setHeader("Connection", "close");
+    sendJson(res, status, { error: error instanceof Error ? error.message : "internal error" }, () => req.destroy());
   }
 }
 

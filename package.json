@@ -9,6 +9,7 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "test": "bun test",
+    "test:ui": "bun test tests/e2e-ui",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
