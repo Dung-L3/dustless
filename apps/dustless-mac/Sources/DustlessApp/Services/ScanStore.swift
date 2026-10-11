@@ -54,7 +54,7 @@ final class ScanStore: ObservableObject {
             busyMessage = "Measuring caches across every rule…"
             let report = try await cli.scan()
             self.report = report
-            selection = Set(report.deletable.map(\.id))
+            selection = report.initialSelection
             lastApply = nil
             busyMessage = nil
             phase = .ready
@@ -78,7 +78,7 @@ final class ScanStore: ObservableObject {
             showingApplyResult = true
             let fresh = try await cli.scan()
             report = fresh
-            selection = Set(fresh.deletable.map(\.id))
+            selection = fresh.initialSelection
             busyMessage = nil
             phase = .ready
         } catch {

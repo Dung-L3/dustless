@@ -103,6 +103,14 @@ struct SafetyInvariantTests {
         #expect(deletable.allSatisfy { $0.isDeletableByEngine })
         #expect(deletable.count <= report.findings.count)
     }
+
+    @Test func aFreshScanNeverPreSelectsAnything() throws {
+        let report = try JSONDecoder().decode(ScanReport.self, from: fixture("scan.json"))
+        // The fixture has deletable findings, so an empty selection is a real
+        // decision and not an artefact of an empty report.
+        #expect(!report.deletable.isEmpty)
+        #expect(report.initialSelection.isEmpty)
+    }
 }
 
 @Suite("byte formatting")

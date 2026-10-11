@@ -42,6 +42,11 @@ public struct ScanReport: Codable, Sendable {
     public var deletableBytes: UInt64 {
         deletable.reduce(0) { $0 + $1.bytes }
     }
+
+    /// Safety invariant: a scan never pre-selects anything. The engine fails
+    /// closed (`src/core/apply.ts`) and the UI must too — the user opts in to
+    /// each path, so a fresh report starts with an empty selection.
+    public var initialSelection: Set<String> { [] }
 }
 
 public enum ApplyStatus: String, Codable, Sendable {
