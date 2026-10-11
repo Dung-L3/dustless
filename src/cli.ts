@@ -2,7 +2,7 @@
 import { appendFile, mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
-import type { ApplyOutcome, Finding, ScanReport, Tier } from "./types.ts";
+import type { ApplyReport, Finding, ScanReport, Tier } from "./types.ts";
 import { HOME, exists, platform } from "./core/paths.ts";
 import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
@@ -85,18 +85,26 @@ function printScan(report: ScanReport): void {
   );
 }
 
-function printApply(outcomes: ApplyOutcome[], freed: number): void {
+function printApply(result: ApplyReport): void {
   if (flag("json")) {
-    console.log(JSON.stringify({ outcomes, freed }));
+    console.log(JSON.stringify(result));
     return;
   }
-  for (const o of outcomes) {
+  for (const o of result.outcomes) {
     const mark = o.status === "deleted" ? paint("32", "✔") : o.status === "failed" ? paint("31", "✖") : paint("33", "–");
     say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${dim(o.ruleId)}  ${o.path}`);
     if (o.detail) say(`  ${dim(o.detail)}`);
   }
-  say(`\n${bold(`Đã thu hồi ${bytesOf(freed)}`)}`);
+  say(`\n${bold(`Đã thu hồi ${bytesOf(result.freed)}`)}`);
 }
+
+const idleApply = (): ApplyReport => ({
+  outcomes: [],
+  freed: 0,
+  freeBefore: 0,
+  freeAfter: 0,
+  elapsedMs: 0,
+});
 
 async function runScan(): Promise<number> {
   printScan(await scan());
@@ -108,15 +116,17 @@ async function runApply(): Promise<number> {
   if (!flag("json")) printScan(report);
   const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
   if (deletable.length === 0) {
-    say("Không có mục nào đủ điều kiện xóa.");
+    printApply(idleApply());
+    if (!flag("json")) say("Không có mục nào đủ điều kiện xóa.");
     return 0;
   }
   if (!flag("yes") && !(await confirmSummary(deletable, report.totals.blocked.count))) {
-    say("Đã hủy. Không có gì bị xóa.");
+    printApply(idleApply());
+    if (!flag("json")) say("Đã hủy. Không có gì bị xóa.");
     return 0;
   }
   const result = await apply(report, { assumeYes: flag("yes"), onPrompt: askYellow });
-  printApply(result.outcomes, result.freed);
+  printApply(result);
   return result.outcomes.some((o) => o.status === "failed") ? 1 : 0;
 }
 
@@ -124,6 +134,7 @@ async function confirmSummary(findings: Finding[], blockedCount: number): Promis
   const green = findings.filter((f) => f.tier === "green");
   const yellow = findings.filter((f) => f.tier === "yellow");
   const total = findings.reduce((sum, f) => sum + f.bytes, 0);
+  if (flag("json")) return false;
   say(
     `\n${bold("Sẽ xóa")} ${green.length} mục tự động (${bytesOf(green.reduce((s, f) => s + f.bytes, 0))})` +
       `\n${bold("Sẽ hỏi")}  ${yellow.length} mục (${bytesOf(yellow.reduce((s, f) => s + f.bytes, 0))})` +
