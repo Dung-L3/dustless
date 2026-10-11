@@ -46,7 +46,7 @@ VIAddVersionKey "LegalCopyright" "MIT"
 !insertmacro MUI_LANGUAGE "English"
 
 Function RunFirstScan
-  ExecShell "open" "cmd.exe" "/k ""$INSTDIR\${APP_EXE}"" scan"
+  ExecShell "open" "cmd.exe" "/k $\"$INSTDIR\${APP_EXE}$\" scan"
 FunctionEnd
 
 Function .onInit
