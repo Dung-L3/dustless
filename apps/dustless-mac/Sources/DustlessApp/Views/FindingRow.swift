@@ -1,5 +1,6 @@
 import DustlessKit
 import SwiftUI
+import AppKit
 
 struct FindingRow: View {
     let finding: Finding
@@ -81,6 +82,15 @@ struct FindingRow: View {
         .padding(.horizontal, 12)
         .background(rowBackground)
         .contentShape(.rect)
+        .contextMenu {
+            Button(settings.t("revealInFinder")) {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: finding.path)])
+            }
+            Button(settings.t("copyPath")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(finding.path, forType: .string)
+            }
+        }
     }
 
     private var rowBackground: some View {
