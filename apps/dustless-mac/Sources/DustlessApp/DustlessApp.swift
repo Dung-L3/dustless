@@ -303,57 +303,45 @@ struct MemoryWindowContent: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        Group {
-            switch store.memoryPhase {
-            case .idle, .loading:
-                // A refresh re-reads behind the panel; only the first load blanks it.
-                if store.memoryReport != nil {
-                    MemoryView()
-                        .environmentObject(settings)
-                } else {
-                    ProgressView(settings.t("busyMemory"))
-                        .frame(width: 640, height: 320)
-                }
-            case .loaded:
-                if store.memoryReport != nil {
-                    MemoryView()
-                        .environmentObject(settings)
-                } else {
-                    ProgressView(settings.t("busyMemory"))
-                        .frame(width: 640, height: 320)
-                }
-            case .failed:
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 30, weight: .light))
-                        .foregroundStyle(.orange)
-                    Text(settings.t("engineUnavailable"))
-                        .font(.system(size: 15, weight: .semibold))
-                    if let error = store.memoryError {
-                        Text(settings.text(error))
-                            .font(.system(size: 11.5, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 520)
-                    }
-                    Button(settings.t("retry")) {
-                        Task { await store.fetchMemory() }
-                    }
-                    .controlSize(.large)
-                    Text(settings.t("nothingDeleted"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(30)
-                .frame(width: 560, height: 300)
+        state
+            .windowCloseable()
+            .background(CloseOnResignKey())
+            .task {
+                await store.fetchMemory()
             }
-        }
-        .windowCloseable()
-        .background(CloseOnResignKey())
-        .task {
-            await store.fetchMemory()
+    }
+
+    @ViewBuilder
+    private var state: some View {
+        switch store.memoryPhase {
+        case .idle, .loading:
+            // A refresh re-reads behind the panel; only the first load blanks it.
+            if store.memoryReport != nil {
+                MemoryView()
+            } else {
+                PanelStateView(kind: .loading, message: settings.t("busyMemory"))
+                    .frame(width: 640, height: 360)
+            }
+        case .loaded:
+            if store.memoryReport != nil {
+                MemoryView()
+            } else {
+                PanelStateView(
+                    kind: .empty,
+                    message: settings.t("memoryNoProcesses"),
+                    title: settings.t("memory")
+                )
+                .frame(width: 640, height: 360)
+            }
+        case .failed:
+            PanelStateView(
+                kind: .error,
+                message: store.memoryError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
+                title: settings.t("engineUnavailable"),
+                actionTitle: settings.t("retry"),
+                action: { Task { await store.fetchMemory() } }
+            )
+            .frame(width: 640, height: 360)
         }
     }
 }
@@ -364,51 +352,44 @@ struct StorageWindowContent: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        Group {
-            switch store.storagePhase {
-            case .idle, .loading:
-                ProgressView(settings.t("busyScanning"))
-                    .frame(width: 560, height: 300)
-            case .loaded:
-                if let space = store.diskSpace {
-                    StorageView(space: space, reclaimable: store.report?.reclaimable)
-                        .environmentObject(settings)
-                } else {
-                    ProgressView(settings.t("busyScanning"))
-                        .frame(width: 560, height: 300)
-                }
-            case .failed:
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 30, weight: .light))
-                        .foregroundStyle(.orange)
-                    Text(settings.t("engineUnavailable"))
-                        .font(.system(size: 15, weight: .semibold))
-                    if let error = store.storageError {
-                        Text(settings.text(error))
-                            .font(.system(size: 11.5, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 520)
-                    }
-                    Button(settings.t("retry")) {
-                        Task { await store.fetchStorage() }
-                    }
-                    .controlSize(.large)
-                    Text(settings.t("nothingDeleted"))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(30)
-                .frame(width: 560, height: 300)
+        state
+            .windowCloseable()
+            .background(CloseOnResignKey())
+            .task {
+                await store.fetchStorage()
             }
-        }
-        .windowCloseable()
-        .background(CloseOnResignKey())
-        .task {
-            await store.fetchStorage()
+    }
+
+    @ViewBuilder
+    private var state: some View {
+        switch store.storagePhase {
+        case .idle, .loading:
+            if let space = store.diskSpace {
+                StorageView(space: space, reclaimable: store.report?.reclaimable)
+            } else {
+                PanelStateView(kind: .loading, message: settings.t("busyStorage"))
+                    .frame(width: 660, height: 360)
+            }
+        case .loaded:
+            if let space = store.diskSpace {
+                StorageView(space: space, reclaimable: store.report?.reclaimable)
+            } else {
+                PanelStateView(
+                    kind: .empty,
+                    message: settings.t("volumesEmpty"),
+                    title: settings.t("storage")
+                )
+                .frame(width: 660, height: 360)
+            }
+        case .failed:
+            PanelStateView(
+                kind: .error,
+                message: store.storageError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
+                title: settings.t("engineUnavailable"),
+                actionTitle: settings.t("retry"),
+                action: { Task { await store.fetchStorage() } }
+            )
+            .frame(width: 660, height: 360)
         }
     }
 }
