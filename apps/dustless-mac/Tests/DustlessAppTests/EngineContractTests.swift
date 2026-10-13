@@ -41,6 +41,17 @@ struct EngineContractTests {
         #expect(report.elapsedMs >= 0)
     }
 
+    @Test func decodesRealRamPayload() throws {
+        let report = try JSONDecoder().decode(MemoryReport.self, from: fixture("ram.json"))
+        #expect(report.memory.total > 0)
+        #expect(report.memory.used > 0)
+        #expect(report.memory.available > 0)
+        #expect(report.memory.swapUsed > 0)
+        #expect(report.memory.pressurePercent >= 0 && report.memory.pressurePercent <= 100)
+        #expect(!report.processes.isEmpty)
+        #expect(report.processes.allSatisfy { $0.mem > 0 })
+    }
+
     @Test func rejectsMalformedScanPayload() {
         #expect(throws: (any Error).self) {
             try JSONDecoder().decode(ScanReport.self, from: Data(#"{"findings":"nope"}"#.utf8))
