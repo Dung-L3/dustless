@@ -160,6 +160,67 @@ final class CloseOnResignKeyView: NSView {
     }
 }
 
+/// Environment key for closing the current window.
+private struct WindowCloseActionKey: EnvironmentKey {
+    static let defaultValue: @Sendable () -> Void = { }
+}
+
+extension EnvironmentValues {
+    var closeWindow: @Sendable () -> Void {
+        get { self[WindowCloseActionKey.self] }
+        set { self[WindowCloseActionKey.self] = newValue }
+    }
+}
+
+/// View modifier that captures the hosting window and injects a `closeWindow`
+/// action into the environment. Use `.windowCloseable()` on the root view of
+/// a window scene.
+struct WindowCloseable: ViewModifier {
+    @State private var closeAction: (@Sendable () -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .background(WindowCaptureForClose(closeAction: $closeAction))
+            .environment(\.closeWindow, closeAction ?? {})
+    }
+}
+
+extension View {
+    func windowCloseable() -> some View {
+        modifier(WindowCloseable())
+    }
+}
+
+@MainActor
+final class WindowCaptureForCloseView: NSView {
+    var closeActionBinding: Binding<(@Sendable () -> Void)?>
+
+    init(closeActionBinding: Binding<(@Sendable () -> Void)?>) {
+        self.closeActionBinding = closeActionBinding
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window = window else { return }
+        closeActionBinding.wrappedValue = { [weak window] in
+            window?.close()
+        }
+    }
+}
+
+struct WindowCaptureForClose: NSViewRepresentable {
+    @Binding var closeAction: (@Sendable () -> Void)?
+
+    func makeNSView(context: Context) -> NSView {
+        WindowCaptureForCloseView(closeActionBinding: $closeAction)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -243,14 +304,47 @@ struct MemoryWindowContent: View {
 
     var body: some View {
         Group {
-            if store.memoryReport != nil {
-                MemoryView()
-                    .environmentObject(settings)
-            } else {
+            switch store.memoryPhase {
+            case .idle, .loading:
                 ProgressView(settings.t("busyScanning"))
                     .frame(width: 560, height: 300)
+            case .loaded:
+                if store.memoryReport != nil {
+                    MemoryView()
+                        .environmentObject(settings)
+                } else {
+                    ProgressView(settings.t("busyScanning"))
+                        .frame(width: 560, height: 300)
+                }
+            case .failed:
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(.orange)
+                    Text(settings.t("engineUnavailable"))
+                        .font(.system(size: 15, weight: .semibold))
+                    if let error = store.memoryError {
+                        Text(settings.text(error))
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 520)
+                    }
+                    Button(settings.t("retry")) {
+                        Task { await store.fetchMemory() }
+                    }
+                    .controlSize(.large)
+                    Text(settings.t("nothingDeleted"))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(30)
+                .frame(width: 560, height: 300)
             }
         }
+        .windowCloseable()
         .background(CloseOnResignKey())
         .task {
             await store.fetchMemory()
@@ -265,14 +359,47 @@ struct StorageWindowContent: View {
 
     var body: some View {
         Group {
-            if let space = store.diskSpace {
-                StorageView(space: space, reclaimable: store.report?.reclaimable)
-                    .environmentObject(settings)
-            } else {
+            switch store.storagePhase {
+            case .idle, .loading:
                 ProgressView(settings.t("busyScanning"))
                     .frame(width: 560, height: 300)
+            case .loaded:
+                if let space = store.diskSpace {
+                    StorageView(space: space, reclaimable: store.report?.reclaimable)
+                        .environmentObject(settings)
+                } else {
+                    ProgressView(settings.t("busyScanning"))
+                        .frame(width: 560, height: 300)
+                }
+            case .failed:
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(.orange)
+                    Text(settings.t("engineUnavailable"))
+                        .font(.system(size: 15, weight: .semibold))
+                    if let error = store.storageError {
+                        Text(settings.text(error))
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 520)
+                    }
+                    Button(settings.t("retry")) {
+                        Task { await store.fetchStorage() }
+                    }
+                    .controlSize(.large)
+                    Text(settings.t("nothingDeleted"))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(30)
+                .frame(width: 560, height: 300)
             }
         }
+        .windowCloseable()
         .background(CloseOnResignKey())
         .task {
             await store.fetchStorage()
