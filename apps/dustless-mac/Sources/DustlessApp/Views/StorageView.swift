@@ -12,6 +12,7 @@ struct StorageView: View {
             header
             Divider()
             metricsGrid
+            usageBar
             if let reclaimable {
                 Divider()
                 reclaimableSection(reclaimable)
@@ -55,6 +56,11 @@ struct StorageView: View {
         }
     }
 
+    private var usageBar: some View {
+        ProgressView(value: Double(space.used), total: Double(space.total))
+            .frame(height: 8)
+    }
+
     private func reclaimableSection(_ reclaimable: UInt64) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -65,14 +71,10 @@ struct StorageView: View {
                     .foregroundStyle(.secondary)
                     .help(settings.t("reclaimableHelp"))
             }
-            HStack(spacing: 12) {
-                ProgressView(value: Double(space.used), total: Double(space.total))
-                    .frame(height: 8)
-                Text(ByteFormat.string(reclaimable))
-                    .font(.system(.body, design: .monospaced))
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-            }
+            Text(ByteFormat.string(reclaimable))
+                .font(.system(.body, design: .monospaced))
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
             Text(settings.t("storageNote"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
