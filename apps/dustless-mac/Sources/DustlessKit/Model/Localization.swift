@@ -240,6 +240,13 @@ public enum L10n {
         "pressureNormal": "Bình thường",
         "pressureWarn": "Cảnh báo",
         "pressureCritical": "Nghiêm trọng",
+
+        // native app — storage view
+        "diskTotal": "Tổng dung lượng",
+        "diskUsed": "Đã dùng",
+        "diskFree": "Còn trống",
+        "diskVolume": "Ổ đĩa",
+        "storageNote": "Thu hồi được đo bởi engine.",
     ]
 
     static let en: [String: String] = [
@@ -411,6 +418,13 @@ public enum L10n {
         "pressureNormal": "Normal",
         "pressureWarn": "Warning",
         "pressureCritical": "Critical",
+
+        // native app — storage view
+        "diskTotal": "Total",
+        "diskUsed": "Used",
+        "diskFree": "Free",
+        "diskVolume": "Volume",
+        "storageNote": "Reclaimable measured by the engine.",
     ]
 
     static let zh: [String: String] = [
@@ -582,5 +596,12 @@ public enum L10n {
         "pressureNormal": "正常",
         "pressureWarn": "警告",
         "pressureCritical": "严重",
+
+        // native app — storage view
+        "diskTotal": "总计",
+        "diskUsed": "已用",
+        "diskFree": "可用",
+        "diskVolume": "卷",
+        "storageNote": "可回收量由引擎实测。",
     ]
 }
