@@ -11,17 +11,21 @@ struct MemoryView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            Divider()
-            memoryGrid
-            Divider()
-            processList
-            Divider()
-            footer
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                Divider()
+                memoryGrid
+                Divider()
+                processList
+            }
+            .padding(20)
         }
-        .padding(20)
         .frame(width: 560)
+        .safeAreaInset(edge: .bottom) {
+            footer
+                .background(.regularMaterial)
+        }
     }
 
     private var header: some View {
@@ -30,6 +34,15 @@ struct MemoryView: View {
                 .font(.title2.weight(.semibold))
             Spacer()
             pressureBadge
+            Button(action: { dismiss() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .help(settings.t("close"))
+            .accessibilityLabel(settings.t("close"))
         }
     }
 
@@ -109,7 +122,6 @@ struct MemoryView: View {
                 .width(min: 70, ideal: 90)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .frame(height: 300)
         }
     }
 
@@ -131,7 +143,8 @@ struct MemoryView: View {
             }
             .keyboardShortcut(.cancelAction)
         }
-        .padding(.top, 4)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 }
 
