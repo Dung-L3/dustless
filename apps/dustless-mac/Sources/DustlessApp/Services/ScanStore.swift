@@ -11,6 +11,13 @@ final class ScanStore: ObservableObject {
         case ready
     }
 
+    enum LoadPhase: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
     @Published private(set) var lastApply: ApplyReport?
@@ -22,6 +29,12 @@ final class ScanStore: ObservableObject {
     @Published var showingApplyResult = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
+
+    // Independent loading state for Memory/Storage windows — does NOT touch main phase/cli
+    @Published private(set) var memoryPhase: LoadPhase = .idle
+    @Published private(set) var memoryError: L10nText?
+    @Published private(set) var storagePhase: LoadPhase = .idle
+    @Published private(set) var storageError: L10nText?
 
     private var cli: DustlessCLI?
 
@@ -110,48 +123,34 @@ final class ScanStore: ObservableObject {
     }
 
     func fetchMemory() async {
-        guard phase != .scanning && phase != .resolvingEngine else { return }
-        phase = .resolvingEngine
-        engineError = nil
-        busyMessage = L10nText("busyLocating")
+        guard memoryPhase != .loading else { return }
+        memoryPhase = .loading
+        memoryError = nil
         do {
             let cli = try DustlessCLI.resolve()
-            self.cli = cli
-            phase = .scanning
-            busyMessage = L10nText("busyScanning")
             let report = try await cli.ram()
             self.memoryReport = report
-            busyMessage = nil
-            phase = .ready
+            memoryPhase = .loaded
         } catch {
-            cli = nil
             memoryReport = nil
-            engineError = Self.describe(error)
-            busyMessage = nil
-            phase = .idle
+            memoryError = Self.describe(error)
+            memoryPhase = .failed
         }
     }
 
     func fetchStorage() async {
-        guard phase != .scanning && phase != .resolvingEngine else { return }
-        phase = .resolvingEngine
-        engineError = nil
-        busyMessage = L10nText("busyLocating")
+        guard storagePhase != .loading else { return }
+        storagePhase = .loading
+        storageError = nil
         do {
-            let cli = try DustlessCLI.resolve()
-            self.cli = cli
-            phase = .scanning
-            busyMessage = L10nText("busyScanning")
+            _ = try DustlessCLI.resolve()
             let space = DiskSpace.homeVolume()
             self.diskSpace = space
-            busyMessage = nil
-            phase = .ready
+            storagePhase = .loaded
         } catch {
-            cli = nil
             diskSpace = nil
-            engineError = Self.describe(error)
-            busyMessage = nil
-            phase = .idle
+            storageError = Self.describe(error)
+            storagePhase = .failed
         }
     }
 
