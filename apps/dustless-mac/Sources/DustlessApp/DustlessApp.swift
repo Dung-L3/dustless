@@ -121,43 +121,36 @@ struct WindowCapture: NSViewRepresentable {
     }
 }
 
-/// Attaches to a window and closes it when it resigns key status (click outside).
-/// Guards against closing during initial open by ignoring the first resign event.
+/// Closes a window when it resigns key status, i.e. when the user clicks
+/// outside it (another window of this app, or another app).
 struct CloseOnResignKey: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
-        let view = CloseOnResignKeyView()
-        return view
+        CloseOnResignKeyView()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard let view = nsView as? CloseOnResignKeyView,
-              let window = nsView.window else { return }
-        view.attach(to: window)
-    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 @MainActor
 final class CloseOnResignKeyView: NSView {
-    private var observedWindow: NSWindow?
-    private var isFirstResign = true
+    private weak var observedWindow: NSWindow?
 
-    func attach(to window: NSWindow) {
-        guard observedWindow !== window else { return }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // SwiftUI calls updateNSView before the view is in a window, so attach
+        // here instead — this is the only place the window is guaranteed.
+        guard let window, observedWindow !== window else { return }
         if let old = observedWindow {
             NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: old)
         }
         observedWindow = window
-        isFirstResign = true
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey(_:)), name: NSWindow.didResignKeyNotification, object: window)
+        // The window must be key for resign-key to fire, so make it so.
+        window.makeKeyAndOrderFront(nil)
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
-        guard let window = observedWindow else { return }
-        if isFirstResign {
-            isFirstResign = false
-            return
-        }
-        window.close()
+        observedWindow?.close()
     }
 
     deinit {
