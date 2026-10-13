@@ -157,11 +157,6 @@ struct StorageView: View {
         }
     }
 
-    private var usageBar: some View {
-        ProgressView(value: Double(space.used), total: Double(space.total))
-            .frame(height: 8)
-    }
-
     private func reclaimableSection(_ reclaimable: UInt64) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {

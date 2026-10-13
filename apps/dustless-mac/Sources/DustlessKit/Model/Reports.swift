@@ -39,10 +39,6 @@ public struct ScanReport: Codable, Sendable {
         findings.filter { !$0.isDeletableByEngine }
     }
 
-    public var deletableBytes: UInt64 {
-        deletable.reduce(0) { $0 + $1.bytes }
-    }
-
     /// Safety invariant: a scan never pre-selects anything. The engine fails
     /// closed (`src/core/apply.ts`) and the UI must too — the user opts in to
     /// each path, so a fresh report starts with an empty selection.
@@ -74,5 +70,4 @@ public struct ApplyReport: Codable, Sendable {
     public let elapsedMs: Int
 
     public var deleted: [ApplyOutcome] { outcomes.filter { $0.status == .deleted } }
-    public var notDeleted: [ApplyOutcome] { outcomes.filter { $0.status != .deleted } }
 }
