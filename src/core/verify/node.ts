@@ -2,7 +2,6 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 const INSTALL_MARKERS = [".package-lock.json", ".modules.yaml"];
-const MS_PER_DAY = 86_400_000;
 
 export async function npmOrPnpmLinked(dir: string): Promise<boolean> {
   try {
@@ -11,11 +10,6 @@ export async function npmOrPnpmLinked(dir: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function installAgeDays(dir: string): Promise<number | null> {
-  const installed = await newestInstallMarker(dir);
-  return installed === null ? null : (Date.now() - installed) / MS_PER_DAY;
 }
 
 export async function isLiveDependencyTree(dir: string): Promise<boolean> {
