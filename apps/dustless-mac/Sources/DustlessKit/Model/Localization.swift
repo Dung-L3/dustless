@@ -240,6 +240,10 @@ public enum L10n {
         "pressureNormal": "Bình thường",
         "pressureWarn": "Cảnh báo",
         "pressureCritical": "Nghiêm trọng",
+        "memoryStopProcess": "Dừng tiến trình",
+        "memoryForceStop": "Buộc dừng",
+        "memoryStopped": "Đã dừng",
+        "memoryStopError": "Lỗi không xác định",
 
         // native app — storage view
         "diskTotal": "Tổng dung lượng",
@@ -418,6 +422,10 @@ public enum L10n {
         "pressureNormal": "Normal",
         "pressureWarn": "Warning",
         "pressureCritical": "Critical",
+        "memoryStopProcess": "Stop Process",
+        "memoryForceStop": "Force Stop",
+        "memoryStopped": "Stopped",
+        "memoryStopError": "Unknown error",
 
         // native app — storage view
         "diskTotal": "Total",
@@ -596,6 +604,10 @@ public enum L10n {
         "pressureNormal": "正常",
         "pressureWarn": "警告",
         "pressureCritical": "严重",
+        "memoryStopProcess": "停止进程",
+        "memoryForceStop": "强制停止",
+        "memoryStopped": "已停止",
+        "memoryStopError": "未知错误",
 
         // native app — storage view
         "diskTotal": "总计",
