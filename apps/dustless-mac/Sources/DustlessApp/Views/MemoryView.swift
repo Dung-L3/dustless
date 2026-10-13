@@ -63,18 +63,28 @@ struct MemoryView: View {
         .help(settings.t("memoryPressureHelp"))
     }
 
+    /// Six tiles directly on the window background — no wrapping card, so the
+    /// tiles read as one group instead of as cards inside a card.
     private func metrics(_ mem: MemoryInfo?) -> some View {
-        func value(_ bytes: UInt64?) -> String { bytes.map(ByteFormat.string) ?? "—" }
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-            MetricCard(label: settings.t("memoryAvailable"), value: value(mem?.available))
-            MetricCard(label: settings.t("memoryUsed"), value: value(mem?.used))
-            MetricCard(label: settings.t("memoryTotal"), value: value(mem?.total))
-            MetricCard(label: settings.t("memoryCompressed"), value: value(mem?.compressed))
-            MetricCard(label: settings.t("memorySwapUsed"), value: value(mem?.swapUsed))
-            MetricCard(label: settings.t("memorySwapTotal"), value: value(mem?.swapTotal))
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            ForEach(metricTiles(mem), id: \.label) { tile in
+                MetricCard(label: tile.label, value: tile.value)
+                    .padding(10)
+                    .panelCard()
+            }
         }
-        .padding(10)
-        .panelCard()
+    }
+
+    private func metricTiles(_ mem: MemoryInfo?) -> [(label: String, value: String)] {
+        func value(_ bytes: UInt64?) -> String { bytes.map(ByteFormat.string) ?? "—" }
+        return [
+            (settings.t("memoryAvailable"), value(mem?.available)),
+            (settings.t("memoryUsed"), value(mem?.used)),
+            (settings.t("memoryTotal"), value(mem?.total)),
+            (settings.t("memoryCompressed"), value(mem?.compressed)),
+            (settings.t("memorySwapUsed"), value(mem?.swapUsed)),
+            (settings.t("memorySwapTotal"), value(mem?.swapTotal)),
+        ]
     }
 
     private func processes(_ report: MemoryReport?) -> some View {

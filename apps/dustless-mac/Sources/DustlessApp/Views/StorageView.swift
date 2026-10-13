@@ -140,22 +140,21 @@ struct StorageView: View {
         }
     }
 
+    /// One line, not a card: the volumes above are cards, and a fourth card here
+    /// competed with them instead of summarising them.
     private func reclaimableSection(_ reclaimable: UInt64) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Text(settings.t("reclaimableMetric"))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .help(settings.t("reclaimableHelp"))
-                        .accessibilityLabel(settings.t("reclaimableHelp"))
-                }
-                Text(ByteFormat.string(reclaimable))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded).monospacedDigit())
-            }
+        HStack(spacing: 8) {
+            Text(settings.t("reclaimableMetric"))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            Image(systemName: "info.circle")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .help(settings.t("reclaimableHelp"))
+                .accessibilityLabel(settings.t("reclaimableHelp"))
+
+            Text(ByteFormat.string(reclaimable))
+                .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
 
             Spacer(minLength: 8)
 
@@ -163,6 +162,7 @@ struct StorageView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func loadVolumes() async {
