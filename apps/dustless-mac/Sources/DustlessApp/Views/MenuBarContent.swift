@@ -46,6 +46,11 @@ struct MenuBarContent: View {
                 Task { await store.fetchMemory() }
                 store.showingMemory = true
             }
+            Button(settings.t("storage")) {
+                onOpenWindow()
+                Task { await store.fetchStorage() }
+                store.showingStorage = true
+            }
             Button(settings.t("settingsOpen")) { openSettings() }
 
             Divider()

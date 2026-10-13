@@ -151,6 +151,15 @@ struct RootView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    Task { await store.fetchStorage() }
+                    store.showingStorage = true
+                } label: {
+                    Label(settings.t("storage"), systemImage: "internaldrive")
+                }
+                .help(settings.t("storage"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     openSettings()
                 } label: {
                     Label(settings.t("settingsOpen"), systemImage: "gearshape")
@@ -175,6 +184,12 @@ struct RootView: View {
         .sheet(isPresented: $store.showingMemory) {
             if let report = store.memoryReport {
                 MemoryView(report: report)
+                    .environmentObject(settings)
+            }
+        }
+        .sheet(isPresented: $store.showingStorage) {
+            if let space = store.diskSpace {
+                StorageView(space: space, reclaimable: store.report?.reclaimable)
                     .environmentObject(settings)
             }
         }
