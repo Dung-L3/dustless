@@ -8,6 +8,7 @@ typealias MemCategory = DustlessKit.Category
 struct MemoryView: View {
     let report: MemoryReport
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -16,6 +17,8 @@ struct MemoryView: View {
             memoryGrid
             Divider()
             processList
+            Divider()
+            footer
         }
         .padding(20)
         .frame(width: 560)
@@ -118,6 +121,17 @@ struct MemoryView: View {
         case .lsp: return "categoryLSP"
         case .other: return "categoryOther"
         }
+    }
+
+    private var footer: some View {
+        HStack {
+            Spacer()
+            Button(settings.t("done")) {
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+        }
+        .padding(.top, 4)
     }
 }
 
