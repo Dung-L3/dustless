@@ -6,6 +6,7 @@ import { loadRules } from "../core/rules.ts";
 import { scan } from "../core/scan.ts";
 import { freeSpace } from "../core/space.ts";
 import { createTools, type Core, type Tool } from "./tools.ts";
+import { writeOut } from "../core/output.ts";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const SERVER_INFO = { name: "dustless", version: pkg.version };
@@ -106,9 +107,9 @@ export async function serveMcp(): Promise<void> {
   guardStdout();
   const tools = createTools(core);
   const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  const send = (message: RpcMessage | null): void => {
+  const send = async (message: RpcMessage | null): Promise<void> => {
     const line = encode(message);
-    if (line !== null) process.stdout.write(line);
+    if (line !== null) await writeOut(line);
   };
   try {
     for await (const line of input) {
@@ -117,13 +118,13 @@ export async function serveMcp(): Promise<void> {
       try {
         parsed = JSON.parse(line);
       } catch (err) {
-        send(failure(null, -32700, `Parse error: ${(err as Error).message}. Send one JSON-RPC object per line.`));
+        await send(failure(null, -32700, `Parse error: ${(err as Error).message}. Send one JSON-RPC object per line.`));
         continue;
       }
       try {
-        send(await handleRpc(parsed, tools));
+        await send(await handleRpc(parsed, tools));
       } catch (err) {
-        send(failure(null, -32603, `Internal error: ${(err as Error).message}`));
+        await send(failure(null, -32603, `Internal error: ${(err as Error).message}`));
       }
     }
   } catch (err) {
