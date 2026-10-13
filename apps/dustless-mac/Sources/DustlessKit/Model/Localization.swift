@@ -191,7 +191,6 @@ public enum L10n {
         "openDustless": "Mở Dustless",
         "launchAtLogin": "Mở khi đăng nhập",
         "quitDustless": "Thoát Dustless",
-        "settingsHeading": "Cài đặt",
         "settingsOpen": "Cài đặt…",
         "general": "Chung",
         "startup": "Khởi động",
@@ -246,9 +245,6 @@ public enum L10n {
         "pressureNormal": "Bình thường",
         "pressureWarn": "Cảnh báo",
         "pressureCritical": "Nghiêm trọng",
-        "memoryStopProcess": "Dừng tiến trình",
-        "memoryForceStop": "Buộc dừng",
-        "memoryStopped": "Đã dừng",
         "memoryStopError": "Lỗi không xác định",
         "memoryStopNamed": "Dừng {name}",
         "memoryForceStopNamed": "Buộc dừng {name}",
@@ -262,10 +258,6 @@ public enum L10n {
         "busyStorage": "Đang đọc các ổ đĩa…",
 
         // native app — storage view
-        "diskTotal": "Tổng dung lượng",
-        "diskUsed": "Đã dùng",
-        "diskFree": "Còn trống",
-        "diskVolume": "Ổ đĩa",
         "storageNote": "Thu hồi được đo bởi engine.",
 
         // native app — apps view
@@ -280,7 +272,6 @@ public enum L10n {
         "volumeTotal": "Tổng",
         "volumeUsed": "Đã dùng",
         "volumeFree": "Còn trống",
-        "relatedFiles": "Tệp liên quan",
         "appsCount": "{n} ứng dụng",
         "appsRelatedCount": "{n} tệp liên quan",
         "appsUninstallHelp": "Di chuyển {name} và các tệp liên quan vào Thùng rác",
@@ -289,8 +280,6 @@ public enum L10n {
         "outcomeStatus": "Trạng thái: {status}",
         "busyApps": "Đang đọc danh sách ứng dụng…",
         "volumeUsageHelp": "{name}: đã dùng {percent} dung lượng.",
-        "appBundleId": "Bundle ID",
-        "appSize": "Kích thước",
     ]
 
     static let en: [String: String] = [
@@ -413,7 +402,6 @@ public enum L10n {
         "openDustless": "Open Dustless",
         "launchAtLogin": "Launch at login",
         "quitDustless": "Quit Dustless",
-        "settingsHeading": "Settings",
         "settingsOpen": "Settings…",
         "general": "General",
         "startup": "Startup",
@@ -468,9 +456,6 @@ public enum L10n {
         "pressureNormal": "Normal",
         "pressureWarn": "Warning",
         "pressureCritical": "Critical",
-        "memoryStopProcess": "Stop Process",
-        "memoryForceStop": "Force Stop",
-        "memoryStopped": "Stopped",
         "memoryStopError": "Unknown error",
         "memoryStopNamed": "Stop {name}",
         "memoryForceStopNamed": "Force stop {name}",
@@ -484,10 +469,6 @@ public enum L10n {
         "busyStorage": "Reading volumes…",
 
         // native app — storage view
-        "diskTotal": "Total",
-        "diskUsed": "Used",
-        "diskFree": "Free",
-        "diskVolume": "Volume",
         "storageNote": "Reclaimable measured by the engine.",
 
         // native app — apps view
@@ -502,7 +483,6 @@ public enum L10n {
         "volumeTotal": "Total",
         "volumeUsed": "Used",
         "volumeFree": "Free",
-        "relatedFiles": "Related Files",
         "appsCount": "{n} apps",
         "appsRelatedCount": "{n} related files",
         "appsUninstallHelp": "Move {name} and its related files to the Trash",
@@ -511,8 +491,6 @@ public enum L10n {
         "outcomeStatus": "Status: {status}",
         "busyApps": "Reading the application list…",
         "volumeUsageHelp": "{name}: {percent} of capacity used.",
-        "appBundleId": "Bundle ID",
-        "appSize": "Size",
     ]
 
     static let zh: [String: String] = [
@@ -635,7 +613,6 @@ public enum L10n {
         "openDustless": "打开 Dustless",
         "launchAtLogin": "登录时启动",
         "quitDustless": "退出 Dustless",
-        "settingsHeading": "设置",
         "settingsOpen": "设置…",
         "general": "通用",
         "startup": "启动",
@@ -690,9 +667,6 @@ public enum L10n {
         "pressureNormal": "正常",
         "pressureWarn": "警告",
         "pressureCritical": "严重",
-        "memoryStopProcess": "停止进程",
-        "memoryForceStop": "强制停止",
-        "memoryStopped": "已停止",
         "memoryStopError": "未知错误",
         "memoryStopNamed": "停止 {name}",
         "memoryForceStopNamed": "强制停止 {name}",
@@ -706,10 +680,6 @@ public enum L10n {
         "busyStorage": "正在读取卷信息…",
 
         // native app — storage view
-        "diskTotal": "总计",
-        "diskUsed": "已用",
-        "diskFree": "可用",
-        "diskVolume": "卷",
         "storageNote": "可回收量由引擎实测。",
 
         // native app — apps view
@@ -724,7 +694,6 @@ public enum L10n {
         "volumeTotal": "总计",
         "volumeUsed": "已用",
         "volumeFree": "可用",
-        "relatedFiles": "相关文件",
         "appsCount": "{n} 个应用",
         "appsRelatedCount": "{n} 个相关文件",
         "appsUninstallHelp": "将 {name} 及其相关文件移至废纸篓",
@@ -733,7 +702,5 @@ public enum L10n {
         "outcomeStatus": "状态：{status}",
         "busyApps": "正在读取应用程序列表…",
         "volumeUsageHelp": "{name}：已使用 {percent} 容量。",
-        "appBundleId": "Bundle ID",
-        "appSize": "大小",
     ]
 }
