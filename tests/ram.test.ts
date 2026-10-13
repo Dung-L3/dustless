@@ -77,6 +77,24 @@ describe("memory", () => {
     expect(mem.pressure).toBe("critical");
     expect(mem.pressurePercent).toBeGreaterThan(0);
   });
+
+  test("swap bytes stay integers when sysctl reports a fraction", async () => {
+    const ram = createRam({
+      exec: fakeExec({
+        ...memResponse(34359738368, { free: 100000, active: 500000, wired: 200000, compressed: 50000 }, 0),
+        "sysctl vm.swapusage": {
+          code: 0,
+          out: "vm.swapusage: total = 1024.00M  used = 5.12M  free = 1018.88M  (encrypted)\n",
+          err: "",
+        },
+      }),
+    });
+    const mem = await ram.getMemoryInfo();
+    expect(Number.isInteger(mem.swapUsed)).toBe(true);
+    expect(Number.isInteger(mem.swapTotal)).toBe(true);
+    expect(mem.swapUsed).toBe(Math.round(5.12 * KIB * KIB));
+    expect(JSON.parse(JSON.stringify(mem)).swapUsed).toBe(mem.swapUsed);
+  });
 });
 
 describe("processes", () => {
