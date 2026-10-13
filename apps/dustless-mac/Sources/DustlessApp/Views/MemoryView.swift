@@ -8,173 +8,201 @@ typealias MemCategory = DustlessKit.Category
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.closeWindow) private var closeWindow
 
     @State private var killResults: [Int: KillStatus] = [:]
-    @State private var isRefreshing = false
+    /// A kill is in flight; stop buttons are held until the engine answers.
+    @State private var isStopping = false
+    /// Which row the pointer is over, so the stop button only lights up there.
+    @State private var hoveredPID: Int?
+
+    /// The table is a summary, not a full `ps`. The footer says so.
+    private static let processLimit = 15
 
     var body: some View {
         let report = store.memoryReport
         VStack(alignment: .leading, spacing: 16) {
             header(report)
             Divider()
-            memoryGrid(report)
+            metrics(report?.memory)
             Divider()
-            processList(report)
+            processes(report)
         }
         .padding(20)
-        .frame(width: 560)
+        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
         .background(.regularMaterial)
     }
 
     private func header(_ report: MemoryReport?) -> some View {
-        HStack {
-            Text(settings.t("memory"))
-                .font(.title2.weight(.semibold))
-            Spacer()
-            if let report {
-                pressureBadge(report)
+        PanelHeader(title: settings.t("memory")) {
+            HStack(spacing: 8) {
+                if let report {
+                    pressureChip(report)
+                }
+                RefreshButton(isBusy: store.memoryPhase == .loading) {
+                    Task { await store.fetchMemory() }
+                }
             }
-            Button(action: { closeWindow() }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .help(settings.t("close"))
-            .accessibilityLabel(settings.t("close"))
         }
     }
 
-    private func pressureBadge(_ report: MemoryReport) -> some View {
-        let pressure = report.memory.pressure
-        let percent = report.memory.pressurePercent
+    private func pressureChip(_ report: MemoryReport) -> some View {
+        let memory = report.memory
         let (labelKey, color): (String, Color) = {
-            switch pressure {
+            switch memory.pressure {
             case .normal: return ("pressureNormal", .green)
             case .warn: return ("pressureWarn", .orange)
             case .critical: return ("pressureCritical", .red)
             }
         }()
 
-        return HStack(spacing: 6) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text("\(settings.t("memoryPressure")): \(settings.t(labelKey)) (\(percent)%)")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(color.opacity(0.12), in: .capsule)
+        return StatusChip(
+            color: color,
+            text: "\(settings.t("memoryPressure")): \(settings.t(labelKey)) (\(memory.pressurePercent)%)",
+            prominent: true
+        )
+        .help(settings.t("memoryPressureHelp"))
     }
 
-    private func memoryGrid(_ report: MemoryReport?) -> some View {
-        let mem = report?.memory
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            MetricRow(label: settings.t("memoryAvailable"), value: mem.map { ByteFormat.string($0.available) } ?? "—")
-            MetricRow(label: settings.t("memoryUsed"), value: mem.map { ByteFormat.string($0.used) } ?? "—")
-            MetricRow(label: settings.t("memoryTotal"), value: mem.map { ByteFormat.string($0.total) } ?? "—")
-            MetricRow(label: settings.t("memoryCompressed"), value: mem.map { ByteFormat.string($0.compressed) } ?? "—")
-            MetricRow(label: settings.t("memorySwapUsed"), value: mem.map { ByteFormat.string($0.swapUsed) } ?? "—")
-            MetricRow(label: settings.t("memorySwapTotal"), value: mem.map { ByteFormat.string($0.swapTotal) } ?? "—")
+    private func metrics(_ mem: MemoryInfo?) -> some View {
+        func value(_ bytes: UInt64?) -> String { bytes.map(ByteFormat.string) ?? "—" }
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            MetricCard(label: settings.t("memoryAvailable"), value: value(mem?.available))
+            MetricCard(label: settings.t("memoryUsed"), value: value(mem?.used))
+            MetricCard(label: settings.t("memoryTotal"), value: value(mem?.total))
+            MetricCard(label: settings.t("memoryCompressed"), value: value(mem?.compressed))
+            MetricCard(label: settings.t("memorySwapUsed"), value: value(mem?.swapUsed))
+            MetricCard(label: settings.t("memorySwapTotal"), value: value(mem?.swapTotal))
         }
+        .padding(10)
+        .panelCard()
     }
 
-    private func processList(_ report: MemoryReport?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(settings.t("memoryProcesses"))
-                .font(.headline)
+    private func processes(_ report: MemoryReport?) -> some View {
+        let all = report?.processes ?? []
+        let top = Array(all.sorted { $0.mem > $1.mem }.prefix(Self.processLimit))
 
-            let topProcesses = Array((report?.processes ?? [])
-                .sorted { $0.mem > $1.mem }
-                .prefix(15))
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(settings.t("memoryProcesses"))
+                    .panelSectionHeader()
+                if all.count > top.count {
+                    Text(settings.t("memoryShowingTop", [
+                        "shown": "\(top.count)",
+                        "total": "\(all.count)",
+                    ]))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 0)
+            }
 
-            Table(topProcesses) {
+            Table(top) {
                 TableColumn(settings.t("memoryProcessName")) { (proc: MemProcess) in
                     Text(proc.name)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 12.5, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .accessibilityLabel(rowDescription(proc))
                 }
-                .width(min: 120, ideal: 180)
+                .width(min: 160, ideal: 240)
 
                 TableColumn(settings.t("memoryProcessCategory")) { (proc: MemProcess) in
-                    Text(settings.t(categoryKey(proc.category)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    StatusChip(
+                        color: categoryColor(proc.category),
+                        text: settings.t(categoryKey(proc.category))
+                    )
                 }
-                .width(min: 60, ideal: 80)
+                .width(min: 96, ideal: 112)
 
                 TableColumn(settings.t("memoryProcessPID")) { (proc: MemProcess) in
                     Text("\(proc.pid)")
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
-                .width(min: 50, ideal: 70)
+                .width(min: 56, ideal: 64)
 
                 TableColumn(settings.t("memoryProcessMem")) { (proc: MemProcess) in
                     Text(ByteFormat.string(proc.mem))
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.primary)
+                        .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .width(min: 70, ideal: 90)
+                .width(min: 76, ideal: 88)
 
-                TableColumn("") { (proc: MemProcess) in
+                TableColumn(settings.t("actions")) { (proc: MemProcess) in
                     stopButton(for: proc)
                 }
-                .width(min: 44, ideal: 44, max: 44)
+                .width(min: 40, ideal: 40, max: 40)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .frame(height: 220)
+            .frame(height: top.isEmpty ? 90 : 250)
+
+            if top.isEmpty {
+                Text(settings.t("memoryNoProcesses"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    /// Spoken once for the whole row rather than as four disconnected cells.
+    private func rowDescription(_ proc: MemProcess) -> String {
+        [
+            proc.name,
+            settings.t("memoryProcessPID") + " " + "\(proc.pid)",
+            settings.t(categoryKey(proc.category)),
+            ByteFormat.string(proc.mem),
+        ].joined(separator: ", ")
     }
 
     @ViewBuilder
     private func stopButton(for proc: MemProcess) -> some View {
-        let status = killResults[proc.pid]
-        if let status {
-            statusView(status)
+        if let status = killResults[proc.pid] {
+            statusView(status, for: proc)
         } else {
+            let hovering = hoveredPID == proc.pid
             Button(action: { killProcess(pid: proc.pid, force: false, sigkill: false) }) {
                 Image(systemName: "stop.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.red)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(hovering ? Color.red : Color.secondary.opacity(0.8))
+                    .frame(width: 24, height: 20)
+                    .background(hovering ? Color.red.opacity(0.14) : .clear, in: .rect(cornerRadius: 5))
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .help(settings.t("memoryStopProcess"))
+            .onHover { hovering in
+                hoveredPID = hovering ? proc.pid : (hoveredPID == proc.pid ? nil : hoveredPID)
+            }
+            .help(settings.t("memoryStopNamed", ["name": proc.name]))
+            .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
             .contextMenu {
                 Button(action: { killProcess(pid: proc.pid, force: true, sigkill: true) }) {
-                    Label(settings.t("memoryForceStop"), systemImage: "exclamationmark.octagon.fill")
+                    Label(
+                        settings.t("memoryForceStopNamed", ["name": proc.name]),
+                        systemImage: "exclamationmark.octagon.fill"
+                    )
                 }
             }
-            .disabled(isRefreshing)
+            .disabled(isStopping)
         }
     }
 
     @ViewBuilder
-    private func statusView(_ status: KillStatus) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: status.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(status.ok ? .green : .red)
-            Text(status.ok ? settings.t("memoryStopped") : (status.reason ?? settings.t("memoryStopError")))
-                .font(.caption)
-                .foregroundStyle(status.ok ? .green : .red)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background((status.ok ? Color.green : Color.red).opacity(0.12), in: .rect(cornerRadius: 4))
-        .transition(.opacity.combined(with: .scale))
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation { killResults[status.pid] = nil }
+    private func statusView(_ status: KillStatus, for proc: MemProcess) -> some View {
+        let tint = status.ok ? Color.green : Color.red
+        let label = status.ok
+            ? settings.t("memoryStoppedNamed", ["name": proc.name])
+            : (status.reason ?? settings.t("memoryStopError"))
+        Image(systemName: status.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(tint)
+            .help(label)
+            .accessibilityLabel(label)
+            .transition(.opacity.combined(with: .scale))
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation { killResults[status.pid] = nil }
+                }
             }
-        }
     }
 
     private func categoryKey(_ category: MemCategory) -> String {
@@ -187,10 +215,20 @@ struct MemoryView: View {
         }
     }
 
+    private func categoryColor(_ category: MemCategory) -> Color {
+        switch category {
+        case .browser: return .blue
+        case .editor: return .purple
+        case .container: return .teal
+        case .lsp: return .orange
+        case .other: return .secondary
+        }
+    }
+
     private func killProcess(pid: Int, force: Bool, sigkill: Bool) {
         Task {
-            isRefreshing = true
-            defer { isRefreshing = false }
+            isStopping = true
+            defer { isStopping = false }
             do {
                 let cli = try DustlessCLI.resolve()
                 let result = try await cli.kill(pid: pid, force: force, sigkill: sigkill)
@@ -214,23 +252,4 @@ private struct KillStatus: Identifiable {
     let pid: Int
     let ok: Bool
     let reason: String?
-}
-
-private struct MetricRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
-    }
 }
