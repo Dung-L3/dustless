@@ -88,6 +88,12 @@ struct PanelHeader<Accessory: View>: View {
     var subtitle: String?
     @ViewBuilder var accessory: Accessory
 
+    init(title: String, subtitle: String? = nil, @ViewBuilder accessory: () -> Accessory) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory()
+    }
+
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
@@ -105,6 +111,13 @@ struct PanelHeader<Accessory: View>: View {
             accessory
             CloseWindowButton()
         }
+    }
+}
+
+extension PanelHeader where Accessory == EmptyView {
+    /// A title row with nothing but the close button.
+    init(title: String, subtitle: String? = nil) {
+        self.init(title: title, subtitle: subtitle) { EmptyView() }
     }
 }
 
