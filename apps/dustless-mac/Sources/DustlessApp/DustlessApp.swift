@@ -54,7 +54,7 @@ struct DustlessApp: App {
                 .environmentObject(store)
                 .environmentObject(settings)
         }
-        .defaultSize(width: 580, height: 520)
+        .defaultSize(width: 700, height: 660)
 
         Window(settings.t("storage"), id: "storage") {
             StorageWindowContent()
@@ -306,15 +306,21 @@ struct MemoryWindowContent: View {
         Group {
             switch store.memoryPhase {
             case .idle, .loading:
-                ProgressView(settings.t("busyScanning"))
-                    .frame(width: 560, height: 300)
+                // A refresh re-reads behind the panel; only the first load blanks it.
+                if store.memoryReport != nil {
+                    MemoryView()
+                        .environmentObject(settings)
+                } else {
+                    ProgressView(settings.t("busyMemory"))
+                        .frame(width: 640, height: 320)
+                }
             case .loaded:
                 if store.memoryReport != nil {
                     MemoryView()
                         .environmentObject(settings)
                 } else {
-                    ProgressView(settings.t("busyScanning"))
-                        .frame(width: 560, height: 300)
+                    ProgressView(settings.t("busyMemory"))
+                        .frame(width: 640, height: 320)
                 }
             case .failed:
                 VStack(spacing: 16) {
