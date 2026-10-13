@@ -1,0 +1,353 @@
+import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
+import type { AppInfo, ListAppsOptions, UninstallOptions, UninstallOutcome, UninstallReport } from "./types.ts";
+
+const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
+
+const RELATIVE_LEFTOVER_PATHS = [
+  "Library/Application Support/{id}",
+  "Library/Caches/{id}",
+  "Library/Preferences/{id}.plist",
+  "Library/Logs/{id}",
+  "Library/Saved Application State/{id}.savedState",
+  "Library/Containers/{id}",
+  "Library/Group Containers/{id}",
+  "Library/WebKit/{id}",
+  "Library/HTTPStorages/{id}",
+  "Library/Application Scripts/{id}",
+  "Library/LaunchAgents/{id}.plist",
+  "Library/Cookies/{id}.binarycookies",
+];
+
+const DENY_PATHS = [
+  "/",
+  "/System",
+  "/usr",
+  "/bin",
+  "/sbin",
+  "/Library",
+  "/Applications",
+];
+
+function expandHome(path: string, home: string): string {
+  return path.replace(/^~(?=$|[/\\])/, home);
+}
+
+function isUnder(path: string, parent: string): boolean {
+  const resolvedPath = resolve(path);
+  const resolvedParent = resolve(parent);
+  return resolvedPath === resolvedParent || resolvedPath.startsWith(resolvedParent + sep);
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function dirSize(path: string): Promise<number> {
+  let total = 0;
+  const stack = [resolve(path)];
+  while (stack.length) {
+    const current = stack.pop();
+    if (current === undefined) continue;
+    try {
+      const entries = await readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(full);
+        } else {
+          total += (await lstat(full)).size;
+        }
+      }
+    } catch {
+      // ignore unreadable
+    }
+  }
+  return total;
+}
+
+function parseInfoPlist(xml: string): { bundleId?: string; name?: string; displayName?: string } {
+  const result: { bundleId?: string; name?: string; displayName?: string } = {};
+  let currentKey: string | null = null;
+  for (const line of xml.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("<key>") && trimmed.endsWith("</key>")) {
+      currentKey = trimmed.slice(5, -6);
+    } else if (currentKey && trimmed.startsWith("<string>") && trimmed.endsWith("</string>")) {
+      const value = trimmed.slice(8, -9);
+      if (currentKey === "CFBundleIdentifier") result.bundleId = value;
+      else if (currentKey === "CFBundleName") result.name = value;
+      else if (currentKey === "CFBundleDisplayName") result.displayName = value;
+      currentKey = null;
+    }
+  }
+  return result;
+}
+
+async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name: string } | null> {
+  const plistPath = join(appPath, "Contents", "Info.plist");
+  try {
+    const xml = await readFile(plistPath, "utf8");
+    const parsed = parseInfoPlist(xml);
+    if (!parsed.bundleId) return null;
+    const name = parsed.displayName ?? parsed.name ?? parsed.bundleId;
+    return { bundleId: parsed.bundleId, name };
+  } catch {
+    return null;
+  }
+}
+
+function deriveRelatedPaths(home: string, bundleId: string): string[] {
+  const out: string[] = [];
+  for (const template of RELATIVE_LEFTOVER_PATHS) {
+    const path = expandHome(join(home, template.replace(/{id}/g, bundleId)), home);
+    out.push(path);
+  }
+  return out;
+}
+
+function isSystemApp(appPath: string): boolean {
+  const resolved = resolve(appPath);
+  return resolved.startsWith("/System/Applications" + sep) || resolved === "/System/Applications";
+}
+
+function isAllowedAppDir(appPath: string, appDirs: string[]): boolean {
+  const resolved = resolve(appPath);
+  for (const dir of appDirs) {
+    const expanded = expandHome(dir, homedir());
+    if (isUnder(resolved, expanded)) {
+      const rel = relative(expanded, resolved);
+      return !rel.includes(sep); // directly under, not nested
+    }
+  }
+  return false;
+}
+
+function isDenied(path: string, home: string): boolean {
+  const resolved = resolve(path);
+  const resolvedHome = resolve(home);
+
+  // Check if this is an app bundle directly under allowed app directories
+  const isAllowedAppBundle = (p: string) => {
+    const appDirs = ["/Applications", join(homedir(), "Applications")];
+    for (const dir of appDirs) {
+      const expanded = expandHome(dir, homedir());
+      if (isUnder(p, expanded)) {
+        const rel = relative(expanded, p);
+        if (!rel.includes(sep) && rel.endsWith(".app")) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  if (isAllowedAppBundle(resolved)) {
+    return false;
+  }
+
+  for (const deny of DENY_PATHS) {
+    if (isUnder(resolved, deny)) return true;
+  }
+
+  const homeDeny = [
+    join(resolvedHome, "Library"),
+    join(resolvedHome, "Library", "Application Support"),
+    join(resolvedHome, "Library", "Caches"),
+    join(resolvedHome, "Library", "Preferences"),
+    join(resolvedHome, "Library", "Containers"),
+    join(resolvedHome, "Library", "Group Containers"),
+    join(resolvedHome, "Library", "Logs"),
+  ];
+
+  for (const deny of homeDeny) {
+    if (isUnder(resolved, deny)) return true;
+  }
+
+  if (!isUnder(resolved, resolvedHome) && !isUnder(resolved, "/Applications") && !isUnder(resolved, join(homedir(), "Applications"))) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
+  const home = opts.home ?? homedir();
+  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
+  const results: AppInfo[] = [];
+
+  for (const appDir of appDirs) {
+    let entries: string[];
+    try {
+      entries = await readdir(appDir, { withFileTypes: true })
+        .then((list) => list.filter((e) => e.isDirectory() && e.name.endsWith(".app")).map((e) => e.name));
+    } catch {
+      continue;
+    }
+
+    for (const name of entries) {
+      const appPath = join(appDir, name);
+      const info = await readBundleInfo(appPath);
+      if (!info) continue;
+
+      const bytes = await dirSize(appPath);
+      const allRelated = deriveRelatedPaths(home, info.bundleId);
+      const existingRelated = [];
+      for (const p of allRelated) {
+        if (await exists(p)) existingRelated.push(p);
+      }
+
+      results.push({
+        bundleId: info.bundleId,
+        name: info.name,
+        path: appPath,
+        bytes,
+        relatedPaths: existingRelated,
+      });
+    }
+  }
+
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function moveToTrash(src: string, trashDir: string): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
+  const bytes = await dirSize(src);
+  const name = src.split(sep).filter(Boolean).pop() ?? "unknown";
+  await mkdir(trashDir, { recursive: true });
+  let dest = join(trashDir, name);
+  let suffix = 1;
+  while (await exists(dest)) {
+    dest = join(trashDir, `${name}.${suffix}`);
+    suffix++;
+  }
+  try {
+    await rename(src, dest);
+    return { status: "trashed", bytes, detail: `moved to ${dest}` };
+  } catch (err) {
+    return { status: "failed", bytes, detail: String(err) };
+  }
+}
+
+async function purgePath(src: string): Promise<{ status: "purged" | "failed"; bytes: number; detail: string }> {
+  const bytes = await dirSize(src);
+  try {
+    await rm(src, { recursive: true, force: true });
+    return { status: "purged", bytes, detail: "permanently deleted" };
+  } catch (err) {
+    return { status: "failed", bytes, detail: String(err) };
+  }
+}
+
+export async function uninstall(opts: UninstallOptions): Promise<UninstallReport> {
+  const { home, appPath, relatedPaths, confirm, purge = false, trashDir } = opts;
+
+  if (!confirm) {
+    const failedOutcome = (p: string) => ({ path: p, status: "failed" as const, bytes: 0, detail: "confirm required" });
+    return {
+      outcomes: [
+        failedOutcome(appPath),
+        ...relatedPaths.map(failedOutcome),
+      ],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1 + relatedPaths.length, totalBytes: 0 },
+    };
+  }
+
+  const resolvedAppPath = resolve(appPath);
+  const appDirs = DEFAULT_APP_DIRS.map((d) => expandHome(d, home));
+
+  if (!resolvedAppPath.endsWith(".app" + sep) && !resolvedAppPath.endsWith(".app")) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "not a .app bundle" }],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+
+  if (isSystemApp(resolvedAppPath)) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "system app refused" }],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+
+  if (!isAllowedAppDir(resolvedAppPath, appDirs)) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "app not in allowed app directories" }],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+
+  if (isDenied(resolvedAppPath, home)) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "denied path" }],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+
+  // Read bundle ID to validate relatedPaths
+  const bundleInfo = await readBundleInfo(resolvedAppPath);
+  if (!bundleInfo) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "could not read bundle ID" }],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+  const expectedRelatedPaths = new Set(deriveRelatedPaths(home, bundleInfo.bundleId).map((p) => resolve(p)));
+
+  const resolvedRelatedPaths = relatedPaths.map((p) => resolve(p));
+  const allowedPaths = new Set([resolvedAppPath, ...resolvedRelatedPaths]);
+
+  // Validate that each relatedPath is a legitimate leftover for this bundle ID
+  for (const p of resolvedRelatedPaths) {
+    if (!expectedRelatedPaths.has(p)) {
+      return {
+        outcomes: [{ path: p, status: "failed", bytes: 0, detail: "not a valid leftover path for this app" }],
+        summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+      };
+    }
+  }
+
+  const allPaths = [resolvedAppPath, ...resolvedRelatedPaths];
+  const trash = trashDir ? expandHome(trashDir, home) : join(home, ".Trash");
+  const outcomes: UninstallOutcome[] = [];
+
+  for (const p of allPaths) {
+    if (!allowedPaths.has(p)) {
+      outcomes.push({ path: p, status: "skipped", bytes: 0, detail: "not in allowed list" });
+      continue;
+    }
+    // Allow deny-listed paths if they are explicitly in relatedPaths (or appPath)
+    if (p !== resolvedAppPath && !resolvedRelatedPaths.includes(p) && isDenied(p, home)) {
+      outcomes.push({ path: p, status: "failed", bytes: 0, detail: "denied path" });
+      continue;
+    }
+    if (!(await exists(p))) {
+      outcomes.push({ path: p, status: "skipped", bytes: 0, detail: "does not exist" });
+      continue;
+    }
+
+    if (purge) {
+      const result = await purgePath(p);
+      outcomes.push({ path: p, ...result });
+    } else {
+      const result = await moveToTrash(p, trash);
+      outcomes.push({ path: p, ...result });
+    }
+  }
+
+  const summary = outcomes.reduce(
+    (acc, o) => {
+      acc[o.status]++;
+      acc.totalBytes += o.bytes;
+      return acc;
+    },
+    { trashed: 0, purged: 0, skipped: 0, failed: 0, totalBytes: 0 } as UninstallReport["summary"],
+  );
+
+  return { outcomes, summary };
+}
