@@ -6,7 +6,6 @@ struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.closeWindow) private var closeWindow
 
     @State private var volumes: [VolumeInfo] = []
     @State private var apps: [InstalledApp] = []
@@ -21,22 +20,25 @@ struct StorageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
+
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    volumesSection
-                    Divider()
-                    applicationsSection
-                    if let reclaimable {
-                        Divider()
-                        reclaimableSection(reclaimable)
-                    }
-                }
-                .padding(.bottom, 20)
+
+            // Volumes stay put at the top; the app list scrolls in the space
+            // that is left. One long scroll made the volumes impossible to find
+            // on a Mac with a dozen applications installed.
+            volumesSection
+
+            if let reclaimable {
+                reclaimableSection(reclaimable)
             }
+
+            Divider()
+
+            applicationsSection
+                .frame(maxHeight: .infinity)
         }
         .padding(20)
-        .frame(minWidth: 600, idealWidth: 680, minHeight: 500, idealHeight: 650)
+        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 680)
         .background(.regularMaterial)
         .task {
             if !dataLoaded {
@@ -63,33 +65,18 @@ struct StorageView: View {
     }
 
     private var header: some View {
-        HStack {
-            Text(settings.t("storage"))
-                .font(.title2.weight(.semibold))
-            if let name = space.volumeName, !name.isEmpty {
-                Text(name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button(action: { closeWindow() }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .help(settings.t("close"))
-            .accessibilityLabel(settings.t("close"))
-        }
+        PanelHeader(
+            title: settings.t("storage"),
+            subtitle: space.volumeName?.isEmpty == false ? space.volumeName : nil
+        )
     }
 
     private var volumesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(settings.t("volumesTitle"))
-                .font(.headline)
+                .panelSectionHeader()
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(volumes) { volume in
                     VolumeCard(volume: volume)
                 }
@@ -98,34 +85,55 @@ struct StorageView: View {
     }
 
     private var applicationsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
                 Text(settings.t("appsTitle"))
-                    .font(.headline)
-                Spacer()
+                    .panelSectionHeader()
+
+                if !apps.isEmpty {
+                    Text(settings.t("itemMany", ["n": "\(apps.count)"]))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(PanelStyle.rowFill, in: .capsule)
+                        .accessibilityLabel(settings.t("appsCount", ["n": "\(apps.count)"]))
+                }
+
+                Spacer(minLength: 0)
+
                 if isLoadingApps {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
 
-            if let error = appsError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            appsBody
+        }
+    }
 
-            if apps.isEmpty && !isLoadingApps {
-                Text(settings.t("nothingScanned"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-            } else {
-                LazyVStack(spacing: 8) {
+    /// Three distinct states: still loading, failed with a retry, or the list.
+    @ViewBuilder
+    private var appsBody: some View {
+        if let error = appsError {
+            PanelStateView(
+                kind: .error,
+                message: error,
+                title: settings.t("appsTitle"),
+                actionTitle: settings.t("retry"),
+                action: { Task { await loadApps() } }
+            )
+        } else if apps.isEmpty {
+            PanelStateView(kind: .loading, message: settings.t("busyApps"))
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 6) {
                     ForEach(apps) { app in
-                        AppRow(app: app, onUninstall: { selectedAppForUninstall = app })
+                        AppRow(
+                            app: app,
+                            isUninstalling: isUninstalling,
+                            onUninstall: { selectedAppForUninstall = app }
+                        )
                     }
                 }
             }
@@ -133,21 +141,26 @@ struct StorageView: View {
     }
 
     private func reclaimableSection(_ reclaimable: UInt64) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(settings.t("reclaimableMetric"))
-                    .font(.headline)
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help(settings.t("reclaimableHelp"))
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(settings.t("reclaimableMetric"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .help(settings.t("reclaimableHelp"))
+                        .accessibilityLabel(settings.t("reclaimableHelp"))
+                }
+                Text(ByteFormat.string(reclaimable))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded).monospacedDigit())
             }
-            Text(ByteFormat.string(reclaimable))
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
             Text(settings.t("storageNote"))
-                .font(.caption)
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
     }
@@ -189,6 +202,7 @@ struct StorageView: View {
 
     private func performUninstall(_ app: InstalledApp) async {
         isUninstalling = true
+        defer { isUninstalling = false }
         do {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.uninstallApp(path: app.path)
@@ -198,7 +212,6 @@ struct StorageView: View {
         } catch {
             uninstallError = error.localizedDescription
         }
-        isUninstalling = false
     }
 }
 
@@ -221,83 +234,90 @@ struct VolumeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(volume.name)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
+            HStack(spacing: 6) {
+                Text(volume.name)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                Text(volume.usedPercent, format: .percent.precision(.fractionLength(0)))
+                    .font(.system(size: 11, weight: .medium, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
 
             ProgressView(value: volume.usedPercent)
                 .frame(height: 6)
+                .help(settings.t("volumeUsageHelp", ["name": volume.name]))
 
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(settings.t("volumeTotal"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormat.string(volume.total))
-                        .font(.system(.caption, design: .monospaced))
-                        .fontWeight(.medium)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(settings.t("volumeUsed"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormat.string(volume.used))
-                        .font(.system(.caption, design: .monospaced))
-                        .fontWeight(.medium)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(settings.t("volumeFree"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(ByteFormat.string(volume.free))
-                        .font(.system(.caption, design: .monospaced))
-                        .fontWeight(.medium)
-                }
+            HStack(spacing: 10) {
+                MetricCard(
+                    label: settings.t("volumeTotal"),
+                    value: ByteFormat.string(volume.total),
+                    compact: true
+                )
+                MetricCard(
+                    label: settings.t("volumeUsed"),
+                    value: ByteFormat.string(volume.used),
+                    compact: true
+                )
+                MetricCard(
+                    label: settings.t("volumeFree"),
+                    value: ByteFormat.string(volume.free),
+                    compact: true
+                )
             }
         }
         .padding(12)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
+        .panelCard()
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 
 struct AppRow: View {
     let app: InstalledApp
+    var isUninstalling: Bool = false
     let onUninstall: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(app.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Text(app.bundleId)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 2) {
                 Text(ByteFormat.string(app.bytes))
-                    .font(.system(size: 13, weight: .medium, design: .rounded).monospacedDigit())
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
                     .foregroundStyle(.primary)
-                Text("\(app.relatedPaths.count) \(settings.t("relatedFiles"))")
-                    .font(.caption)
+                Text(settings.t("appsRelatedCount", ["n": "\(app.relatedPaths.count)"]))
+                    .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
             }
 
-            Button(settings.t("appsUninstall")) {
-                onUninstall()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .foregroundStyle(.red)
+            Button(settings.t("appsUninstall"), role: .destructive, action: onUninstall)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isUninstalling)
+                .help(settings.t("appsUninstallHelp", ["name": app.name]))
+                .accessibilityLabel(settings.t("appsUninstallNamed", ["name": app.name]))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.3), in: .rect(cornerRadius: 8))
+        .panelCard(PanelStyle.rowFill)
+        .pathContextMenu(app.path)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -349,6 +369,10 @@ struct UninstallConfirmationSheet: View {
                 Text(settings.t("appsTrashTitle"))
                     .font(.system(size: 16, weight: .semibold))
             }
+            Text(app.name)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
             Text(settings.t("appsTrashBody", ["n": "\(app.relatedPaths.count)"]))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
@@ -416,6 +440,8 @@ struct AppUninstallRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .help(path)
+                    .accessibilityLabel(settings.t("pathA11y", ["path": path]))
             }
 
             Spacer(minLength: 10)
@@ -429,6 +455,7 @@ struct AppUninstallRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 14)
         .pathContextMenu(path)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -443,10 +470,9 @@ struct UninstallResultSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(settings.t("appsUninstalled"))
                     .font(.system(size: 16, weight: .semibold))
-                Text(settings.t("resultSummary", [
+                Text(settings.t("appsResultSummary", [
                     "freed": ByteFormat.string(report.summary.totalBytes),
-                    "elapsed": "0 ms",
-                    "free": ByteFormat.string(report.summary.totalBytes),
+                    "count": "\(report.outcomes.count)",
                 ]))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
@@ -465,6 +491,8 @@ struct UninstallResultSheet: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(tint(for: outcome.status))
                                 .frame(width: 14)
+                                .help(settings.t("outcomeStatus", ["status": settings.t(statusKey(for: outcome.status))]))
+                                .accessibilityLabel(settings.t("outcomeStatus", ["status": settings.t(statusKey(for: outcome.status))]))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(outcome.path)
                                     .font(.system(size: 11.5, design: .monospaced))
@@ -520,6 +548,16 @@ struct UninstallResultSheet: View {
         case .purged: .green
         case .skipped: .secondary
         case .failed: .red
+        }
+    }
+
+    /// Reuses the shared cleanup vocabulary so both result sheets read alike.
+    private func statusKey(for status: UninstallOutcome.Status) -> String {
+        switch status {
+        case .trashed: "deleted"
+        case .purged: "deleted"
+        case .skipped: "skipped"
+        case .failed: "failed"
         }
     }
 }
