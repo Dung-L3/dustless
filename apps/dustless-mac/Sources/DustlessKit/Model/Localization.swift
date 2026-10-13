@@ -251,6 +251,21 @@ public enum L10n {
         "diskFree": "Còn trống",
         "diskVolume": "Ổ đĩa",
         "storageNote": "Thu hồi được đo bởi engine.",
+
+        // native app — apps view
+        "appsTitle": "Ứng dụng",
+        "appsUninstall": "Gỡ cài đặt",
+        "appsTrashTitle": "Di chuyển vào Thùng rác?",
+        "appsTrashBody": "Ứng dụng này và {n} tệp liên quan sẽ được di chuyển vào Thùng rác. Hành động này có thể hoàn tác.",
+        "appsMoveToTrash": "Di chuyển vào Thùng rác",
+        "appsUninstalled": "Đã gỡ cài đặt",
+        "volumesTitle": "Các ổ đĩa",
+        "volumeTotal": "Tổng",
+        "volumeUsed": "Đã dùng",
+        "volumeFree": "Còn trống",
+        "relatedFiles": "Tệp liên quan",
+        "appBundleId": "Bundle ID",
+        "appSize": "Kích thước",
     ]
 
     static let en: [String: String] = [
@@ -433,6 +448,21 @@ public enum L10n {
         "diskFree": "Free",
         "diskVolume": "Volume",
         "storageNote": "Reclaimable measured by the engine.",
+
+        // native app — apps view
+        "appsTitle": "Applications",
+        "appsUninstall": "Uninstall",
+        "appsTrashTitle": "Move to Trash?",
+        "appsTrashBody": "This app and {n} related files will be moved to the Trash. This action can be undone.",
+        "appsMoveToTrash": "Move to Trash",
+        "appsUninstalled": "Uninstalled",
+        "volumesTitle": "Volumes",
+        "volumeTotal": "Total",
+        "volumeUsed": "Used",
+        "volumeFree": "Free",
+        "relatedFiles": "Related Files",
+        "appBundleId": "Bundle ID",
+        "appSize": "Size",
     ]
 
     static let zh: [String: String] = [
@@ -615,5 +645,20 @@ public enum L10n {
         "diskFree": "可用",
         "diskVolume": "卷",
         "storageNote": "可回收量由引擎实测。",
+
+        // native app — apps view
+        "appsTitle": "应用程序",
+        "appsUninstall": "卸载",
+        "appsTrashTitle": "移至废纸篓？",
+        "appsTrashBody": "此应用及 {n} 个相关文件将移至废纸篓。此操作可撤销。",
+        "appsMoveToTrash": "移至废纸篓",
+        "appsUninstalled": "已卸载",
+        "volumesTitle": "卷",
+        "volumeTotal": "总计",
+        "volumeUsed": "已用",
+        "volumeFree": "可用",
+        "relatedFiles": "相关文件",
+        "appBundleId": "Bundle ID",
+        "appSize": "大小",
     ]
 }
