@@ -61,6 +61,14 @@ public struct DustlessCLI: Sendable {
         try await decode(MemoryReport.self, from: run(["ram", "--json"]))
     }
 
+    public func apps() async throws -> [InstalledApp] {
+        try await decode([InstalledApp].self, from: run(["apps", "--json"]))
+    }
+
+    public func uninstallApp(path: String) async throws -> UninstallReport {
+        try await decode(UninstallReport.self, from: run(["apps", "--uninstall", path, "--confirm", "--json"]))
+    }
+
     public func kill(pid: Int, force: Bool = false, sigkill: Bool = false) async throws -> RamKillResult {
         var args = ["ram", "--kill", "\(pid)", "--confirm", "--json"]
         if force { args.append("--force") }
