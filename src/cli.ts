@@ -14,6 +14,7 @@ import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.
 import { serveMcp } from "./mcp/server.ts";
 import { runRam } from "./core/ram/index.ts";
 import { writeOut } from "./core/output.ts";
+import { listApps, uninstall } from "./core/apps/index.ts";
 
 const VERSION = pkg.version;
 const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴", blocked: "⛔" };
@@ -35,6 +36,8 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless doctor               chẩn đoán môi trường
   dustless net                  flush DNS cache; --reset-dns v.v. là nâng cao, từng lệnh một
   dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
+  dustless apps [--json]        liệt kê ứng dụng .app
+  dustless apps --uninstall <path> --confirm [--purge] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
   dustless version | help
 
 Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
@@ -320,6 +323,74 @@ async function printNet(report: NetReport): Promise<void> {
   say("");
 }
 
+async function runApps(_rest: string[]): Promise<number> {
+  const { resolve } = await import("node:path");
+  const home = homedir();
+  const uninstallPath = opt("uninstall");
+  const confirm = flag("confirm");
+  const purge = flag("purge");
+  const trashDir = opt("trash-dir");
+
+  if (uninstallPath) {
+    const apps = await listApps({ home });
+    const target = apps.find((a) => a.path === uninstallPath || resolve(a.path) === resolve(uninstallPath));
+    if (!target) {
+      if (flag("json")) {
+        await writeOut(`${JSON.stringify({ error: "app not found in inventory", path: uninstallPath })}\n`);
+      } else {
+        say(`✖ ứng dụng không có trong danh sách: ${uninstallPath}`);
+      }
+      return 1;
+    }
+    const report = await uninstall({
+      home,
+      appPath: target.path,
+      relatedPaths: target.relatedPaths,
+      confirm,
+      purge,
+      trashDir,
+    });
+    if (flag("json")) {
+      await writeOut(`${JSON.stringify(report)}\n`);
+      return report.summary.failed > 0 ? 1 : 0;
+    }
+    for (const o of report.outcomes) {
+      const mark =
+        o.status === "trashed"
+          ? paint("32", "🗑")
+          : o.status === "purged"
+            ? paint("31", "🔥")
+            : o.status === "skipped"
+              ? paint("33", "⊘")
+              : paint("31", "✖");
+      say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${o.path}`);
+      if (o.detail) say(`  ${dim(o.detail)}`);
+    }
+    say(
+      `\n${paint("32", `🗑 ${report.summary.trashed}`)}  ${paint("31", `🔥 ${report.summary.purged}`)}  ${paint("33", `⊘ ${report.summary.skipped}`)}  ${paint("31", `✖ ${report.summary.failed}`)} · ${bold(`tổng ${bytesOf(report.summary.totalBytes)}`)}`,
+    );
+    return report.summary.failed > 0 ? 1 : 0;
+  }
+
+  const apps = await listApps({ home });
+  if (flag("json")) {
+    await writeOut(`${JSON.stringify(apps)}\n`);
+    return 0;
+  }
+  if (!apps.length) {
+    say(dim("Không tìm thấy ứng dụng .app nào."));
+    return 0;
+  }
+  say(bold(`\n${apps.length} ứng dụng`));
+  for (const app of apps) {
+    say(`${paint("36", app.name.padEnd(30))} ${bytesOf(app.bytes).padStart(9)}  ${dim(app.bundleId)}  ${app.path}`);
+    if (app.relatedPaths.length) {
+      say(`  ${dim("← dư:")} ${app.relatedPaths.map((p) => dim(p.replace(home, "~"))).join(", ")}`);
+    }
+  }
+  return 0;
+}
+
 async function main(): Promise<number> {
   if (flag("version")) {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
@@ -337,6 +408,7 @@ async function main(): Promise<number> {
     return 0;
   }
   if (command === "ram") return await runRam();
+  if (command === "apps") return await runApps(rest);
   if (command === "version") {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;
