@@ -61,7 +61,7 @@ struct DustlessApp: App {
                 .environmentObject(store)
                 .environmentObject(settings)
         }
-        .defaultSize(width: 580, height: 420)
+        .defaultSize(width: 620, height: 620)
     }
 }
 
