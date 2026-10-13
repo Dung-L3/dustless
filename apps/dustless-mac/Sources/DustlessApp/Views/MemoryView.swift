@@ -8,7 +8,6 @@ typealias MemCategory = DustlessKit.Category
 struct MemoryView: View {
     let report: MemoryReport
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -31,7 +30,7 @@ struct MemoryView: View {
                 .font(.title2.weight(.semibold))
             Spacer()
             pressureBadge
-            Button(action: { dismiss() }) {
+            Button(action: { NSApp.keyWindow?.close() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
@@ -137,7 +136,7 @@ struct MemoryView: View {
         HStack {
             Spacer()
             Button(settings.t("done")) {
-                dismiss()
+                NSApp.keyWindow?.close()
             }
             .keyboardShortcut(.cancelAction)
         }
