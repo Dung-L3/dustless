@@ -153,6 +153,86 @@ struct RefreshButton: View {
     }
 }
 
+// MARK: - States
+
+/// The one loading / empty / error state used by every panel, so the Memory and
+/// Storage windows cannot drift apart on how they say "still working",
+/// "nothing here" and "that failed".
+struct PanelStateView: View {
+    enum Kind {
+        case loading
+        case empty
+        case error
+
+        var symbol: String {
+            switch self {
+            case .loading: "circle.dotted"
+            case .empty: "tray"
+            case .error: "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    let kind: Kind
+    let message: String
+    var title: String?
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if kind == .loading {
+                ProgressView()
+                    .controlSize(.large)
+            } else {
+                Image(systemName: kind.symbol)
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(kind == .error ? Color.orange : Color.secondary)
+            }
+
+            if let title {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+            }
+
+            messageLabel
+
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .controlSize(.large)
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// An engine error is worth copying, so it is selectable and monospaced.
+    private var messageLabel: some View {
+        Text(message)
+            .font(kind == .error
+                ? .system(size: 11.5, design: .monospaced)
+                : .system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 440)
+            .modifier(OptionalTextSelection(isEnabled: kind == .error))
+    }
+}
+
+private struct OptionalTextSelection: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.textSelection(.enabled)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Path actions
 
 /// Shared context menu for file path actions (Reveal in Finder, Copy Path).
