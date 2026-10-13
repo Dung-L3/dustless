@@ -250,8 +250,8 @@ struct MemoryWindowContent: View {
 
     var body: some View {
         Group {
-            if let report = store.memoryReport {
-                MemoryView(report: report)
+            if store.memoryReport != nil {
+                MemoryView()
                     .environmentObject(settings)
             } else {
                 ProgressView(settings.t("busyScanning"))

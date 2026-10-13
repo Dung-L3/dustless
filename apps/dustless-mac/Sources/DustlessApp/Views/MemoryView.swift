@@ -6,16 +6,20 @@ typealias MemProcess = DustlessKit.ProcessInfo
 typealias MemCategory = DustlessKit.Category
 
 struct MemoryView: View {
-    let report: MemoryReport
+    @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
 
+    @State private var killResults: [Int: KillStatus] = [:]
+    @State private var isRefreshing = false
+
     var body: some View {
+        let report = store.memoryReport
         VStack(alignment: .leading, spacing: 16) {
-            header
+            header(report)
             Divider()
-            memoryGrid
+            memoryGrid(report)
             Divider()
-            processList
+            processList(report)
             Divider()
             footer
         }
@@ -24,12 +28,14 @@ struct MemoryView: View {
         .background(.regularMaterial)
     }
 
-    private var header: some View {
+    private func header(_ report: MemoryReport?) -> some View {
         HStack {
             Text(settings.t("memory"))
                 .font(.title2.weight(.semibold))
             Spacer()
-            pressureBadge
+            if let report {
+                pressureBadge(report)
+            }
             Button(action: { NSApp.keyWindow?.close() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
@@ -42,7 +48,7 @@ struct MemoryView: View {
         }
     }
 
-    private var pressureBadge: some View {
+    private func pressureBadge(_ report: MemoryReport) -> some View {
         let pressure = report.memory.pressure
         let percent = report.memory.pressurePercent
         let (labelKey, color): (String, Color) = {
@@ -66,24 +72,24 @@ struct MemoryView: View {
         .background(color.opacity(0.12), in: .capsule)
     }
 
-    private var memoryGrid: some View {
-        let mem = report.memory
+    private func memoryGrid(_ report: MemoryReport?) -> some View {
+        let mem = report?.memory
         return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            MetricRow(label: settings.t("memoryAvailable"), value: ByteFormat.string(mem.available))
-            MetricRow(label: settings.t("memoryUsed"), value: ByteFormat.string(mem.used))
-            MetricRow(label: settings.t("memoryTotal"), value: ByteFormat.string(mem.total))
-            MetricRow(label: settings.t("memoryCompressed"), value: ByteFormat.string(mem.compressed))
-            MetricRow(label: settings.t("memorySwapUsed"), value: ByteFormat.string(mem.swapUsed))
-            MetricRow(label: settings.t("memorySwapTotal"), value: ByteFormat.string(mem.swapTotal))
+            MetricRow(label: settings.t("memoryAvailable"), value: mem.map { ByteFormat.string($0.available) } ?? "—")
+            MetricRow(label: settings.t("memoryUsed"), value: mem.map { ByteFormat.string($0.used) } ?? "—")
+            MetricRow(label: settings.t("memoryTotal"), value: mem.map { ByteFormat.string($0.total) } ?? "—")
+            MetricRow(label: settings.t("memoryCompressed"), value: mem.map { ByteFormat.string($0.compressed) } ?? "—")
+            MetricRow(label: settings.t("memorySwapUsed"), value: mem.map { ByteFormat.string($0.swapUsed) } ?? "—")
+            MetricRow(label: settings.t("memorySwapTotal"), value: mem.map { ByteFormat.string($0.swapTotal) } ?? "—")
         }
     }
 
-    private var processList: some View {
+    private func processList(_ report: MemoryReport?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(settings.t("memoryProcesses"))
                 .font(.headline)
 
-            let topProcesses = Array(report.processes
+            let topProcesses = Array((report?.processes ?? [])
                 .sorted { $0.mem > $1.mem }
                 .prefix(15))
 
@@ -116,9 +122,59 @@ struct MemoryView: View {
                         .foregroundStyle(.primary)
                 }
                 .width(min: 70, ideal: 90)
+
+                TableColumn("") { (proc: MemProcess) in
+                    stopButton(for: proc)
+                }
+                .width(min: 44, ideal: 44, max: 44)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .frame(height: 220)
+        }
+    }
+
+    @ViewBuilder
+    private func stopButton(for proc: MemProcess) -> some View {
+        let status = killResults[proc.pid]
+        if let status {
+            statusView(status)
+        } else {
+            Button(action: { killProcess(pid: proc.pid, force: false, sigkill: false) }) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .help(settings.t("memoryStopProcess"))
+            .contextMenu {
+                Button(action: { killProcess(pid: proc.pid, force: true, sigkill: true) }) {
+                    Label(settings.t("memoryForceStop"), systemImage: "exclamationmark.octagon.fill")
+                }
+            }
+            .disabled(isRefreshing)
+        }
+    }
+
+    @ViewBuilder
+    private func statusView(_ status: KillStatus) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: status.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(status.ok ? .green : .red)
+            Text(status.ok ? settings.t("memoryStopped") : (status.reason ?? settings.t("memoryStopError")))
+                .font(.caption)
+                .foregroundStyle(status.ok ? .green : .red)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background((status.ok ? Color.green : Color.red).opacity(0.12), in: .rect(cornerRadius: 4))
+        .transition(.opacity.combined(with: .scale))
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                withAnimation { killResults[status.pid] = nil }
+            }
         }
     }
 
@@ -143,6 +199,34 @@ struct MemoryView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
     }
+
+    private func killProcess(pid: Int, force: Bool, sigkill: Bool) {
+        Task {
+            isRefreshing = true
+            defer { isRefreshing = false }
+            do {
+                let cli = try DustlessCLI.resolve()
+                let result = try await cli.kill(pid: pid, force: force, sigkill: sigkill)
+                await MainActor.run {
+                    killResults[pid] = KillStatus(pid: pid, ok: result.ok, reason: result.reason)
+                }
+                if result.ok {
+                    await store.fetchMemory()
+                }
+            } catch {
+                await MainActor.run {
+                    killResults[pid] = KillStatus(pid: pid, ok: false, reason: error.localizedDescription)
+                }
+            }
+        }
+    }
+}
+
+private struct KillStatus: Identifiable {
+    let id = UUID()
+    let pid: Int
+    let ok: Bool
+    let reason: String?
 }
 
 private struct MetricRow: View {
