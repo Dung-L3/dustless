@@ -217,6 +217,29 @@ public enum L10n {
         // native app — findings filter
         "searchFindings": "Lọc kết quả theo rule hoặc đường dẫn",
         "noMatches": "Không khớp kết quả nào",
+
+        // native app — memory view
+        "memory": "Bộ nhớ",
+        "memoryPressure": "Áp lực bộ nhớ",
+        "memoryAvailable": "Có sẵn",
+        "memoryUsed": "Đã dùng",
+        "memoryTotal": "Tổng cộng",
+        "memoryCompressed": "Nén",
+        "memorySwapUsed": "Swap đã dùng",
+        "memorySwapTotal": "Swap tổng",
+        "memoryProcesses": "Tiến trình",
+        "memoryProcessName": "Tên",
+        "memoryProcessCategory": "Loại",
+        "memoryProcessPID": "PID",
+        "memoryProcessMem": "Bộ nhớ",
+        "categoryBrowser": "Trình duyệt",
+        "categoryEditor": "Biên tập",
+        "categoryContainer": "Container",
+        "categoryLSP": "LSP",
+        "categoryOther": "Khác",
+        "pressureNormal": "Bình thường",
+        "pressureWarn": "Cảnh báo",
+        "pressureCritical": "Nghiêm trọng",
     ]
 
     static let en: [String: String] = [
@@ -365,6 +388,29 @@ public enum L10n {
         // native app — findings filter
         "searchFindings": "Filter findings by rule or path",
         "noMatches": "No matches",
+
+        // native app — memory view
+        "memory": "Memory",
+        "memoryPressure": "Memory Pressure",
+        "memoryAvailable": "Available",
+        "memoryUsed": "Used",
+        "memoryTotal": "Total",
+        "memoryCompressed": "Compressed",
+        "memorySwapUsed": "Swap Used",
+        "memorySwapTotal": "Swap Total",
+        "memoryProcesses": "Processes",
+        "memoryProcessName": "Name",
+        "memoryProcessCategory": "Category",
+        "memoryProcessPID": "PID",
+        "memoryProcessMem": "Memory",
+        "categoryBrowser": "Browser",
+        "categoryEditor": "Editor",
+        "categoryContainer": "Container",
+        "categoryLSP": "LSP",
+        "categoryOther": "Other",
+        "pressureNormal": "Normal",
+        "pressureWarn": "Warning",
+        "pressureCritical": "Critical",
     ]
 
     static let zh: [String: String] = [
@@ -513,5 +559,28 @@ public enum L10n {
         // native app — findings filter
         "searchFindings": "按规则或路径筛选结果",
         "noMatches": "无匹配结果",
+
+        // native app — memory view
+        "memory": "内存",
+        "memoryPressure": "内存压力",
+        "memoryAvailable": "可用",
+        "memoryUsed": "已用",
+        "memoryTotal": "总计",
+        "memoryCompressed": "压缩",
+        "memorySwapUsed": "Swap已用",
+        "memorySwapTotal": "Swap总计",
+        "memoryProcesses": "进程",
+        "memoryProcessName": "名称",
+        "memoryProcessCategory": "类别",
+        "memoryProcessPID": "PID",
+        "memoryProcessMem": "内存",
+        "categoryBrowser": "浏览器",
+        "categoryEditor": "编辑器",
+        "categoryContainer": "容器",
+        "categoryLSP": "LSP",
+        "categoryOther": "其他",
+        "pressureNormal": "正常",
+        "pressureWarn": "警告",
+        "pressureCritical": "严重",
     ]
 }
