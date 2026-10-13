@@ -279,6 +279,7 @@ public enum L10n {
         "appsResultSummary": "{count} mục · đã thu hồi {freed}",
         "outcomeStatus": "Trạng thái: {status}",
         "busyApps": "Đang đọc danh sách ứng dụng…",
+        "appsEmpty": "Không tìm thấy ứng dụng nào.",
         "volumeUsageHelp": "{name}: đã dùng {percent} dung lượng.",
     ]
 
@@ -490,6 +491,7 @@ public enum L10n {
         "appsResultSummary": "{count} items · {freed} freed",
         "outcomeStatus": "Status: {status}",
         "busyApps": "Reading the application list…",
+        "appsEmpty": "No applications found.",
         "volumeUsageHelp": "{name}: {percent} of capacity used.",
     ]
 
@@ -701,6 +703,7 @@ public enum L10n {
         "appsResultSummary": "{count} 项 · 已回收 {freed}",
         "outcomeStatus": "状态：{status}",
         "busyApps": "正在读取应用程序列表…",
+        "appsEmpty": "未找到任何应用程序。",
         "volumeUsageHelp": "{name}：已使用 {percent} 容量。",
     ]
 }

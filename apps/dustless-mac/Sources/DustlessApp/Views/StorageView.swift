@@ -124,7 +124,12 @@ struct StorageView: View {
                 action: { Task { await loadApps() } }
             )
         } else if apps.isEmpty {
-            PanelStateView(kind: .loading, message: settings.t("busyApps"))
+            // Zero applications is a real answer, not a reason to spin.
+            PanelStateView(
+                kind: isLoadingApps ? .loading : .empty,
+                message: isLoadingApps ? settings.t("busyApps") : settings.t("appsEmpty")
+            )
+            .frame(minHeight: 120)
         } else {
             ScrollView {
                 LazyVStack(spacing: 6) {
