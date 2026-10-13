@@ -11,21 +11,18 @@ struct MemoryView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                Divider()
-                memoryGrid
-                Divider()
-                processList
-            }
-            .padding(20)
-        }
-        .frame(width: 560)
-        .safeAreaInset(edge: .bottom) {
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            Divider()
+            memoryGrid
+            Divider()
+            processList
+            Divider()
             footer
-                .background(.regularMaterial)
         }
+        .padding(20)
+        .frame(width: 560)
+        .background(.regularMaterial)
     }
 
     private var header: some View {
@@ -122,6 +119,7 @@ struct MemoryView: View {
                 .width(min: 70, ideal: 90)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .frame(height: 220)
         }
     }
 
