@@ -13,6 +13,7 @@ import { diskUsage, freeSpace } from "./core/space.ts";
 import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
 import { serveMcp } from "./mcp/server.ts";
 import { runRam } from "./core/ram/index.ts";
+import { writeOut } from "./core/output.ts";
 
 const VERSION = pkg.version;
 const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴", blocked: "⛔" };
@@ -69,9 +70,9 @@ function say(line = ""): void {
   if (!flag("quiet")) console.log(line);
 }
 
-function printScan(report: ScanReport): void {
+async function printScan(report: ScanReport): Promise<void> {
   if (flag("json")) {
-    console.log(JSON.stringify(report));
+    await writeOut(`${JSON.stringify(report)}\n`);
     return;
   }
   say(bold(`\ndustless scan — ${report.platform} — ${report.scannedMs}ms — còn trống ${bytesOf(report.freeBefore)}\n`));
@@ -91,9 +92,9 @@ function printScan(report: ScanReport): void {
   );
 }
 
-function printApply(result: ApplyReport): void {
+async function printApply(result: ApplyReport): Promise<void> {
   if (flag("json")) {
-    console.log(JSON.stringify(result));
+    await writeOut(`${JSON.stringify(result)}\n`);
     return;
   }
   for (const o of result.outcomes) {
@@ -113,26 +114,26 @@ const idleApply = (): ApplyReport => ({
 });
 
 async function runScan(): Promise<number> {
-  printScan(await scan());
+  await printScan(await scan());
   return 0;
 }
 
 async function runApply(): Promise<number> {
   const report = await scan();
-  if (!flag("json")) printScan(report);
+  if (!flag("json")) await printScan(report);
   const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
   if (deletable.length === 0) {
-    printApply(idleApply());
+    await printApply(idleApply());
     if (!flag("json")) say("Không có mục nào đủ điều kiện xóa.");
     return 0;
   }
   if (!flag("yes") && !(await confirmSummary(deletable, report.totals.blocked.count))) {
-    printApply(idleApply());
+    await printApply(idleApply());
     if (!flag("json")) say("Đã hủy. Không có gì bị xóa.");
     return 0;
   }
   const result = await apply(report, { tiers: tierChoicesFor(report), assumeYes: flag("yes"), onPrompt: askYellow });
-  printApply(result);
+  await printApply(result);
   return result.outcomes.some((o) => o.status === "failed") ? 1 : 0;
 }
 
@@ -197,7 +198,7 @@ async function runRule(sub: string, rest: string[]): Promise<number> {
   if (sub === "list") {
     const rules = await loadRules();
     if (flag("json")) {
-      console.log(JSON.stringify(rules));
+      await writeOut(`${JSON.stringify(rules)}\n`);
       return 0;
     }
     for (const rule of rules) say(`${tierBadge(rule.tier)} ${rule.id.padEnd(26)} ${rule.desc}`);
@@ -208,9 +209,10 @@ async function runRule(sub: string, rest: string[]): Promise<number> {
   if (sub === "show") {
     const found = (await loadRules()).find((rule) => rule.id === rest[0]);
     if (!found) throw new Error(`không có rule "${rest[0] ?? ""}"`);
-    console.log(JSON.stringify(found, null, 2));
+    await writeOut(`${JSON.stringify(found, null, 2)}\n`);
     return 0;
   }
+
   if (sub === "add") {
     const [id, tier, desc, ...patterns] = rest;
     if (!id || !tier || !desc || !patterns.length) {
@@ -254,7 +256,7 @@ async function runDoctor(): Promise<number> {
     hygiene,
   };
   if (flag("json")) {
-    console.log(JSON.stringify(report, null, 2));
+    await writeOut(`${JSON.stringify(report, null, 2)}\n`);
     return 0;
   }
   say(bold(`\ndustless doctor ${VERSION}`));
@@ -290,13 +292,13 @@ async function runNet(): Promise<number> {
     flushRouting: flag("flush-routing"),
   };
   const report = await net({ ops: selectOps(flags), dryRun: flag("dry-run"), force: flag("force") });
-  printNet(report);
+  await printNet(report);
   return report.outcomes.some((o) => o.status === "failed") ? 1 : 0;
 }
 
-function printNet(report: NetReport): void {
+async function printNet(report: NetReport): Promise<void> {
   if (flag("json")) {
-    console.log(JSON.stringify(report));
+    await writeOut(`${JSON.stringify(report)}\n`);
     return;
   }
   say(bold(`\ndustless net — ${report.platform}`));
@@ -346,17 +348,28 @@ async function main(): Promise<number> {
   throw new Error(`lệnh không hợp lệ "${command}" — chạy \`dustless help\``);
 }
 
+// `main()` can print hundreds of KB (e.g. `ram --json` lists every process).
+// When stdout is a pipe the kernel buffer fills at 64 KiB and the rest waits in
+// user space, so letting the process end here truncated the tail to exactly
+// 65536 bytes — file redirects looked fine, but MCP clients, agents and the app
+// read through pipes and got broken JSON. Drain stdout first.
+function flushStdout(): Promise<void> {
+  return new Promise((resolve) => process.stdout.write("", () => resolve()));
+}
+
 process.on("unhandledRejection", (reason) => {
   console.error(paint("31", String(reason)));
-  process.exit(1);
+  void flushStdout().finally(() => process.exit(1));
 });
 
 main().then(
-  (code) => {
+  async (code) => {
+    await flushStdout();
     process.exitCode = code;
   },
-  (err: Error) => {
+  async (err: Error) => {
     console.error(paint("31", `✖ ${err.message}`));
+    await flushStdout();
     process.exitCode = 1;
   },
 );
