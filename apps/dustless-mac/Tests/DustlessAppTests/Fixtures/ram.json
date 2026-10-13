@@ -1,0 +1,70 @@
+{
+  "memory": {
+    "total": 34359738368,
+    "used": 17798660096,
+    "available": 16561078272,
+    "free": 613007360,
+    "compressed": 318881792,
+    "swapTotal": 1073741824,
+    "swapUsed": 5368709,
+    "pressure": "normal",
+    "pressurePercent": 52
+  },
+  "processes": [
+    {
+      "pid": 40729,
+      "ppid": 40671,
+      "name": "Brave",
+      "command": "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/155.1.97.56/Helpers/Brave Browser Helper (Renderer).app/Contents/MacOS/Brave Browser Helper (Renderer) --type=renderer --enable-distillability-service --origin-trial-public-key=bYUKPJoPnCxeNvu72j4EmPuK7tr1PAC7SHh8ld9Mw3E=,fMS4mpO6buLQ/QMd+zJmxzty/VQ6B1EUZqoCU04zoRU= --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=24 --launch-time-ticks=38532895588 --shared-files --metrics-shmem-handle=1752395122,r,4362654706562892190,3004703617387372315,1572864 --field-trial-handle=1718379636,r,4532657118475320164,1158321398653947858,262144 --variations-seed-version=main@5a54118717fec842b9441634125bba7d32dc8163 --pseudonymization-salt-handle=1935764596,r,13256477599746767290,3103260640105339561,4 --trace-process-track-uuid=3190709008800875870 --seatbelt-client=166",
+      "cpu": 0,
+      "mem": 1767243776,
+      "owner": "mac",
+      "root": false,
+      "category": "browser"
+    },
+    {
+      "pid": 75253,
+      "ppid": 1,
+      "name": "opencode",
+      "command": "/Users/mac/.opencode/bin/opencode serve --service",
+      "cpu": 17.6,
+      "mem": 1741586432,
+      "owner": "mac",
+      "root": false,
+      "category": "other"
+    },
+    {
+      "pid": 78243,
+      "ppid": 1,
+      "name": "com.apple.WebKit.WebContent",
+      "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+      "cpu": 0,
+      "mem": 1292386304,
+      "owner": "mac",
+      "root": false,
+      "category": "other"
+    },
+    {
+      "pid": 78237,
+      "ppid": 1,
+      "name": "Stremio",
+      "command": "/Applications/Stremio.app/Contents/MacOS/Stremio",
+      "cpu": 0.9,
+      "mem": 1160806400,
+      "owner": "mac",
+      "root": false,
+      "category": "other"
+    },
+    {
+      "pid": 66603,
+      "ppid": 65636,
+      "name": "opencode",
+      "command": "opencode",
+      "cpu": 4.6,
+      "mem": 1095303168,
+      "owner": "mac",
+      "root": false,
+      "category": "other"
+    }
+  ]
+}

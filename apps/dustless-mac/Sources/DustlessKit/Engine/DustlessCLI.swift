@@ -57,6 +57,10 @@ public struct DustlessCLI: Sendable {
         try await decode(ApplyReport.self, from: run(["apply", "--json", "--yes"]))
     }
 
+    public func ram() async throws -> MemoryReport {
+        try await decode(MemoryReport.self, from: run(["ram", "--json"]))
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: data)
