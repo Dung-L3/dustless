@@ -1,0 +1,29 @@
+{
+  "outcomes": [
+    {
+      "path": "/Applications/TestApp.app",
+      "status": "trashed",
+      "bytes": 123456789,
+      "detail": "moved to /Users/test/.Trash/TestApp.app"
+    },
+    {
+      "path": "/Users/test/Library/Application Support/TestApp",
+      "status": "trashed",
+      "bytes": 10485760,
+      "detail": "moved to /Users/test/.Trash/TestApp.1"
+    },
+    {
+      "path": "/Users/test/Library/Caches/com.test.app",
+      "status": "skipped",
+      "bytes": 0,
+      "detail": "does not exist"
+    }
+  ],
+  "summary": {
+    "trashed": 2,
+    "purged": 0,
+    "skipped": 1,
+    "failed": 0,
+    "totalBytes": 133942549
+  }
+}

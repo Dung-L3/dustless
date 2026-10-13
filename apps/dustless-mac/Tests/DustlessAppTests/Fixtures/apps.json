@@ -1,0 +1,30 @@
+[
+  {
+    "bundleId": "com.brave.Browser",
+    "name": "Brave Browser",
+    "path": "/Applications/Brave Browser.app",
+    "bytes": 595125530,
+    "relatedPaths": [
+      "/Users/mac/Library/Caches/com.brave.Browser",
+      "/Users/mac/Library/Preferences/com.brave.Browser.plist",
+      "/Users/mac/Library/WebKit/com.brave.Browser",
+      "/Users/mac/Library/HTTPStorages/com.brave.Browser"
+    ]
+  },
+  {
+    "bundleId": "com.cbd.chitubox2025",
+    "name": "CHITUBOX",
+    "path": "/Applications/CHITUBOX.app",
+    "bytes": 2392572220,
+    "relatedPaths": [
+      "/Users/mac/Library/Preferences/com.cbd.chitubox2025.plist"
+    ]
+  },
+  {
+    "bundleId": "com.anthropic.claude-code-url-handler",
+    "name": "Claude Code URL Handler",
+    "path": "/Users/mac/Applications/Claude Code URL Handler.app",
+    "bytes": 876,
+    "relatedPaths": []
+  }
+]
