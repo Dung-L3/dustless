@@ -61,6 +61,13 @@ public struct DustlessCLI: Sendable {
         try await decode(MemoryReport.self, from: run(["ram", "--json"]))
     }
 
+    public func kill(pid: Int, force: Bool = false, sigkill: Bool = false) async throws -> RamKillResult {
+        var args = ["ram", "--kill", "\(pid)", "--confirm", "--json"]
+        if force { args.append("--force") }
+        if sigkill { args.append("--sigkill") }
+        return try await decode(RamKillResult.self, from: run(args))
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: data)
