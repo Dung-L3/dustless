@@ -8,6 +8,7 @@ typealias MemCategory = DustlessKit.Category
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.closeWindow) private var closeWindow
 
     @State private var killResults: [Int: KillStatus] = [:]
     @State private var isRefreshing = false
@@ -20,8 +21,6 @@ struct MemoryView: View {
             memoryGrid(report)
             Divider()
             processList(report)
-            Divider()
-            footer
         }
         .padding(20)
         .frame(width: 560)
@@ -36,7 +35,7 @@ struct MemoryView: View {
             if let report {
                 pressureBadge(report)
             }
-            Button(action: { NSApp.keyWindow?.close() }) {
+            Button(action: { closeWindow() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
@@ -186,18 +185,6 @@ struct MemoryView: View {
         case .lsp: return "categoryLSP"
         case .other: return "categoryOther"
         }
-    }
-
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button(settings.t("done")) {
-                NSApp.keyWindow?.close()
-            }
-            .keyboardShortcut(.cancelAction)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
     private func killProcess(pid: Int, force: Bool, sigkill: Bool) {
