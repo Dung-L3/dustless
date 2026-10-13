@@ -5,7 +5,6 @@ struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -35,7 +34,7 @@ struct StorageView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: { dismiss() }) {
+            Button(action: { NSApp.keyWindow?.close() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
@@ -85,7 +84,7 @@ struct StorageView: View {
         HStack {
             Spacer()
             Button(settings.t("done")) {
-                dismiss()
+                NSApp.keyWindow?.close()
             }
             .keyboardShortcut(.cancelAction)
         }

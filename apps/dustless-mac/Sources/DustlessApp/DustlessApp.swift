@@ -48,6 +48,20 @@ struct DustlessApp: App {
             MenuBarLabel()
         }
         .menuBarExtraStyle(.menu)
+
+        Window(settings.t("memory"), id: "memory") {
+            MemoryWindowContent()
+                .environmentObject(store)
+                .environmentObject(settings)
+        }
+        .defaultSize(width: 580, height: 520)
+
+        Window(settings.t("storage"), id: "storage") {
+            StorageWindowContent()
+                .environmentObject(store)
+                .environmentObject(settings)
+        }
+        .defaultSize(width: 580, height: 420)
     }
 }
 
@@ -107,6 +121,52 @@ struct WindowCapture: NSViewRepresentable {
     }
 }
 
+/// Attaches to a window and closes it when it resigns key status (click outside).
+/// Guards against closing during initial open by ignoring the first resign event.
+struct CloseOnResignKey: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = CloseOnResignKeyView()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? CloseOnResignKeyView,
+              let window = nsView.window else { return }
+        view.attach(to: window)
+    }
+}
+
+@MainActor
+final class CloseOnResignKeyView: NSView {
+    private var observedWindow: NSWindow?
+    private var isFirstResign = true
+
+    func attach(to window: NSWindow) {
+        guard observedWindow !== window else { return }
+        if let old = observedWindow {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: old)
+        }
+        observedWindow = window
+        isFirstResign = true
+        NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey(_:)), name: NSWindow.didResignKeyNotification, object: window)
+    }
+
+    @objc private func windowDidResignKey(_ notification: Notification) {
+        guard let window = observedWindow else { return }
+        if isFirstResign {
+            isFirstResign = false
+            return
+        }
+        window.close()
+    }
+
+    deinit {
+        if let window = observedWindow {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
+        }
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -120,6 +180,7 @@ struct RootView: View {
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationSplitView {
@@ -142,8 +203,7 @@ struct RootView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await store.fetchMemory() }
-                    store.showingMemory = true
+                    openWindow(id: "memory")
                 } label: {
                     Label(settings.t("memory"), systemImage: "memorychip")
                 }
@@ -151,8 +211,7 @@ struct RootView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await store.fetchStorage() }
-                    store.showingStorage = true
+                    openWindow(id: "storage")
                 } label: {
                     Label(settings.t("storage"), systemImage: "internaldrive")
                 }
@@ -181,17 +240,49 @@ struct RootView: View {
                 ApplyResultSheet(report: report) { store.showingApplyResult = false }
             }
         }
-        .sheet(isPresented: $store.showingMemory) {
+    }
+}
+
+/// Content for the Memory window — loads data on appear and includes outside-click close.
+struct MemoryWindowContent: View {
+    @EnvironmentObject private var store: ScanStore
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        Group {
             if let report = store.memoryReport {
                 MemoryView(report: report)
                     .environmentObject(settings)
+            } else {
+                ProgressView(settings.t("busyScanning"))
+                    .frame(width: 560, height: 300)
             }
         }
-        .sheet(isPresented: $store.showingStorage) {
+        .background(CloseOnResignKey())
+        .task {
+            await store.fetchMemory()
+        }
+    }
+}
+
+/// Content for the Storage window — loads data on appear and includes outside-click close.
+struct StorageWindowContent: View {
+    @EnvironmentObject private var store: ScanStore
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        Group {
             if let space = store.diskSpace {
                 StorageView(space: space, reclaimable: store.report?.reclaimable)
                     .environmentObject(settings)
+            } else {
+                ProgressView(settings.t("busyScanning"))
+                    .frame(width: 560, height: 300)
             }
+        }
+        .background(CloseOnResignKey())
+        .task {
+            await store.fetchStorage()
         }
     }
 }

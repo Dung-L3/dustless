@@ -7,6 +7,7 @@ struct MenuBarContent: View {
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -42,14 +43,10 @@ struct MenuBarContent: View {
             Divider()
             Button(settings.t("openDustless"), action: onOpenWindow)
             Button(settings.t("memory")) {
-                onOpenWindow()
-                Task { await store.fetchMemory() }
-                store.showingMemory = true
+                openWindow(id: "memory")
             }
             Button(settings.t("storage")) {
-                onOpenWindow()
-                Task { await store.fetchStorage() }
-                store.showingStorage = true
+                openWindow(id: "storage")
             }
             Button(settings.t("settingsOpen")) { openSettings() }
 

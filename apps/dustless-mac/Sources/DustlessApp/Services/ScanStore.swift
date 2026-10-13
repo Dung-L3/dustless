@@ -20,8 +20,6 @@ final class ScanStore: ObservableObject {
     @Published private(set) var busyMessage: L10nText?
     @Published var showingConfirmation = false
     @Published var showingApplyResult = false
-    @Published var showingMemory = false
-    @Published var showingStorage = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
 
