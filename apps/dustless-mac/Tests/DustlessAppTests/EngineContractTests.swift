@@ -42,10 +42,6 @@ struct DiskSpaceTests {
     }
 }
 
-private func fixture(_ name: String) throws -> Data {
-    try Data(contentsOf: fixtures.appendingPathComponent(name))
-}
-
 private func findingJSON(
     tier: String, blocked: Bool, bytes: UInt64, path: String = "/tmp/x"
 ) -> Data {
