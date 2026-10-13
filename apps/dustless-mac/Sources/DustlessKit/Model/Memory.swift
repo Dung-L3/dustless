@@ -44,3 +44,18 @@ public enum Category: String, Codable, Sendable {
     case lsp
     case other
 }
+
+/// Result of a `dustless ram --kill` invocation.
+public struct RamKillResult: Codable, Sendable {
+    public let ok: Bool
+    public let reason: String?
+    public let reclaimable: UInt64?
+    public let reclaimed: UInt64?
+
+    public init(ok: Bool, reason: String? = nil, reclaimable: UInt64? = nil, reclaimed: UInt64? = nil) {
+        self.ok = ok
+        self.reason = reason
+        self.reclaimable = reclaimable
+        self.reclaimed = reclaimed
+    }
+}
