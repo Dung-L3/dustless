@@ -14,10 +14,12 @@ final class ScanStore: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
     @Published private(set) var lastApply: ApplyReport?
+    @Published private(set) var memoryReport: MemoryReport?
     @Published private(set) var engineError: L10nText?
     @Published private(set) var busyMessage: L10nText?
     @Published var showingConfirmation = false
     @Published var showingApplyResult = false
+    @Published var showingMemory = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
 
@@ -105,6 +107,29 @@ final class ScanStore: ObservableObject {
     func selectNone(in tab: TierTab) {
         guard let report else { return }
         selection.subtract(tab.findings(in: report).filter(\.isDeletableByEngine).map(\.id))
+    }
+
+    func fetchMemory() async {
+        guard phase != .scanning && phase != .resolvingEngine else { return }
+        phase = .resolvingEngine
+        engineError = nil
+        busyMessage = L10nText("busyLocating")
+        do {
+            let cli = try DustlessCLI.resolve()
+            self.cli = cli
+            phase = .scanning
+            busyMessage = L10nText("busyScanning")
+            let report = try await cli.ram()
+            self.memoryReport = report
+            busyMessage = nil
+            phase = .ready
+        } catch {
+            cli = nil
+            memoryReport = nil
+            engineError = Self.describe(error)
+            busyMessage = nil
+            phase = .idle
+        }
     }
 
     static func describe(_ error: Error) -> L10nText {

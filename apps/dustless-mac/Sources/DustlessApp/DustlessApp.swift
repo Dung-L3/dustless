@@ -142,6 +142,15 @@ struct RootView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    Task { await store.fetchMemory() }
+                    store.showingMemory = true
+                } label: {
+                    Label(settings.t("memory"), systemImage: "memorychip")
+                }
+                .help(settings.t("memory"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     openSettings()
                 } label: {
                     Label(settings.t("settingsOpen"), systemImage: "gearshape")
@@ -161,6 +170,12 @@ struct RootView: View {
         .sheet(isPresented: $store.showingApplyResult) {
             if let report = store.lastApply {
                 ApplyResultSheet(report: report) { store.showingApplyResult = false }
+            }
+        }
+        .sheet(isPresented: $store.showingMemory) {
+            if let report = store.memoryReport {
+                MemoryView(report: report)
+                    .environmentObject(settings)
             }
         }
     }
