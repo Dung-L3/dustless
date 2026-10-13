@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { platform, HOME, expand } from "../core/paths.ts";
+import { platform, expand } from "../core/paths.ts";
 
 const exec = promisify(execFile);
 
@@ -171,9 +171,3 @@ function staleNote(ageDays: number | null): string {
   if (ageDays > 90) return `không chạm tới ${Math.floor(ageDays / 30)} tháng`;
   return "còn mới";
 }
-
-export const STARTUP_LOCATIONS: Record<string, string> = {
-  mac: `${HOME}/Library/LaunchAgents`,
-  win: "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
-  linux: `${HOME}/.config/autostart`,
-};

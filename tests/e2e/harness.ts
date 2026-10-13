@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -187,11 +187,6 @@ export async function userRules(home: string, body: string): Promise<string> {
   return file;
 }
 
-export async function makeWritable(dir: string): Promise<void> {
-  spawnSync("chmod", ["-R", "u+rwX", dir], { stdio: "ignore" });
-  await chmod(dir, 0o755).catch(() => undefined);
-}
-
 export function scanJson(stdout: string): ScanReport {
   const parsed = JSON.parse(stdout) as ScanReport;
   return parsed;
@@ -234,10 +229,6 @@ export async function digest(dir: string): Promise<string> {
   }
   for (const part of parts.sort()) hash.update(part);
   return hash.digest("hex");
-}
-
-export function findByRule(report: ScanReport, ruleId: string, pathSuffix: string): Finding | undefined {
-  return report.findings.find((f) => f.ruleId === ruleId && f.path.endsWith(pathSuffix));
 }
 
 export function applyJson(stdout: string): ApplyReport {
