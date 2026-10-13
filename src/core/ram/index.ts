@@ -1,3 +1,4 @@
+import { writeOut } from "../output.ts";
 import { exec as spaceExec } from "../space.ts";
 import type { KillOptions, KillResult, MemoryInfo, ProcessCategory, ProcessInfo, RamDeps } from "./types.ts";
 
@@ -115,7 +116,7 @@ export function createRam(deps: RamDeps = {}) {
       }
       const result = await killProcess(pid, { confirm: flag("confirm"), force: flag("force"), sigkill: flag("sigkill") });
       if (json) {
-        console.log(JSON.stringify(result));
+        await writeOut(`${JSON.stringify(result)}\n`);
       } else {
         if (result.ok) {
           say(`Sent ${flag("sigkill") ? "SIGKILL" : "SIGTERM"} to ${pid}`);
@@ -131,7 +132,7 @@ export function createRam(deps: RamDeps = {}) {
 
     const [mem, procs] = await Promise.all([getMemoryInfo(), getProcesses()]);
     if (json) {
-      console.log(JSON.stringify({ memory: mem, processes: procs }, null, 2));
+      await writeOut(`${JSON.stringify({ memory: mem, processes: procs }, null, 2)}\n`);
       return 0;
     }
 
@@ -214,7 +215,10 @@ function parseSwap(text: string): { total: number; used: number } {
 
 function parseSize(value: number, unit: string | undefined): number {
   const multipliers: Record<string, number> = { B: 1, K: KIB, M: KIB * KIB, G: KIB * KIB * KIB, T: KIB * KIB * KIB * KIB };
-  return value * (multipliers[unit ?? "B"] ?? 1);
+  // `sysctl vm.swapusage` prints fractional values (e.g. "used = 5.12M"), so
+  // round to whole bytes: a byte count must be an integer, and the JSON
+  // contract feeds strict decoders that reject 5368709.12.
+  return Math.round(value * (multipliers[unit ?? "B"] ?? 1));
 }
 
 function parsePsLine(line: string): ProcessInfo | null {
