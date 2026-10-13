@@ -74,18 +74,14 @@ async function dirSize(path: string): Promise<number> {
 
 function parseInfoPlist(xml: string): { bundleId?: string; name?: string; displayName?: string } {
   const result: { bundleId?: string; name?: string; displayName?: string } = {};
-  let currentKey: string | null = null;
-  for (const line of xml.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("<key>") && trimmed.endsWith("</key>")) {
-      currentKey = trimmed.slice(5, -6);
-    } else if (currentKey && trimmed.startsWith("<string>") && trimmed.endsWith("</string>")) {
-      const value = trimmed.slice(8, -9);
-      if (currentKey === "CFBundleIdentifier") result.bundleId = value;
-      else if (currentKey === "CFBundleName") result.name = value;
-      else if (currentKey === "CFBundleDisplayName") result.displayName = value;
-      currentKey = null;
-    }
+  // Apple writes `<key>X</key>` and `<string>Y</string>` on separate lines, but
+  // generated plists often put them on one line, so match across whitespace.
+  for (const match of xml.matchAll(/<key>\s*([^<]+?)\s*<\/key>\s*<string>([^<]*)<\/string>/g)) {
+    const key = match[1];
+    const value = match[2];
+    if (key === "CFBundleIdentifier") result.bundleId = value;
+    else if (key === "CFBundleName") result.name = value;
+    else if (key === "CFBundleDisplayName") result.displayName = value;
   }
   return result;
 }
