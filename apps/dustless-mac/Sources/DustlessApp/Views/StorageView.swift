@@ -1,10 +1,36 @@
 import DustlessKit
 import SwiftUI
+import AppKit
+
+/// Shared context menu for file path actions (Reveal in Finder, Copy Path).
+private struct PathContextMenu: ViewModifier {
+    let path: String
+    let settings: AppSettings
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button(settings.t("revealInFinder")) {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            Button(settings.t("copyPath")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            }
+        }
+    }
+}
+
+private extension View {
+    func pathContextMenu(_ path: String, settings: AppSettings) -> some View {
+        modifier(PathContextMenu(path: path, settings: settings))
+    }
+}
 
 struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.closeWindow) private var closeWindow
 
     @State private var volumes: [VolumeInfo] = []
     @State private var apps: [InstalledApp] = []
@@ -13,6 +39,8 @@ struct StorageView: View {
     @State private var selectedAppForUninstall: InstalledApp?
     @State private var uninstallReport: UninstallReport?
     @State private var isUninstalling = false
+    @State private var uninstallError: String?
+    @State private var dataLoaded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -28,16 +56,18 @@ struct StorageView: View {
                         reclaimableSection(reclaimable)
                     }
                 }
+                .padding(.bottom, 20)
             }
-            Divider()
-            footer
         }
         .padding(20)
-        .frame(width: 560)
+        .frame(minWidth: 600, idealWidth: 680, minHeight: 500, idealHeight: 650)
         .background(.regularMaterial)
         .task {
-            await loadVolumes()
-            await loadApps()
+            if !dataLoaded {
+                await loadVolumes()
+                await loadApps()
+                dataLoaded = true
+            }
         }
         .sheet(item: $selectedAppForUninstall) { app in
             UninstallConfirmationSheet(
@@ -49,6 +79,11 @@ struct StorageView: View {
         }
         .sheet(item: $uninstallReport) { report in
             UninstallResultSheet(report: report, settings: settings, onDismiss: { uninstallReport = nil })
+        }
+        .alert(settings.t("appsUninstall"), isPresented: .constant(uninstallError != nil), presenting: uninstallError) { _ in
+            Button(settings.t("done")) { uninstallError = nil }
+        } message: { error in
+            Text(error)
         }
     }
 
@@ -62,7 +97,7 @@ struct StorageView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: { NSApp.keyWindow?.close() }) {
+            Button(action: { closeWindow() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
@@ -147,18 +182,6 @@ struct StorageView: View {
         }
     }
 
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button(settings.t("done")) {
-                NSApp.keyWindow?.close()
-            }
-            .keyboardShortcut(.cancelAction)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-    }
-
     private func loadVolumes() async {
         let keys: [URLResourceKey] = [.volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
@@ -203,7 +226,7 @@ struct StorageView: View {
             selectedAppForUninstall = nil
             await loadApps()
         } catch {
-            // Error handling could be improved
+            uninstallError = error.localizedDescription
         }
         isUninstalling = false
     }
@@ -434,6 +457,7 @@ struct AppUninstallRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 14)
+        .pathContextMenu(path, settings: settings)
     }
 }
 
@@ -491,6 +515,7 @@ struct UninstallResultSheet: View {
                         }
                         .padding(.vertical, 7)
                         .padding(.horizontal, 14)
+                        .pathContextMenu(outcome.path, settings: settings)
                         Divider().opacity(0.4)
                     }
                 }
