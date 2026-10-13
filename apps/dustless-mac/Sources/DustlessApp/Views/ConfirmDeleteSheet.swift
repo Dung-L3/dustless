@@ -2,6 +2,30 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
+/// Shared context menu for file path actions (Reveal in Finder, Copy Path).
+private struct PathContextMenu: ViewModifier {
+    let path: String
+    @EnvironmentObject private var settings: AppSettings
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button(settings.t("revealInFinder")) {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            Button(settings.t("copyPath")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path, forType: .string)
+            }
+        }
+    }
+}
+
+private extension View {
+    func pathContextMenu(_ path: String) -> some View {
+        modifier(PathContextMenu(path: path))
+    }
+}
+
 struct ConfirmDeleteSheet: View {
     let findings: [Finding]
     let totalBytes: UInt64
@@ -56,15 +80,7 @@ struct ConfirmDeleteSheet: View {
                         .padding(.vertical, 7)
                         .padding(.horizontal, 14)
                         .contentShape(.rect)
-                        .contextMenu {
-                            Button(settings.t("revealInFinder")) {
-                                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: finding.path)])
-                            }
-                            Button(settings.t("copyPath")) {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(finding.path, forType: .string)
-                            }
-                        }
+                        .pathContextMenu(finding.path)
                         Divider().opacity(0.4)
                     }
                 }
@@ -179,6 +195,7 @@ struct ApplyResultSheet: View {
                         }
                         .padding(.vertical, 7)
                         .padding(.horizontal, 14)
+                        .pathContextMenu(outcome.path)
                         Divider().opacity(0.4)
                     }
                 }
