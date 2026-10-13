@@ -2,30 +2,6 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-/// Shared context menu for file path actions (Reveal in Finder, Copy Path).
-private struct PathContextMenu: ViewModifier {
-    let path: String
-    let settings: AppSettings
-
-    func body(content: Content) -> some View {
-        content.contextMenu {
-            Button(settings.t("revealInFinder")) {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-            }
-            Button(settings.t("copyPath")) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(path, forType: .string)
-            }
-        }
-    }
-}
-
-private extension View {
-    func pathContextMenu(_ path: String, settings: AppSettings) -> some View {
-        modifier(PathContextMenu(path: path, settings: settings))
-    }
-}
-
 struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
@@ -72,13 +48,12 @@ struct StorageView: View {
         .sheet(item: $selectedAppForUninstall) { app in
             UninstallConfirmationSheet(
                 app: app,
-                settings: settings,
                 onCancel: { selectedAppForUninstall = nil },
                 onConfirm: { Task { await performUninstall(app) } }
             )
         }
         .sheet(item: $uninstallReport) { report in
-            UninstallResultSheet(report: report, settings: settings, onDismiss: { uninstallReport = nil })
+            UninstallResultSheet(report: report, onDismiss: { uninstallReport = nil })
         }
         .alert(settings.t("appsUninstall"), isPresented: .constant(uninstallError != nil), presenting: uninstallError) { _ in
             Button(settings.t("done")) { uninstallError = nil }
@@ -116,7 +91,7 @@ struct StorageView: View {
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(volumes) { volume in
-                    VolumeCard(volume: volume, settings: settings)
+                    VolumeCard(volume: volume)
                 }
             }
         }
@@ -150,7 +125,7 @@ struct StorageView: View {
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(apps) { app in
-                        AppRow(app: app, settings: settings, onUninstall: { selectedAppForUninstall = app })
+                        AppRow(app: app, onUninstall: { selectedAppForUninstall = app })
                     }
                 }
             }
@@ -242,7 +217,7 @@ struct VolumeInfo: Identifiable {
 
 struct VolumeCard: View {
     let volume: VolumeInfo
-    let settings: AppSettings
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -288,8 +263,9 @@ struct VolumeCard: View {
 
 struct AppRow: View {
     let app: InstalledApp
-    let settings: AppSettings
     let onUninstall: () -> Void
+
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         HStack(spacing: 12) {
@@ -327,9 +303,10 @@ struct AppRow: View {
 
 struct UninstallConfirmationSheet: View {
     let app: InstalledApp
-    let settings: AppSettings
     let onCancel: () -> Void
     let onConfirm: () -> Void
+
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -342,8 +319,7 @@ struct UninstallConfirmationSheet: View {
                         name: app.name,
                         path: app.path,
                         bytes: app.bytes,
-                        isApp: true,
-                        settings: settings
+                        isApp: true
                     )
                     Divider().opacity(0.4).padding(.horizontal, 14)
 
@@ -353,8 +329,7 @@ struct UninstallConfirmationSheet: View {
                             name: (related as NSString).lastPathComponent,
                             path: related,
                             bytes: nil,
-                            isApp: false,
-                            settings: settings
+                            isApp: false
                         )
                         Divider().opacity(0.4).padding(.horizontal, 14)
                     }
@@ -422,7 +397,8 @@ struct AppUninstallRow: View {
     let path: String
     let bytes: UInt64?
     let isApp: Bool
-    let settings: AppSettings
+
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -452,14 +428,15 @@ struct AppUninstallRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 14)
-        .pathContextMenu(path, settings: settings)
+        .pathContextMenu(path)
     }
 }
 
 struct UninstallResultSheet: View {
     let report: UninstallReport
-    let settings: AppSettings
     let onDismiss: () -> Void
+
+    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -510,7 +487,7 @@ struct UninstallResultSheet: View {
                         }
                         .padding(.vertical, 7)
                         .padding(.horizontal, 14)
-                        .pathContextMenu(outcome.path, settings: settings)
+                        .pathContextMenu(outcome.path)
                         Divider().opacity(0.4)
                     }
                 }
