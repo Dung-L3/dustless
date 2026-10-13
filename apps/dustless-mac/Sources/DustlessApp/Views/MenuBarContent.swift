@@ -41,6 +41,11 @@ struct MenuBarContent: View {
 
             Divider()
             Button(settings.t("openDustless"), action: onOpenWindow)
+            Button(settings.t("memory")) {
+                onOpenWindow()
+                Task { await store.fetchMemory() }
+                store.showingMemory = true
+            }
             Button(settings.t("settingsOpen")) { openSettings() }
 
             Divider()
