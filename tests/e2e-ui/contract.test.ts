@@ -72,6 +72,37 @@ describe("app.js and index.html agree", () => {
   });
 });
 
+describe("no dead css or markup", () => {
+  const inUse = new Set(
+    [
+      ...[...html.matchAll(/class="([^"]*)"/g), ...[...appJs.matchAll(/class:\s*"([^"]+)"/g)]].flatMap((match) =>
+        (match[1] ?? "").split(/\s+/),
+      ),
+      // `glyph(name, "group__chev")` names its class outside a class= prop.
+      ...[...appJs.matchAll(/glyph\([^,]+,\s*"([^"]+)"/g)].map((match) => match[1] ?? ""),
+    ].filter(Boolean),
+  );
+
+  test("every class selector in style.css is used by the markup or by app.js", () => {
+    const selectors = new Set([...css.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((match) => match[1] ?? ""));
+    expect(selectors.size).toBeGreaterThan(60);
+    expect([...selectors].filter((name) => !inUse.has(name)).sort()).toEqual([]);
+  });
+
+  test("every svg symbol is drawn somewhere, including the ones glyph() builds", () => {
+    const defined = [...html.matchAll(/<symbol id="([^"]+)"/g)].map((match) => match[1] ?? "");
+    const drawn = new Set([
+      ...[...`${html}\n${appJs}`.matchAll(/href="#(i-[\w-]+)"/g)].map((match) => match[1] ?? ""),
+      // glyph(name) resolves to #i-<name> at runtime.
+      ...[...appJs.matchAll(/glyph\(\s*"([\w-]+)"/g)].map((match) => `i-${match[1] ?? ""}`),
+    ]);
+    expect({ defined: defined.length, orphans: defined.filter((id) => !drawn.has(id)).sort() }).toEqual({
+      defined: 11,
+      orphans: [],
+    });
+  });
+});
+
 describe("the page makes no off-origin requests", () => {
   test("every href and src stays on this origin", () => {
     const refs = [...html.matchAll(/\b(?:href|src)="([^"]*)"/g)].map((match) => match[1] ?? "");

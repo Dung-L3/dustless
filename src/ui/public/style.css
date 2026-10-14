@@ -367,7 +367,6 @@ b { font-weight: 620; }
   font-weight: 600; letter-spacing: 0.04em;
 }
 .row__tag svg { width: 11px; height: 11px; }
-.row__tag--muted { background: rgba(127, 127, 127, 0.08); color: var(--text-3); }
 .row__right { display: grid; justify-items: end; gap: 6px; }
 .row__bytes { font-size: var(--fs-lead); font-weight: 620; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .bar { --w: 0; width: 120px; height: 4px; overflow: hidden; border-radius: var(--r-pill); background: rgba(127, 127, 127, 0.1); }
@@ -384,17 +383,6 @@ b { font-weight: 620; }
 
 .decision { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); }
 .switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: rgba(127, 127, 127, 0.06); }
-.switch button {
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
-  border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-3);
-  font-size: var(--fs-micro); font-weight: 620; letter-spacing: 0.04em; cursor: pointer;
-  transition: color 220ms var(--ease), background 220ms var(--ease);
-}
-.switch button svg { width: 12px; height: 12px; }
-.switch button:hover { color: var(--text); }
-.switch button[aria-pressed="true"] { background: rgba(127, 127, 127, 0.12); color: var(--text); }
-.switch button[data-choice="delete"][aria-pressed="true"] { background: var(--tier); color: var(--canvas); }
-.decision__hint { font-size: var(--fs-micro); color: var(--text-3); }
 
 .outcome { display: grid; gap: var(--s4); grid-template-columns: 1fr; padding-top: var(--s2); }
 .tally {
@@ -437,7 +425,6 @@ b { font-weight: 620; }
   grid-column: 2 / -1; font-size: var(--fs-micro); color: var(--text-3);
 }
 .sheet__item b { font-size: var(--fs-sm); color: var(--tier); font-variant-numeric: tabular-nums; }
-.sheet__total { font-size: var(--fs-lead); font-weight: 620; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .sheet__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s3); }
 
 .toast {
