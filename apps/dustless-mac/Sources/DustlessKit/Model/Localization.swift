@@ -281,6 +281,15 @@ public enum L10n {
         "busyApps": "Đang đọc danh sách ứng dụng…",
         "appsEmpty": "Không tìm thấy ứng dụng nào.",
         "volumeUsageHelp": "{name}: đã dùng {percent} dung lượng.",
+
+        // native app — largest files view
+        "largeFilesTitle": "Tệp lớn nhất",
+        "largeFilesCount": "{n} tệp",
+        "largeFilesEmpty": "Không có tệp lớn nào trong thư mục home.",
+        "busyLargeFiles": "Đang tìm tệp lớn nhất…",
+        "largeFilesTrashBody": "Tệp này sẽ được chuyển vào Thùng rác. Nó nằm lại cho tới khi bạn đổ Thùng rác.",
+        "largeFilesTrashHelp": "Chuyển {name} vào Thùng rác",
+        "largeFilesTrashed": "Đã chuyển vào Thùng rác",
     ]
 
     static let en: [String: String] = [
@@ -493,6 +502,15 @@ public enum L10n {
         "busyApps": "Reading the application list…",
         "appsEmpty": "No applications found.",
         "volumeUsageHelp": "{name}: {percent} of capacity used.",
+
+        // native app — largest files view
+        "largeFilesTitle": "Largest files",
+        "largeFilesCount": "{n} files",
+        "largeFilesEmpty": "No large files in your home folder.",
+        "busyLargeFiles": "Looking for large files…",
+        "largeFilesTrashBody": "This file will be moved to the Trash. It stays there until you empty the Trash.",
+        "largeFilesTrashHelp": "Move {name} to the Trash",
+        "largeFilesTrashed": "Moved to Trash",
     ]
 
     static let zh: [String: String] = [
@@ -705,5 +723,14 @@ public enum L10n {
         "busyApps": "正在读取应用程序列表…",
         "appsEmpty": "未找到任何应用程序。",
         "volumeUsageHelp": "{name}：已使用 {percent} 容量。",
+
+        // native app — largest files view
+        "largeFilesTitle": "最大的文件",
+        "largeFilesCount": "{n} 个文件",
+        "largeFilesEmpty": "主目录中没有大文件。",
+        "busyLargeFiles": "正在查找大文件…",
+        "largeFilesTrashBody": "此文件将被移至废纸篓。它会一直留在那里，直到你清倒废纸篓。",
+        "largeFilesTrashHelp": "将 {name} 移至废纸篓",
+        "largeFilesTrashed": "已移至废纸篓",
     ]
 }
