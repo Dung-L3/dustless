@@ -327,10 +327,12 @@ struct ProcessGroupTests {
     }
 
     @Test func groupMembersAreSortedBiggestFirst() throws {
+        // Same executable, different pids: without a bundle the rule groups on
+        // the executable path, so these are ONE group.
         let group = try #require(try [
-            process(command: "/usr/bin/a", mem: 1),
-            process(command: "/usr/bin/b", mem: 9),
-            process(command: "/usr/bin/c", mem: 5),
+            process(command: "/usr/bin/a", mem: 1, pid: 1),
+            process(command: "/usr/bin/a", mem: 9, pid: 2),
+            process(command: "/usr/bin/a", mem: 5, pid: 3),
         ].groupedByApp().first)
         #expect(group.processes.map(\.mem) == [9, 5, 1])
     }
