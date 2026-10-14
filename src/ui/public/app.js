@@ -69,11 +69,16 @@ async function api(path, options) {
 }
 
 
+// One predicate for "the engine will never delete this", used by every list,
+// every control and the payload: a finding is inert when it is hard-blocked or
+// on the red list, and those are exactly the findings that get no checkbox.
+const isLocked = (finding) => finding.blocked || finding.tier === "red";
+
 function tabFindings(tab) {
   if (!state.report) return [];
-  if (tab === "locked") return state.report.findings.filter((f) => f.blocked || f.tier === "red");
+  if (tab === "locked") return state.report.findings.filter(isLocked);
   const tier = TIERS[tab];
-  return state.report.findings.filter((f) => !f.blocked && f.tier !== "red" && f.tier === tier);
+  return state.report.findings.filter((f) => !isLocked(f) && f.tier === tier);
 }
 
 function groupByRule(findings) {
@@ -107,7 +112,7 @@ function buildTierChoice() {
   const ruleIds = new Set(state.report.findings.map((f) => f.ruleId));
   for (const ruleId of ruleIds) {
     const items = state.report.findings.filter((f) => f.ruleId === ruleId);
-    const deletable = items.some((f) => !f.blocked && f.tier !== "red");
+    const deletable = items.some((f) => !isLocked(f));
     const selected = items.some((f) => state.selected.has(findingKey(f)));
     if (!deletable || !selected) choices[ruleId] = "skip";
     else {
@@ -211,7 +216,7 @@ function provenance(finding) {
 function renderRow(finding, index, group, tab, stagger) {
   const key = findingKey(finding);
   const chosen = state.selected.has(key);
-  const locked = finding.blocked || finding.tier === "red";
+  const locked = isLocked(finding);
   const note = finding.blocked ? finding.note : t("blockedNotice");
   return h("div", {
     class: "row",
@@ -316,17 +321,28 @@ function toggleGroup(ruleId) {
   renderAllTabs(false);
 }
 
+// `/api/apply` answers with one tier per rule and `apply()` deletes every
+// finding that carries it, so a per-item checkbox could only ever lie: tick one
+// item of a rule and the engine removes its siblings the user never chose.
+// Ticking therefore selects the whole rule — which is what the control's own
+// `ruleWide` label already promised.
 function toggleFinding(key) {
-  if (state.selected.has(key)) state.selected.delete(key);
-  else state.selected.add(key);
+  const finding = byKey.get(key);
+  if (!finding) return;
+  const group = state.report?.findings.filter((f) => f.ruleId === finding.ruleId && !isLocked(f)) ?? [];
+  const select = !state.selected.has(key);
+  for (const item of group) {
+    if (select) state.selected.add(findingKey(item));
+    else state.selected.delete(findingKey(item));
+  }
   paintSummary();
   renderAllTabs(false);
   renderConfirm();
 }
 
 function renderConfirm() {
-  const deletable = state.report?.findings.filter((f) => !f.blocked) ?? [];
-  const locked = state.report?.findings.filter((f) => f.blocked) ?? [];
+  const deletable = state.report?.findings.filter((f) => !isLocked(f)) ?? [];
+  const locked = state.report?.findings.filter(isLocked) ?? [];
   dom.confirmList.replaceChildren(...deletable.map((finding) => {
     const key = findingKey(finding);
     const checked = state.selected.has(key);

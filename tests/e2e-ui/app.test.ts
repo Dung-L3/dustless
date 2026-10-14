@@ -6,6 +6,7 @@ import {
   BLOCKED_GRADLE,
   BLOCKED_RULE,
   BUILD_ONE,
+  BUILD_THREE,
   BUILD_TWO,
   EMPTY_REPORT,
   GREEN_RULE,
@@ -183,22 +184,29 @@ describe("decision controls", () => {
     expect(input?.closest("label")?.getAttribute("aria-label")).toBe(t("ruleWide"));
   });
 
-  test("toggling one yellow item does not affect siblings", () => {
+  test("ticking one item of a rule ticks every item of that rule", () => {
     let first = rowFor(YELLOW_RULE, BUILD_ONE) as El;
     expect(first.dataset.chosen).toBe("false");
     stub.click(checkboxFor(first) as El);
     first = rowFor(YELLOW_RULE, BUILD_ONE) as El;
     const sibling = rowFor(YELLOW_RULE, BUILD_TWO) as El;
     expect(first.dataset.chosen).toBe("true");
-    expect(sibling.dataset.chosen).toBe("false");
+    expect(sibling.dataset.chosen).toBe("true");
   });
 
-  test("the hero and the CTA hint follow the per-item selection", () => {
-    let first = rowFor(YELLOW_RULE, BUILD_ONE) as El;
+  test("ticking it again unticks the whole rule, because apply deletes the whole rule", () => {
+    stub.click(checkboxFor(rowFor(YELLOW_RULE, BUILD_ONE) as El) as El);
+    stub.click(checkboxFor(rowFor(YELLOW_RULE, BUILD_TWO) as El) as El);
+    for (const path of [BUILD_ONE, BUILD_TWO, BUILD_THREE]) {
+      expect({ path, chosen: rowFor(YELLOW_RULE, path)?.dataset.chosen }).toEqual({ path, chosen: "false" });
+    }
+  });
+
+  test("the hero and the CTA hint follow the rule-wide selection", () => {
     expect(heroBytes()).toBe(0);
-    stub.click(checkboxFor(first) as El);
-    expect(heroBytes()).toBe(8 * 1024 * 1024);
-    expect(stub.byId("cleanHint").textContent).toContain("1");
+    stub.click(checkboxFor(rowFor(YELLOW_RULE, BUILD_ONE) as El) as El);
+    expect(heroBytes()).toBe(13 * 1024 * 1024);
+    expect(stub.byId("cleanHint").textContent).toContain("3");
   });
 
   test("the confirm dialog lists every deletable item and starts with nothing selected", () => {
@@ -218,11 +226,12 @@ describe("decision controls", () => {
     const sheetRowFor = (path: string) => stub.byId("confirmList").children.find((li) => li.textContent.includes(path));
     let firstGreen = sheetRowFor(NPM_CACHE) as El;
     stub.click(checkboxFor(firstGreen) as El);
-    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "5 MB" }));
+    // npm.cacache also owns ~/.npm/_npx, and apply would delete both.
+    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "7 MB" }));
     expect(stub.byId("confirmGo").disabled).toBe(false);
     let firstYellow = sheetRowFor(BUILD_ONE) as El;
     stub.click(checkboxFor(firstYellow) as El);
-    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "13 MB" }));
+    expect(stub.byId("confirmTotal").textContent).toBe(t("confirmTotal", { amount: "20 MB" }));
   });
 });
 
@@ -248,6 +257,22 @@ describe("the apply payload", () => {
       ruleId: BLOCKED_RULE,
       requested: "skip",
     });
+  });
+
+  test("apply deletes a whole rule, so the payload never covers an unchosen finding", async () => {
+    stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    const tiers = await postApply();
+    expect(Object.entries(tiers).filter(([, tier]) => tier !== "skip")).toEqual([[GREEN_RULE, "green"]]);
+    // Every non-locked finding under a rule we asked to delete must read as chosen.
+    for (const finding of MIXED_REPORT.findings.filter((f) => !f.blocked)) {
+      const asked = tiers[finding.ruleId] !== "skip";
+      const row = rowFor(finding.ruleId, finding.path);
+      expect({ path: finding.path, asked, chosen: row?.dataset.chosen }).toEqual({
+        path: finding.path,
+        asked,
+        chosen: String(asked),
+      });
+    }
   });
 
   test("the result panel reports measured numbers, never placeholders", async () => {
