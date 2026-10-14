@@ -69,6 +69,18 @@ public struct DustlessCLI: Sendable {
         try await decode(UninstallReport.self, from: run(["apps", "--uninstall", path, "--confirm", "--json"]))
     }
 
+    /// The engine's own defaults: files over 200 MiB, the biggest 50 first.
+    public func largefiles() async throws -> [LargeFile] {
+        try await decode([LargeFile].self, from: run(["largefiles", "--json"]))
+    }
+
+    /// Reports the same shape as `uninstallApp()` — one outcome, one summary —
+    /// because both commands move a path to the Trash and nothing is ever
+    /// hard-deleted.
+    public func deleteLargeFile(path: String) async throws -> UninstallReport {
+        try await decode(UninstallReport.self, from: run(["largefiles", "--delete", path, "--confirm", "--json"]))
+    }
+
     public func kill(pid: Int, force: Bool = false, sigkill: Bool = false) async throws -> RamKillResult {
         var args = ["ram", "--kill", "\(pid)", "--confirm", "--json"]
         if force { args.append("--force") }
