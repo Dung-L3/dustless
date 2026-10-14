@@ -39,13 +39,16 @@ export function size(lang, bytes) {
   return `${number(lang, bytes, 0)} B`;
 }
 
+// The hero figure has to agree with `size()` everywhere else on the page, or a
+// 488 KB selection reads "0 MB" next to a CTA hint that says "488 KB".
 export function heroSize(bytes) {
-  if (bytes < MIB) return { value: bytes / MIB, unit: "MB", digits: 0 };
   if (bytes >= GIB) {
     const raw = bytes / GIB;
     return { value: raw, unit: "GB", digits: raw >= 10 ? 1 : 2 };
   }
-  return { value: bytes / MIB, unit: "MB", digits: 0 };
+  if (bytes >= MIB) return { value: bytes / MIB, unit: "MB", digits: 0 };
+  if (bytes >= KIB) return { value: bytes / KIB, unit: "KB", digits: 0 };
+  return { value: bytes, unit: "B", digits: 0 };
 }
 
 export function clockLabel(lang, ms) {
