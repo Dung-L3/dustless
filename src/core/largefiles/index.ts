@@ -61,7 +61,13 @@ function scannedRoots(roots?: string[]): string[] {
 }
 
 /** Unreadable directories and files are skipped silently — a walk of a real
- * home hits TCC-protected folders and racing temp files on every run. */
+ * home hits TCC-protected folders and racing temp files on every run.
+ *
+ * ponytail: one directory at a time, with its files stat'ed in parallel —
+ * 30-130s of wall clock on the author's home depending on what else is doing
+ * I/O. Eight walkers sharing the stack measured ten times *slower*, so the
+ * queue is left alone until that stops being true. The CLI prints the
+ * elapsed time so the wait reads as work rather than as a hang. */
 async function walk(root: string, minSize: number, found: LargeFile[]): Promise<void> {
   const stack = [root];
   while (stack.length) {
