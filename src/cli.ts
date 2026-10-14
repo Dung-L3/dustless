@@ -429,6 +429,8 @@ async function runLargeFiles(): Promise<number> {
     return await printUninstall(await deleteLargeFile({ path: deletePath, confirm: flag("confirm"), trashDir: opt("trash-dir") }));
   }
 
+  if (!flag("json")) say(dim("Đang duyệt thư mục home…"));
+  const started = Date.now();
   const files = await findLargeFiles({
     minSize,
     limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
@@ -441,7 +443,7 @@ async function runLargeFiles(): Promise<number> {
     say(dim(`Không có tệp nào lớn hơn ${bytesOf(minSize ?? DEFAULT_MIN_SIZE)} trong thư mục home.`));
     return 0;
   }
-  say(bold(`\n${files.length} tệp lớn nhất`));
+  say(bold(`\n${files.length} tệp lớn nhất · quét trong ${Date.now() - started}ms`));
   for (const file of files) {
     say(
       `${paint("36", file.path.split(sep).pop()?.padEnd(30) ?? "")} ${bytesOf(file.size).padStart(9)}  ${dim(new Date(file.mtime).toISOString().slice(0, 10))}  ${file.path}`,
