@@ -1,5 +1,6 @@
 import DustlessKit
 import SwiftUI
+import AppKit
 
 /// Avoid collision with Foundation.NSProcessInfo
 typealias MemProcess = DustlessKit.ProcessInfo
@@ -14,18 +15,26 @@ struct MemoryView: View {
     @State private var isStopping = false
     /// Which row the pointer is over, so the stop button only lights up there.
     @State private var hoveredPID: Int?
+    /// The groups the user folded away. `nil` until the first click, which is how
+    /// the biggest group starts open: a hog should not need a second click to see.
+    @State private var collapsed: Set<String>?
 
-    /// The table is a summary, not a full `ps`. The footer says so.
-    private static let processLimit = 15
+    /// The list is a summary, not a full `ps`. The footer says so. The limit is
+    /// on apps, not processes, so a group is never shown with half its memory
+    /// missing.
+    private static let groupLimit = 15
 
     var body: some View {
         let report = store.memoryReport
+        // Grouped once here and threaded down: the body re-runs on every hover,
+        // and regrouping the whole list per row would be wasted work.
+        let groups = processGroups(report)
         VStack(alignment: .leading, spacing: 16) {
             header(report)
             Divider()
             metrics(report?.memory)
             Divider()
-            processes(report)
+            processes(report, groups)
         }
         .padding(20)
         .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
@@ -87,17 +96,20 @@ struct MemoryView: View {
         ]
     }
 
-    private func processes(_ report: MemoryReport?) -> some View {
+    /// One row per application, biggest first, each one opening onto the
+    /// processes it owns — twelve helpers eating 4 GB should read as one hog,
+    /// not as twelve rows competing for the same attention.
+    private func processes(_ report: MemoryReport?, _ groups: [ProcessGroup]) -> some View {
         let all = report?.processes ?? []
-        let top = Array(all.sorted { $0.mem > $1.mem }.prefix(Self.processLimit))
+        let shown = groups.reduce(0) { $0 + $1.count }
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(settings.t("memoryProcesses"))
                     .panelSectionHeader()
-                if all.count > top.count {
+                if shown < all.count {
                     Text(settings.t("memoryShowingTop", [
-                        "shown": "\(top.count)",
+                        "shown": "\(shown)",
                         "total": "\(all.count)",
                     ]))
                     .font(.system(size: 11))
@@ -106,52 +118,146 @@ struct MemoryView: View {
                 Spacer(minLength: 0)
             }
 
-            Table(top) {
-                TableColumn(settings.t("memoryProcessName")) { (proc: MemProcess) in
-                    Text(proc.name)
-                        .font(.system(size: 12.5, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .accessibilityLabel(rowDescription(proc))
-                }
-                .width(min: 160, ideal: 240)
-
-                TableColumn(settings.t("memoryProcessCategory")) { (proc: MemProcess) in
-                    StatusChip(
-                        color: categoryColor(proc.category),
-                        text: settings.t(categoryKey(proc.category))
-                    )
-                }
-                .width(min: 96, ideal: 112)
-
-                TableColumn(settings.t("memoryProcessPID")) { (proc: MemProcess) in
-                    Text("\(proc.pid)")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                .width(min: 56, ideal: 64)
-
-                TableColumn(settings.t("memoryProcessMem")) { (proc: MemProcess) in
-                    Text(ByteFormat.string(proc.mem))
-                        .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .width(min: 76, ideal: 88)
-
-                TableColumn(settings.t("actions")) { (proc: MemProcess) in
-                    stopButton(for: proc)
-                }
-                .width(min: 40, ideal: 40, max: 40)
-            }
-            .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .frame(height: top.isEmpty ? 90 : 250)
-
-            if top.isEmpty {
+            if groups.isEmpty {
                 Text(settings.t("memoryNoProcesses"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                // The list takes whatever height the window has left, so opening a
+                // group never grows the window and many groups just scroll.
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                            groupRow(group, isLargest: index == 0, in: groups)
+                        }
+                    }
+                }
+                .frame(maxHeight: .infinity)
             }
         }
+    }
+
+    /// The report's processes as app groups, biggest first.
+    private func processGroups(_ report: MemoryReport?) -> [ProcessGroup] {
+        Array((report?.processes ?? []).groupedByApp().prefix(Self.groupLimit))
+    }
+
+    private func groupRow(_ group: ProcessGroup, isLargest: Bool, in groups: [ProcessGroup]) -> some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { isExpanded(group, in: groups) },
+            set: { setExpanded($0, for: group) }
+        )) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(group.processes) { proc in
+                    processRow(proc)
+                }
+            }
+            // A rail rather than a card per process: the group already is a card.
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.3))
+                    .frame(width: 1.5)
+            }
+            .padding(.leading, 18)
+        } label: {
+            groupHeader(group, isLargest: isLargest, isOpen: isExpanded(group, in: groups))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .panelCard(PanelStyle.rowFill)
+    }
+
+    private func groupHeader(_ group: ProcessGroup, isLargest: Bool, isOpen: Bool) -> some View {
+        HStack(spacing: 8) {
+            groupIcon(group)
+
+            Text(group.label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(group.bundlePath ?? group.id)
+
+            Spacer(minLength: 8)
+
+            Text(settings.t("memoryProcessCount", ["n": "\(group.count)"]))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(ByteFormat.string(group.bytes))
+                .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
+                .frame(minWidth: 64, alignment: .trailing)
+
+            if isLargest {
+                StatusChip(color: .orange, text: settings.t("memoryLargest"), prominent: true)
+            }
+        }
+        .help(settings.t(isOpen ? "collapseGroup" : "expandGroup"))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The real bundle icon when there is a bundle. ponytail: NSWorkspace caches
+    /// icons on disk, so asking again on every redraw is cheap enough; a cache
+    /// would only pay off for hundreds of apps.
+    @ViewBuilder
+    private func groupIcon(_ group: ProcessGroup) -> some View {
+        if let path = group.bundlePath {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 16, height: 16)
+        } else {
+            Image(systemName: "app.dashed")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
+        }
+    }
+
+    /// One process inside its group. The stop button and its force-stop context
+    /// menu are the row actions the flat list always had.
+    private func processRow(_ proc: MemProcess) -> some View {
+        HStack(spacing: 8) {
+            Text(proc.name)
+                .font(.system(size: 12, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(proc.command)
+                .accessibilityLabel(rowDescription(proc))
+
+            StatusChip(
+                color: categoryColor(proc.category),
+                text: settings.t(categoryKey(proc.category))
+            )
+
+            Spacer(minLength: 6)
+
+            Text("\(proc.pid)")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 52, alignment: .trailing)
+
+            Text(ByteFormat.string(proc.mem))
+                .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
+                .frame(minWidth: 64, alignment: .trailing)
+
+            stopButton(for: proc)
+        }
+        .padding(.vertical, 3)
+    }
+
+    /// Until the first click only the biggest group is open; after that the
+    /// user's own choices stand, even when a refresh reorders the list.
+    private func isExpanded(_ group: ProcessGroup, in groups: [ProcessGroup]) -> Bool {
+        guard let collapsed else { return group.id == groups.first?.id }
+        return !collapsed.contains(group.id)
+    }
+
+    private func setExpanded(_ expanded: Bool, for group: ProcessGroup) {
+        var current = collapsed ?? Set(processGroups(store.memoryReport).dropFirst().map(\.id))
+        if expanded { current.remove(group.id) } else { current.insert(group.id) }
+        collapsed = current
     }
 
     /// Spoken once for the whole row rather than as four disconnected cells.
