@@ -135,6 +135,8 @@ function announce(text) {
 function paintText() {
   document.documentElement.lang = state.lang;
   dom.langs.setAttribute("aria-label", t("language"));
+  dom.themeBtn.setAttribute("aria-label", t("theme"));
+  dom.themeBtn.setAttribute("title", t("theme"));
   for (const button of dom.langs.querySelectorAll("[data-lang]")) {
     button.setAttribute("aria-pressed", String(button.dataset.lang === state.lang));
   }

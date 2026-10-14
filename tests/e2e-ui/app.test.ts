@@ -329,4 +329,11 @@ describe("language switching", () => {
     expect(pressed).toEqual(["vi:false", "en:false", "zh:true"]);
     expect((globalThis as { localStorage?: Storage }).localStorage?.getItem("dustless.lang")).toBe("zh");
   });
+
+  test("the theme button is the last icon control that named itself in English only", () => {
+    stub.click(stub.byId('langs').querySelector('[data-lang="vi"]') as El);
+    expect(stub.byId("themeBtn").getAttribute("aria-label")).toBe(STRINGS["vi"]?.["theme"] ?? "");
+    stub.click(stub.byId('langs').querySelector('[data-lang="zh"]') as El);
+    expect(stub.byId("themeBtn").getAttribute("title")).toBe(STRINGS["zh"]?.["theme"] ?? "");
+  });
 });
