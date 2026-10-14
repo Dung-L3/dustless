@@ -50,6 +50,9 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function dirSize(path: string): Promise<number> {
+  // A plain file is its own size; readdir() on one throws and reports 0.
+  const root = await lstat(path).catch(() => null);
+  if (root?.isFile()) return root.size;
   let total = 0;
   const stack = [resolve(path)];
   while (stack.length) {
@@ -212,7 +215,8 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function moveToTrash(src: string, trashDir: string): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
+/** Shared with `largefiles`: both surfaces move to the Trash the same way. */
+export async function moveToTrash(src: string, trashDir: string): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
   const bytes = await dirSize(src);
   const name = src.split(sep).filter(Boolean).pop() ?? "unknown";
   await mkdir(trashDir, { recursive: true });

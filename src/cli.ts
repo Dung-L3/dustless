@@ -3,7 +3,9 @@ import { appendFile, mkdir, readdir } from "node:fs/promises";
 import pkg from "../package.json" with { type: "json" };
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
+import { sep } from "node:path";
 import type { ApplyReport, Finding, ScanReport, Tier, TierChoice } from "./types.ts";
+import type { UninstallReport } from "./core/apps/types.ts";
 import { HOME, exists, platform } from "./core/paths.ts";
 import { inspectSystem } from "./system/index.ts";
 import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
@@ -15,6 +17,7 @@ import { serveMcp } from "./mcp/server.ts";
 import { runRam } from "./core/ram/index.ts";
 import { writeOut } from "./core/output.ts";
 import { listApps, uninstall } from "./core/apps/index.ts";
+import { deleteLargeFile, DEFAULT_MIN_SIZE, findLargeFiles } from "./core/largefiles/index.ts";
 
 const VERSION = pkg.version;
 const ICON: Record<Tier, string> = { green: "🟢", yellow: "🟡", red: "🔴", blocked: "⛔" };
@@ -38,6 +41,8 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
   dustless apps [--json]        liệt kê ứng dụng .app
   dustless apps --uninstall <path> --confirm [--purge] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
+  dustless largefiles [--json] [--min-size 200mb] [--limit 50]  liệt kê tệp lớn nhất trong thư mục home
+  dustless largefiles --delete <path> --confirm [--json]  chuyển một tệp sang Thùng rác (không xóa vĩnh viễn)
   dustless version | help
 
 Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
@@ -323,6 +328,29 @@ async function printNet(report: NetReport): Promise<void> {
   say("");
 }
 
+async function printUninstall(report: UninstallReport): Promise<number> {
+  if (flag("json")) {
+    await writeOut(`${JSON.stringify(report)}\n`);
+    return report.summary.failed > 0 ? 1 : 0;
+  }
+  for (const o of report.outcomes) {
+    const mark =
+      o.status === "trashed"
+        ? paint("32", "🗑")
+        : o.status === "purged"
+          ? paint("31", "🔥")
+          : o.status === "skipped"
+            ? paint("33", "⊘")
+            : paint("31", "✖");
+    say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${o.path}`);
+    if (o.detail) say(`  ${dim(o.detail)}`);
+  }
+  say(
+    `\n${paint("32", `🗑 ${report.summary.trashed}`)}  ${paint("31", `🔥 ${report.summary.purged}`)}  ${paint("33", `⊘ ${report.summary.skipped}`)}  ${paint("31", `✖ ${report.summary.failed}`)} · ${bold(`tổng ${bytesOf(report.summary.totalBytes)}`)}`,
+  );
+  return report.summary.failed > 0 ? 1 : 0;
+}
+
 async function runApps(_rest: string[]): Promise<number> {
   const { resolve } = await import("node:path");
   const home = homedir();
@@ -342,34 +370,16 @@ async function runApps(_rest: string[]): Promise<number> {
       }
       return 1;
     }
-    const report = await uninstall({
-      home,
-      appPath: target.path,
-      relatedPaths: target.relatedPaths,
-      confirm,
-      purge,
-      trashDir,
-    });
-    if (flag("json")) {
-      await writeOut(`${JSON.stringify(report)}\n`);
-      return report.summary.failed > 0 ? 1 : 0;
-    }
-    for (const o of report.outcomes) {
-      const mark =
-        o.status === "trashed"
-          ? paint("32", "🗑")
-          : o.status === "purged"
-            ? paint("31", "🔥")
-            : o.status === "skipped"
-              ? paint("33", "⊘")
-              : paint("31", "✖");
-      say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${o.path}`);
-      if (o.detail) say(`  ${dim(o.detail)}`);
-    }
-    say(
-      `\n${paint("32", `🗑 ${report.summary.trashed}`)}  ${paint("31", `🔥 ${report.summary.purged}`)}  ${paint("33", `⊘ ${report.summary.skipped}`)}  ${paint("31", `✖ ${report.summary.failed}`)} · ${bold(`tổng ${bytesOf(report.summary.totalBytes)}`)}`,
+    return await printUninstall(
+      await uninstall({
+        home,
+        appPath: target.path,
+        relatedPaths: target.relatedPaths,
+        confirm,
+        purge,
+        trashDir,
+      }),
     );
-    return report.summary.failed > 0 ? 1 : 0;
   }
 
   const apps = await listApps({ home });
@@ -387,6 +397,55 @@ async function runApps(_rest: string[]): Promise<number> {
     if (app.relatedPaths.length) {
       say(`  ${dim("← dư:")} ${app.relatedPaths.map((p) => dim(p.replace(home, "~"))).join(", ")}`);
     }
+  }
+  return 0;
+}
+
+/** `--min-size 200mb` / `200MiB` / a plain byte count. NaN when unparseable. */
+function sizeOpt(name: string): number | undefined {
+  const raw = opt(name);
+  if (raw === undefined) return undefined;
+  const match = /^(\d+(?:\.\d+)?)\s*([bkmgt])?(?:i?b)?$/i.exec(raw.trim());
+  const units: Record<string, number> = { "": 1, b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3, t: 1024 ** 4 };
+  if (!match) return Number.NaN;
+  return Math.round(Number(match[1]) * (units[match[2]?.toLowerCase() ?? ""] ?? 1));
+}
+
+async function runLargeFiles(): Promise<number> {
+  const minSize = sizeOpt("min-size");
+  if (minSize !== undefined && !Number.isFinite(minSize)) {
+    const value = opt("min-size") ?? "";
+    if (flag("json")) {
+      await writeOut(`${JSON.stringify({ error: "invalid --min-size", value })}\n`);
+    } else {
+      say(`✖ --min-size không hợp lệ: "${value}" (dùng 200mb, 1gb hoặc số byte)`);
+    }
+    return 1;
+  }
+  const limit = Number(opt("limit"));
+  const deletePath = opt("delete");
+
+  if (deletePath) {
+    return await printUninstall(await deleteLargeFile({ path: deletePath, confirm: flag("confirm"), trashDir: opt("trash-dir") }));
+  }
+
+  const files = await findLargeFiles({
+    minSize,
+    limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
+  });
+  if (flag("json")) {
+    await writeOut(`${JSON.stringify(files)}\n`);
+    return 0;
+  }
+  if (!files.length) {
+    say(dim(`Không có tệp nào lớn hơn ${bytesOf(minSize ?? DEFAULT_MIN_SIZE)} trong thư mục home.`));
+    return 0;
+  }
+  say(bold(`\n${files.length} tệp lớn nhất`));
+  for (const file of files) {
+    say(
+      `${paint("36", file.path.split(sep).pop()?.padEnd(30) ?? "")} ${bytesOf(file.size).padStart(9)}  ${dim(new Date(file.mtime).toISOString().slice(0, 10))}  ${file.path}`,
+    );
   }
   return 0;
 }
@@ -409,6 +468,7 @@ async function main(): Promise<number> {
   }
   if (command === "ram") return await runRam();
   if (command === "apps") return await runApps(rest);
+  if (command === "largefiles") return await runLargeFiles();
   if (command === "version") {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;
