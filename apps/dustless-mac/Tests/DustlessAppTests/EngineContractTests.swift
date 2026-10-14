@@ -233,3 +233,42 @@ struct AppsModelTests {
         }
     }
 }
+
+@Suite("largest files model")
+struct LargeFilesModelTests {
+    @Test func decodesLargeFileList() throws {
+        let files = try JSONDecoder().decode([LargeFile].self, from: fixture("largefiles.json"))
+        #expect(files.count == 3)
+        let first = try #require(files.first)
+        #expect(first.name == "screen recording.mov")
+        #expect(first.path.hasPrefix("/"))
+        #expect(first.size == 4_823_449_600)
+        // Milliseconds, like every other mtime the engine reports.
+        #expect(abs(first.modified.timeIntervalSince1970 - 1_680_674_828) < 1)
+        #expect(files.allSatisfy { $0.size > 0 })
+    }
+
+    @Test func largeFilesSortBySizeDescending() throws {
+        let files = try JSONDecoder().decode([LargeFile].self, from: fixture("largefiles.json"))
+        let sizes = files.map(\.size).sorted(by: >)
+        #expect(files.sorted { $0.size > $1.size }.map(\.size) == sizes)
+    }
+
+    @Test func distinctPathsStayDistinctFiles() throws {
+        let files = try JSONDecoder().decode([LargeFile].self, from: fixture("largefiles.json"))
+        #expect(Set(files.map(\.path)).count == files.count)
+        #expect(Set(files.map(\.id)).count == files.count)
+    }
+
+    @Test func rejectsMalformedLargeFilePayload() {
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode([LargeFile].self, from: Data(#"[{"size":1}]"#.utf8))
+        }
+    }
+
+    @Test func rejectsFileWithoutSize() {
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode([LargeFile].self, from: Data(#"[{"path":"/a","mtime":0}]"#.utf8))
+        }
+    }
+}
