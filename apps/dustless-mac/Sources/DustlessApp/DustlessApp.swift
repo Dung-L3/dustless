@@ -207,7 +207,10 @@ final class WindowCaptureForCloseView: NSView {
         super.viewDidMoveToWindow()
         guard let window = window else { return }
         closeActionBinding.wrappedValue = { [weak window] in
-            window?.close()
+            // NSWindow.close() is main-actor isolated and this closure is
+            // @Sendable, so hop back to the main actor rather than calling it
+            // from whatever context the environment action is invoked in.
+            Task { @MainActor in window?.close() }
         }
     }
 }

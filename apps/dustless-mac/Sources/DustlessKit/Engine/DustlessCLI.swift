@@ -45,6 +45,13 @@ public struct DustlessCLI: Sendable {
     public let executable: URL
     public let timeout: Int
 
+    /// Lets a caller (or a test) point the helper at any executable, not only
+    /// the one `BinaryLocator` resolves.
+    public init(executable: URL, timeout: Int = 900) {
+        self.executable = executable
+        self.timeout = timeout
+    }
+
     public static func resolve(timeout: Int = 900) throws -> DustlessCLI {
         DustlessCLI(executable: try BinaryLocator.locate(), timeout: timeout)
     }
@@ -104,19 +111,40 @@ public struct DustlessCLI: Sendable {
         try await decode(AwdlPrivilege.self, from: run(["awdl", "--print-privilege", "--json"]))
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    /// The engine prints a full JSON report and *then* exits 1 whenever an
+    /// outcome failed or was refused (`apply`, `ram --kill`, `apps --uninstall`,
+    /// `largefiles --delete`), so a non-zero status is not by itself a failure:
+    /// the report is the answer. Decode first; only when no JSON reads do we fall
+    /// back to the exit status, keeping the real reason for a genuine failure.
+    private func decode<T: Decodable>(_ type: T.Type, from result: RunResult) throws -> T {
         do {
-            return try JSONDecoder().decode(type, from: data)
+            return try JSONDecoder().decode(type, from: result.data)
         } catch {
-            throw DustlessError.unreadableOutput(String(describing: error))
+            if result.status == 0 {
+                throw DustlessError.unreadableOutput(String(describing: error))
+            }
+            if result.stderr.localizedCaseInsensitiveContains("not found") {
+                throw BinaryLocationError.notFound([executable])
+            }
+            throw DustlessError.exited(status: result.status, stderr: result.stderr)
         }
     }
 
-    private func run(_ arguments: [String]) async throws -> Data {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+    private struct RunResult: Sendable {
+        let data: Data
+        let status: Int32
+        let stderr: String
+    }
+
+    private func run(_ arguments: [String]) async throws -> RunResult {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<RunResult, Error>) in
             let running = RunningProcess()
             let out = LockedBox(Data())
             let err = LockedBox(Data())
+            // Set by the deadline below, read once the child is gone, so a run
+            // that ended because time ran out reports `.timedOut` rather than the
+            // signal-delivered exit status.
+            let timedOut = LockedBox(false)
             let queue = DispatchQueue(label: "dustless.engine", qos: .userInitiated)
 
             queue.async {
@@ -145,23 +173,29 @@ public struct DustlessCLI: Sendable {
                     }
                 }
 
-                queue.asyncAfter(deadline: .now() + .seconds(timeout)) { running.cancel() }
+                // The deadline must live OFF this serial queue: this queue then
+                // blocks in `readers.wait()`/`waitUntilExit()` until the child is
+                // gone, so a timer scheduled here could never fire and a hung
+                // engine would hang the app forever.
+                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeout)) {
+                    timedOut.mutate { $0 = true }
+                    running.cancel()
+                }
 
                 readers.wait()
                 process.waitUntilExit()
                 running.finish()
 
-                let status = process.terminationStatus
-                let outData = out.read()
-                let errText = String(data: err.read(), encoding: .utf8) ?? ""
-
-                if status == 0 {
-                    continuation.resume(returning: outData)
-                } else if errText.localizedCaseInsensitiveContains("not found") {
-                    continuation.resume(throwing: BinaryLocationError.notFound([executable]))
-                } else {
-                    continuation.resume(throwing: DustlessError.exited(status: status, stderr: errText))
+                if timedOut.read() {
+                    continuation.resume(throwing: DustlessError.timedOut(timeout))
+                    return
                 }
+
+                continuation.resume(returning: RunResult(
+                    data: out.read(),
+                    status: process.terminationStatus,
+                    stderr: String(data: err.read(), encoding: .utf8) ?? ""
+                ))
             }
         }
     }

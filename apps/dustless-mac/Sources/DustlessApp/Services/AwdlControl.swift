@@ -58,11 +58,12 @@ final class AwdlControl: ObservableObject {
             try privilege.rule.write(to: staging, atomically: true, encoding: .utf8)
             defer { try? FileManager.default.removeItem(at: staging) }
 
-            // visudo validates before the rule can count, so a malformed file
-            // can never wedge sudo the way a bad drop-in otherwise would.
-            try runAdmin(
-                "\(Self.installTool) -m 0440 -o root -g wheel \(sh(staging.path)) \(sh(privilege.path))"
-                    + " && \(Self.visudoTool) -cf \(sh(privilege.path))"
+            // visudo validates the staged copy BEFORE it can count. Installing
+            // first and validating second would leave a malformed file in
+            // /etc/sudoers.d/, which sudo reads, and could wedge sudo machine-wide.
+            try await runAdmin(
+                "\(Self.visudoTool) -cf \(sh(staging.path))"
+                    + " && \(Self.installTool) -m 0440 -o root -g wheel \(sh(staging.path)) \(sh(privilege.path))"
             )
             privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
             error = privilegeInstalled ? nil : L10nText("awdlInstallFailed")
@@ -78,7 +79,7 @@ final class AwdlControl: ObservableObject {
         busy = true
         defer { busy = false }
         do {
-            try runAdmin("\(Self.rmTool) -f \(sh(Self.privilegePath))")
+            try await runAdmin("\(Self.rmTool) -f \(sh(Self.privilegePath))")
             privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
             error = nil
         } catch {
@@ -93,18 +94,25 @@ final class AwdlControl: ObservableObject {
     private static let rmTool = "/bin/rm"
 
     /// Run one shell line as root through the standard macOS admin prompt.
-    private func runAdmin(_ shell: String) throws {
+    ///
+    /// The wait runs off the main actor: the admin password dialog can stay up
+    /// for as long as the user takes, and blocking the main actor behind it
+    /// would freeze the whole app.
+    private func runAdmin(_ shell: String) async throws {
         let literal = shell
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", "do shell script \"\(literal)\" with administrator privileges"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw DustlessError.exited(status: process.terminationStatus, stderr: "") }
+        let status = try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", "do shell script \"\(literal)\" with administrator privileges"]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus
+        }.value
+        guard status == 0 else { throw DustlessError.exited(status: status, stderr: "") }
     }
 
     /// Single-quote a path for /bin/sh. Paths here are constants or a path we
