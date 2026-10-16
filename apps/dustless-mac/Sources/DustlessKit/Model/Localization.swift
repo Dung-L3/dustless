@@ -1,7 +1,7 @@
 import Foundation
 
-/// UI language for the native app. Mirrors `src/ui/public/i18n.js`, which the
-/// web UI uses, so both surfaces share one vocabulary.
+/// UI language for the native app. Adding a language here means adding a table
+/// below to match; `tests/i18n.test.ts` fails until every language lines up.
 public enum Lang: String, CaseIterable, Identifiable, Sendable {
     case vi
     case en
@@ -42,9 +42,10 @@ public struct L10nText: Equatable, Sendable, Hashable {
     }
 }
 
-/// The string table. The keys and values under the `i18n.js` section are a
-/// verbatim copy of `src/ui/public/i18n.js`; `tests/i18n-parity.test.ts` fails
-/// if the two ever drift. Keys after that section are native-app only.
+/// The string table. These tables are the single source for the app's wording in
+/// every language; nothing else holds a copy. `tests/i18n.test.ts` keeps the
+/// languages consistent — same key set, no blank translations, matching
+/// `{placeholder}` sets — so a key added to one is required in all.
 public enum L10n {
     public static func text(_ lang: Lang, _ text: L10nText) -> String {
         render(lang, text.key, text.vars)
@@ -66,10 +67,10 @@ public enum L10n {
         }
     }
 
-    /// Tier words live under the same keys as the web (`green`/`yellow`/`red`/`blocked`).
+    /// Tier words are stored under the tier's own name (`green`/`yellow`/`red`/`blocked`).
     public static func tierKey(_ tier: Tier) -> String { tier.rawValue }
 
-    // MARK: - i18n.js (verbatim; keep in sync with src/ui/public/i18n.js)
+    // MARK: - String tables (keep every language in step)
 
     static let vi: [String: String] = [
         "language": "Ngôn ngữ",

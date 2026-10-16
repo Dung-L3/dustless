@@ -33,7 +33,6 @@ const KEY_PATHS = [
 const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
 
   dustless scan                 quét chéo, in ra những gì có thể dọn
-  dustless ui [--port 4173]     mở giao diện web cục bộ
   dustless apply                xóa GREEN, hỏi từng mục YELLOW
   dustless rule list|show|add|validate
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
@@ -184,24 +183,6 @@ async function askYellow(finding: Finding): Promise<boolean> {
     `\n${tierBadge(finding.tier)} xóa ${bytesOf(finding.bytes)} ở ${finding.path}? [y/N] `,
   );
   return /^y/i.test(answer);
-}
-
-async function runUi(): Promise<number> {
-  const { startServer } = await import("./ui/server.ts");
-  const port = Number(opt("port") ?? 4173);
-  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-    say("port không hợp lệ (cần 1024-65535)");
-    return 1;
-  }
-  const server = await startServer({ port, open: !flag("no-open") });
-  say(`\n${bold("Dustless")} đang chạy tại ${bold(server.url)}`);
-  say(dim("chỉ nghe trên 127.0.0.1 · nhấn Ctrl+C để dừng\n"));
-  await new Promise<void>((resolve) => {
-    process.once("SIGINT", () => resolve());
-    process.once("SIGTERM", () => resolve());
-  });
-  await server.close();
-  return 0;
 }
 
 async function runRule(sub: string, rest: string[]): Promise<number> {
@@ -510,7 +491,6 @@ async function main(): Promise<number> {
   if (command === "apply") return await runApply();
   if (command === "rule") return await runRule(rest[0] ?? "", rest.slice(1));
   if (command === "doctor") return await runDoctor();
-  if (command === "ui") return await runUi();
   if (command === "net") return await runNet();
   if (command === "awdl") return await runAwdl();
   if (command === "mcp") {

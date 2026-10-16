@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 Một id gõ sai, một id mà payload quên mất, một rule mà scan không sinh ra — tất cả đều phân giải thành skip, không bao giờ thành tier của chính rule đó. Phiên bản trước mặc định thành tier của rule, nên một key bị bỏ sót lặng lẽ có nghĩa là "xóa"; đó là thứ đã lấy mất khoảng 36 GB trên một máy thật.
 
-Mặc định đó là lưới an toàn cuối, không phải cơ chế. Mọi caller đều tự dựng map của riêng mình: CLI dựng từ scan đang chạy (`src/cli.ts:134`), UI dựng từ đúng những gì bạn đã chọn (`src/ui/public/app.js:161`), MCP dựng từ các rule id nó đã kiểm chứng trước (`src/mcp/tools.ts:188`).
+Mặc định đó là lưới an toàn cuối, không phải cơ chế. Mọi caller đều tự dựng map của riêng mình: CLI dựng từ scan đang chạy (`src/cli.ts:134`), MCP dựng từ các rule id nó đã kiểm chứng trước (`src/mcp/tools.ts:188`).
 
 ### Vì sao BLOCKED không thể bị ghi đè
 
-Cờ chặn được kiểm tra ở bốn điểm độc lập: scan bật cờ, phần tổng kết của apply loại những finding đó ra khỏi tập cần xóa (`src/cli.ts:118`), `apply()` kiểm tra lại trước khi chạm vào filesystem (`src/core/apply.ts:60`), và safety layer của MCP từ chối cả lệnh (`src/mcp/safety.ts:88`). `--yes` bỏ qua câu hỏi. Nó không thể tạo ra một kiểm chứng đạt, và không thể gỡ cờ chặn. RED cũng vậy: đó là một danh sách regex được biên dịch thẳng vào binary. Không cờ nào, không file rule nào, không tham số MCP nào chạm tới được nó. Giao diện web giữ đúng ranh giới đó: một finding bị chặn nhận một dòng thông báo thay cho nút xóa (`src/ui/public/app.js:303`), và một rule mà mọi finding đều bị chặn sẽ được gửi đi với giá trị `skip` (`src/ui/public/app.js:164`).
+Cờ chặn được kiểm tra ở bốn điểm độc lập: scan bật cờ, phần tổng kết của apply loại những finding đó ra khỏi tập cần xóa (`src/cli.ts:118`), `apply()` kiểm tra lại trước khi chạm vào filesystem (`src/core/apply.ts:60`), và safety layer của MCP từ chối cả lệnh (`src/mcp/safety.ts:88`). `--yes` bỏ qua câu hỏi. Nó không thể tạo ra một kiểm chứng đạt, và không thể gỡ cờ chặn. RED cũng vậy: đó là một danh sách regex được biên dịch thẳng vào binary. Không cờ nào, không file rule nào, không tham số MCP nào chạm tới được nó.
 
 ## Cài đặt
 
@@ -151,7 +151,6 @@ Mọi lệnh dưới đây đều được implement trong `src/cli.ts`.
 | --- | --- |
 | `dustless scan` | Quét chéo mọi rule, in ra finding sắp theo kích thước, kèm tổng theo từng mức và số byte thu hồi được. Chỉ đọc. |
 | `dustless apply` | Scan, in bản tổng kết, hỏi `Xóa? [y/N]`, rồi xóa GREEN và hỏi từng mục YELLOW. Exit code `1` nếu có mục nào thất bại. |
-| `dustless ui` | Khởi động giao diện trình duyệt cục bộ trên 127.0.0.1 và mở nó. Xem [Web UI](#web-ui). |
 | `dustless rule list` | In rule database kèm mức và mô tả, rồi ghi ra nguồn đã nạp. |
 | `dustless rule show <id>` | In một rule dạng JSON. |
 | `dustless rule add <id> <green\|yellow> <desc> <path> [path…]` | Nối thêm rule mới vào `~/.config/dustless/rules.yaml` với `paths.all`. |
@@ -167,38 +166,11 @@ Mọi lệnh dưới đây đều được implement trong `src/cli.ts`.
 | `--json` | Một đối tượng JSON duy nhất trên stdout cho `scan`, `apply`, `rule list`, `doctor`, `version`. Với `apply` nó còn hủy luôn: không có `--yes` thì không có câu hỏi, nên không xóa gì (`src/cli.ts:148`). |
 | `--quiet` | Tắt các dòng dành cho người đọc. |
 | `--yes` | Bỏ qua bước xác nhận. Bỏ qua cả câu hỏi tổng kết **và** các câu hỏi từng mục YELLOW. Nó không bỏ qua kiểm chứng, và không gỡ được BLOCKED hay RED. |
-| `--port <n>` | Chỉ dùng với `ui`. Cổng để listen. Phải nằm trong 1024-65535, kiểm tra trước khi socket mở (`src/cli.ts:176`). Mặc định là `4173`. |
-| `--no-open` | Chỉ dùng với `ui`. Khởi động server mà không mở trình duyệt. |
 | `--help` | Hướng dẫn dùng, chỉ khi nó là đối số đứng một mình — `dustless --help`. Sau một từ lệnh khác thì lệnh đó thắng: `dustless scan --help` sẽ chạy một lần scan. |
 
 ### `apply --json`
 
 `apply --json` in đúng một đối tượng JSON trên stdout, ở mọi đường đi tới được nó — đã xóa, không có gì để xóa, đã hủy — với các key `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` là `max(0, freeAfter - freeBefore)`: chênh lệch dung lượng trống của cả volume, không phải tổng số byte của các mục đã xóa, nên nó có thể báo `0` sau một lần xóa thật nếu giữa lúc đó có thứ khác lấp đĩa (`src/core/apply.ts:33`). Một lỗi cứng — ví dụ `~/.config/dustless/rules.yaml` hỏng — vẫn trả exit `1` kèm thông báo trên stderr và không có gì trên stdout (`src/cli.ts:300`).
-
-## Web UI
-
-`dustless ui` khởi động một server cục bộ và mở giao diện trong trình duyệt của bạn.
-
-```sh
-dustless ui                        # http://127.0.0.1:4173
-dustless ui --port 8080            # tự chọn cổng khác
-dustless ui --no-open              # chạy mà không mở trình duyệt
-```
-
-Nó chỉ bind **127.0.0.1** (`src/ui/server.ts:19`, `src/ui/server.ts:200`). Cổng ngoài khoảng 1024-65535 bị từ chối trước khi socket mở, và nếu cổng đã bị chiếm thì lệnh sẽ fail với `EADDRINUSE` thay vì lặng lẽ nghe ở một chỗ khác. `Ctrl+C` (hoặc `SIGTERM`) dừng server.
-
-Tiến trình này có endpoint `POST /api/apply` xóa file trên đĩa của bạn, nên hàng rào ở đây mới là điểm mấu chốt:
-
-- Chỉ request có `Host` là `127.0.0.1` hoặc `localhost` mới qua được dòng đầu tiên của handler; bất kỳ thứ gì khác nhận `403` trước khi routing chạy (`src/ui/server.ts:116`, `src/ui/server.ts:147`).
-- Bất kỳ request không phải `GET` nào mang `Origin` không thuộc loopback đều là `403` (`src/ui/server.ts:121`, `src/ui/server.ts:155`).
-- Bất kỳ request không phải `GET` nào không có `Content-Type: application/json` đều là `415` (`src/ui/server.ts:161`).
-- Body vượt 1 MiB là `413`; payload mà `tiers` không phải object rule id → `green`/`yellow`/`skip` là `400` (`src/ui/server.ts:99`).
-
-Hai cái cuối là lý do một trang web ngẫu nhiên không xóa được cache của bạn trong lúc UI đang mở. Một POST `fetch` hay form chéo origin là một *simple request* của CORS: không preflight, và chính trình duyệt đặt `Host: 127.0.0.1:<port>`, nên kiểm tra Host không chặn được nó. Kiểm tra `Origin` và `Content-Type` thì chặn được — một simple request không thể tự đặt cả hai.
-
-Mọi response còn mang `default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` và `Cache-Control: no-store` (`src/ui/server.ts:24`, `src/ui/server.ts:143`).
-
-Các route: `GET /api/scan`, `GET /api/rules`, `GET /api/space`, `POST /api/apply`.
 
 ## macOS app
 
