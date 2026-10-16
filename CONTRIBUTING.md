@@ -50,7 +50,7 @@ Nếu một rule chỉ nên chạy ở một OS, hãy nói rõ bằng cách ch�
 
 - **Không bao giờ chạy `apply` trong một process đã resolve home.** `os.homedir()` không đọc lại `$HOME` sau khi process khởi động, và `src/core/paths.ts` capture `HOME` một lần lúc module load. Mọi test xóa file phải chạy trong **child process** với `HOME` trỏ vào thư mục tạm. Đây không phải cảnh báo lý thuyết: sửa sai chỗ này đã xoá nhầm dữ liệu thật hai lần.
 - **Không thêm test chạy trình duyệt.** Một Chromium-family với `--user-data-dir` mới sẽ làm macOS hỏi keychain ở profile thật của bạn. Lý do đầy đủ ở docs/TESTING.md.
-- Đừng nới lỏng assertion để làm test xanh. Một check đỏ là một phát hiện về sản phẩm, và nó được ghi lại ở `tests/e2e-ui/REPORT.md`.
+- Đừng nới lỏng assertion để làm test xanh. Một check đỏ là một phát hiện về sản phẩm, và nó được ghi lại trong issue.
 
 ## Báo lỗi
 

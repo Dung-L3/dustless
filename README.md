@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 A misspelled id, an id the payload forgot, a rule the scan never produced — all resolve to skip, never to the rule's own tier. An earlier version defaulted to the rule's tier instead, and an omitted key silently meant "delete"; that is what took roughly 36 GB off a real machine.
 
-The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli.ts:134`), the UI from what you actually selected (`src/ui/public/app.js:161`), MCP from the rule ids it verified first (`src/mcp/tools.ts:188`).
+The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli.ts:134`), MCP from the rule ids it verified first (`src/mcp/tools.ts:188`).
 
 ### Why BLOCKED cannot be overridden
 
-The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli.ts:118`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:60`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:88`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it. The browser UI holds the same line: a blocked finding gets a notice instead of a delete switch (`src/ui/public/app.js:303`), and a rule whose findings are all blocked is sent as `skip` (`src/ui/public/app.js:164`).
+The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli.ts:118`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:60`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:88`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it.
 
 ## Install
 
@@ -151,7 +151,6 @@ Every command below is implemented in `src/cli.ts`.
 | --- | --- |
 | `dustless scan` | Cross-scan every rule, print findings sorted by size, plus per-tier totals and reclaimable bytes. Read-only. |
 | `dustless apply` | Scan, print the summary, ask `Xóa? [y/N]`, then delete GREEN and ask per YELLOW item. Exit code `1` if anything failed. |
-| `dustless ui` | Start the local browser UI on 127.0.0.1 and open it. See [Web UI](#web-ui). |
 | `dustless rule list` | Print the rule database with tiers and descriptions, and name the source it loaded from. |
 | `dustless rule show <id>` | Print one rule as JSON. |
 | `dustless rule add <id> <green\|yellow> <desc> <path> [path…]` | Append a new rule to `~/.config/dustless/rules.yaml` with `paths.all`. |
@@ -167,36 +166,11 @@ Every command below is implemented in `src/cli.ts`.
 | `--json` | One JSON object on stdout for `scan`, `apply`, `rule list`, `doctor`, `version`. For `apply` it also cancels: with no `--yes` there is no prompt, so nothing is deleted (`src/cli.ts:148`). |
 | `--quiet` | Suppress the human-readable lines. |
 | `--yes` | Skip the confirmation. Skips the summary question **and** the per-item YELLOW questions. It does not skip verification, and it does not unblock BLOCKED or RED. |
-| `--port <n>` | `ui` only. Port to listen on. Must be 1024-65535, checked before the socket opens (`src/cli.ts:176`). Defaults to `4173`. |
-| `--no-open` | `ui` only. Start the server without launching a browser. |
 | `--help` | Usage, only when it is the argument on its own — `dustless --help`. After another command word the command wins: `dustless scan --help` runs a scan. |
 
 ### `apply --json`
 
 `apply --json` prints exactly one JSON object on stdout, on every path that reaches it — deleted, nothing deletable, cancelled — with the keys `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` is `max(0, freeAfter - freeBefore)`: a delta of free space on the volume, not a sum of the deleted items, so it can read `0` after a real deletion if something else filled the disk in between (`src/core/apply.ts:33`). A hard error — a malformed `~/.config/dustless/rules.yaml`, say — still exits `1` with the message on stderr and nothing on stdout (`src/cli.ts:300`).
-
-## Web UI
-
-`dustless ui` starts a local server and opens the interface in your browser.
-
-```sh
-dustless ui                        # http://127.0.0.1:4173
-dustless ui --port 8080            # pick your own port
-dustless ui --no-open              # start without launching a browser
-```
-
-It binds **127.0.0.1 only** (`src/ui/server.ts:19`, `src/ui/server.ts:200`). A port outside 1024-65535 is rejected before the socket opens, and if the port is taken the command fails with `EADDRINUSE` rather than listening somewhere else. `Ctrl+C` (or `SIGTERM`) shuts it down.
-
-This process has a `POST /api/apply` endpoint that deletes files on your disk, so the guard rails are the point:
-
-- Only a request whose `Host` is `127.0.0.1` or `localhost` gets past the first line of the handler; anything else is `403` before routing runs (`src/ui/server.ts:116`, `src/ui/server.ts:147`).
-- Any non-`GET` request carrying an `Origin` that is not loopback is `403` (`src/ui/server.ts:121`, `src/ui/server.ts:155`).
-- Any non-`GET` request without `Content-Type: application/json` is `415` (`src/ui/server.ts:161`).
-- A body over 1 MiB is `413`; a payload whose `tiers` is not an object of rule id to `green`/`yellow`/`skip` is `400` (`src/ui/server.ts:99`).
-
-The last two are why a random web page cannot delete your caches while the UI is open. A cross-origin form or `fetch` POST is a CORS *simple request*: no preflight, and the browser sets `Host: 127.0.0.1:<port>` itself, so the Host check does not stop it. The `Origin` and `Content-Type` checks do — a simple request cannot set either. Every response also carries `default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store` (`src/ui/server.ts:24`, `src/ui/server.ts:143`).
-
-Routes: `GET /api/scan`, `GET /api/rules`, `GET /api/space`, `POST /api/apply`.
 
 ## macOS app
 

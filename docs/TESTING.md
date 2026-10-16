@@ -2,46 +2,29 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src and tests
-bun test              # everything: 182 tests, about 6s on a laptop
-bun run test:ui       # just the web-UI suite in tests/e2e-ui
+bun test              # everything: 201 tests, about 7s on a laptop
 ```
 
-No build step and no browser is needed for the UI suite. `tests/e2e` runs the compiled binary in
+No build step is needed. `tests/e2e` runs the compiled binary in
 `dist/`, and `tests/e2e/cli.test.ts:23` builds it itself before the first assertion, so you do not
 have to remember `bun run build` first.
 
-## Browser-driven UI testing is deliberately not automated
+## Browser-driven testing is deliberately not automated
 
-Do not add a suite that launches a browser. It was tried once and it is not coming back.
+Do not add a suite that launches a browser.
 
-Driving Brave headless over the DevTools Protocol means launching it with a fresh `--user-data-dir`.
-On macOS, a Chromium-family browser with a new profile directory has no key for the `Brave Safe
-Storage` keychain item, so it generates one — which makes macOS show:
-
-> Brave Browser wants to access key "Brave Safe Storage" in your keychain
-
-That prompt is about **your real login keychain**, and the first time someone sees it they reasonably
-conclude their keys are about to be lost. It is not a test problem you can configure around; it is
-the browser asking for a credential that belongs to the person sitting at the machine.
-
-So: no browser binaries, no Playwright/Puppeteer/Selenium/WebDriver, no `open`, no `webbrowser`, no
-`osascript`, no `--user-data-dir` or any other browser flag, and no touching `security` or the login
-keychain. If you think a check needs a browser, skip it and write it down in
-`tests/e2e-ui/REPORT.md` under "Not testable without a browser". A skipped check is fine. A keychain
-prompt is not.
-
-`tests/e2e-ui/` therefore tests the logic, not the pixels: the `i18n.js` tables directly, `app.js`
-against a hand-written DOM stub, `index.html` and `style.css` as text, and the HTTP API against a
-real server. If you want to look at the page yourself, run `bun src/cli.ts ui` and open the URL it
-prints.
+No browser binaries, no Playwright/Puppeteer/Selenium/WebDriver, no `open`, no `webbrowser`, no
+`osascript`, no browser profile flags, and no touching `security` or the login keychain. A Chromium
+browser started with a fresh profile makes macOS prompt for a `… Safe Storage` keychain item, and
+that prompt is about **your real login keychain**. It is not a test problem you can configure around;
+it is the browser asking for a credential that belongs to the person sitting at the machine.
 
 ## The sandbox rule
 
 **Anything that can delete must run in a child process whose environment carries `HOME` pointing at
-a throwaway directory.** Both harnesses do it. `tests/e2e-ui/harness.ts` `mkdtemp`s a root, `mkdir
-home`, plants files, spawns `bun src/cli.ts ui --port N --no-open` with `HOME` and `XDG_CONFIG_HOME`
-in the child's env, and `rm -rf`s the root afterwards. `tests/e2e/harness.ts` does the same for the
-compiled binary, and additionally refuses a `HOME` that is not under the OS temp directory.
+a throwaway directory.** `tests/e2e/harness.ts` `mkdtemp`s a root, `mkdir home`, plants files,
+spawns the compiled binary with `HOME` and `XDG_CONFIG_HOME` in the child's env, and `rm -rf`s the
+root afterwards. It additionally refuses a `HOME` that is not under the OS temp directory.
 
 The in-process version does not work, and this is not a theoretical warning:
 
@@ -69,34 +52,13 @@ echo 'process.env.HOME="/tmp/fake";console.log(require("os").homedir())' > /tmp/
 The sandbox helper is not optional either. `tests/e2e/harness.ts` checks every invocation before it
 happens: `assertTempRoot()` refuses a `HOME` that is not under the OS temp directory and refuses
 `/Users/mac` outright, and `assertSandboxed()` refuses any absolute path argument that escapes the
-sandbox. `tests/e2e-ui/harness.ts` exports `assertInsideSandbox()`, which asserts that every path a
-scan returned is strictly under the sandbox root (`tests/e2e-ui/server.test.ts:200`).
-
-## Writing tests for the UI
-
-- `dom-stub.ts` parses `index.html` and implements the slice of the DOM that `app.js` touches. It
-  parses the real page, so a renamed id surfaces as a `missing` entry and a crash, not as a silently
-  skipped check.
-- `installDom()` replaces `document`, `fetch`, `matchMedia`, `localStorage` and the animation frame
-  callback on `globalThis`. Bun runs every test file in one process, so **call `stub.restore()` in
-  an `afterAll`** or the next file inherits your stub and hangs. Wrapping the global `setTimeout` or
-  `setInterval` also breaks `node:net` inside `bun test`; leave the timers alone.
-- `app.js` exports nothing and runs `runScan()` at import. The test imports it dynamically after the
-  globals are installed, and drives it through the DOM. To test another scenario, swap the
-  responder with `stub.respond()` and click `#scanBtn` rather than re-importing.
-- Tests that assert on a rendered number should parse the rendered text back into bytes. A number
-  that formats correctly is not the same as a number that is correct.
+sandbox.
 
 ## What is expected to fail right now
 
-Nothing, in `tests/e2e-ui`: `bun run test:ui` is **69 pass, 0 fail** across four files as of the
-documentation audit below. `tests/e2e-ui/REPORT.md` still describes 60 pass / 9 fail and lists nine
-product defects — those nine were real, and they were fixed (the UI stopped selling blocked findings
-for deletion, `POST /api/apply` stopped accepting a cross-origin write, and an oversized body now
-answers `413` instead of a bare `200`). The report is kept as the record of what those defects were,
-not as a status page. Re-run `bun run test:ui` before believing either document.
+Nothing, in `tests/e2e/`.
 
-Three checks in the full suite are worth knowing about before you file a bug against them. All three
+Two checks in the full suite are worth knowing about before you file a bug against them. Both
 assert on `freed`, which is `max(0, freeAfter - freeBefore)` — the change in free space on the **whole
 volume** (`src/core/apply.ts:33`), not a sum of the deleted items. When the rest of the suite is
 planting and deleting hundreds of megabytes at the same time, that delta moves on its own:
@@ -105,8 +67,6 @@ planting and deleting hundreds of megabytes at the same time, that delta moves o
   16 MB deletion, and fails when another test consumed the space in between.
 - `tests/e2e/outputs.test.ts` "apply --json reports outcomes and freed bytes" expects `freed > 0` for
   the same reason.
-- `tests/e2e-ui/server.test.ts` "an all-skip payload deletes nothing and frees nothing" expects
-  `freed === 0`, and fails when another test released space in between.
 
 Measured on the reference machine over six full `bun test` runs: between 0 and 2 failures, always
 from that list, and never the same pair twice. They pass consistently when their own file is run
@@ -117,6 +77,10 @@ filesystem the test owns.
 
 Run on branch `docs/accuracy`, 2026-10-11, against `main` at `cf2f23f`. Every claim below was checked
 against the source at the cited line; markdown only was touched.
+
+This is a dated snapshot of that audit, kept as a record. Rows mentioning `src/ui`, `server.ts` or
+`tests/e2e-ui` describe a local web UI that existed then and has since been removed — this project is
+a native app now.
 
 ### Inaccuracies found and how they were resolved
 

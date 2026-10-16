@@ -4,7 +4,7 @@
 
 **Method.** Product pages, official vendor documentation, and review articles for each app listed below. Every non-obvious claim carries a URL. Facts only; marketing copy is quoted sparingly and marked as vendor copy. Where sources disagree, both are given. Anything I could not verify is listed in §6.
 
-**Scope note on Dustless today.** The shipped web UI (`src/ui/public/index.html`) is a single scrolling page — hero figure, three tier cards, an accordion of rule groups, one "Clean" CTA and a confirm sheet. There is no sidebar and no tabs. A SwiftUI Mac app is in progress (`apps/dustless-mac`) whose sidebar currently mixes *metrics*, *tier filters*, *actions*, and *settings* in one list (`SidebarView.swift:11-65`). Sections 2 and 3 are written to apply to both.
+**Scope note on Dustless today.** Dustless is a native macOS app, not a web app: the SwiftUI app in `apps/dustless-mac` is the product, and its sidebar currently mixes *metrics*, *tier filters*, *actions*, and *settings* in one list (`SidebarView.swift:11-65`). Sections 2 and 3 are written to apply to it.
 
 ---
 
@@ -88,13 +88,13 @@ Two structural facts are near-universal:
 
 **Evidence:** CleanMyMac's headline is "Total data that can be safely removed to free disk space" ([Smart Care](https://macpaw.com/support/cleanmymac/knowledgebase/smart-care)) — the safety adjective is doing load-bearing work. Storage Sense's equivalent is a free-space banner ([MS](https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/manage-drive-space-with-storage-sense)).
 
-**Dustless sharpening:** the current web UI already recomputes the hero as the user toggles YELLOW items off (`paintSummary` → `selection()` in `app.js:174-185`). Keep that, and label it explicitly: the number is the *selected* total, not the scan total. Show the scan total as a separate, dimmer figure ("3.4 GB found · 611 MB selected") so the two are never confused — the Apple Storage panel's per-category breakdown is the precedent for showing both a total and a selected subset ([Apple Support](https://support.apple.com/guide/mac-help/find-and-delete-files-on-your-mac-syspf5a64aa6/mac)).
+**Dustless sharpening:** recompute the hero figure as the user toggles YELLOW items off, and label it explicitly: the number is the *selected* total, not the scan total. Show the scan total as a separate, dimmer figure ("3.4 GB found · 611 MB selected") so the two are never confused — the Apple Storage panel's per-category breakdown is the precedent for showing both a total and a selected subset ([Apple Support](https://support.apple.com/guide/mac-help/find-and-delete-files-on-your-mac-syspf5a64aa6/mac)).
 
 ### R3 — Locked items get a real destination, not just a notice. *(differs from category norm)*
 
 **Evidence:** The whole category's safety story is "we checked our database" — CleanMyMac's "Safety Database, built over years of experience" ([Smart Care](https://macpaw.com/support/cleanmymac/knowledgebase/smart-care)), DaisyDisk's refusal to accept `/System` into the Collector ([DeletingFiles](https://daisydiskapp.com/guide/4/en/DeletingFiles/)). In both cases the protected thing **disappears from the UI**. DaisyDisk gives no indication a folder exists that it won't let you delete.
 
-**Why Dustless should differ:** BLOCKED is the product's differentiator and its most interesting output — it is the live verdict "I looked and could not prove this is unused." Hiding it throws away the evidence. The current UI renders it as a notice in the row (`app.js:303-305`), which is correct but passive.
+**Why Dustless should differ:** BLOCKED is the product's differentiator and its most interesting output — it is the live verdict "I looked and could not prove this is unused." Hiding it throws away the evidence. Rendering it as a notice in the row is correct but passive.
 
 **Concretely:** `Locked` is a full view, not a badge. Each locked finding shows **what verification was attempted and why it failed** — for Gradle, the concrete fact "project `/Users/x/repo` pins 8.12 in `gradle-wrapper.properties`". That is the proof that cross-verification works, and it converts a refusal into a feature. A user who sees *why* something is locked trusts the things that are unlocked; a user who just sees a lock does not.
 
@@ -110,7 +110,7 @@ Two structural facts are near-universal:
 
 **Evidence:** The category's weakest link. DaisyDisk's 5-second countdown is the whole safety story and it is a countdown, not a comprehension aid ([DeletingFiles](https://daisydiskapp.com/guide/4/en/DeletingFiles/)). Storage Sense has nothing ([MS](https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/manage-drive-space-with-storage-sense)). Google One is the best of them and still deletes permanently with one tap after a Review step ([Google One](https://support.google.com/googleone/answer/9312312?hl=en)).
 
-**Dustless advantage:** the confirm sheet can say things no competitor can, because it knows *why* each item is in its tier. For each selected item, one line of provenance: `"npm.cacache — verified regenerable, no verification required"` / `"android.ndk — rule requires ≥90 days, newest file is 0 days old"` / `"gradle 8.12 — BLOCKED, pinned by /Users/x/repo"`. The current sheet lists path + size only (`app.js:454-458`); it should list path + size + the deciding reason. A user reviewing "why" is reviewing the tier system; a user reviewing paths is doing DaisyDisk's job and getting less safety for it.
+**Dustless advantage:** the confirm sheet can say things no competitor can, because it knows *why* each item is in its tier. For each selected item, one line of provenance: `"npm.cacache — verified regenerable, no verification required"` / `"android.ndk — rule requires ≥90 days, newest file is 0 days old"` / `"gradle 8.12 — BLOCKED, pinned by /Users/x/repo"`. Listing path + size only is a miss; the sheet should list path + size + the deciding reason. A user reviewing "why" is reviewing the tier system; a user reviewing paths is doing DaisyDisk's job and getting less safety for it.
 
 ### R6 — Keep automation minimal and non-destructive-by-default; do not ship unattended GREEN deletion. *(deliberately differs from Storage Sense)*
 

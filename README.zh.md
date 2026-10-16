@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 拼错的 id、payload 漏掉的 id、scan 根本没产出的 rule —— 全部解析为 skip，绝不会变成该规则自己的 tier。早期版本默认取规则自身的 tier，于是漏掉一个键就等于静默地说“删除”；那正是从一台真实机器上带走约 36 GB 的原因。
 
-这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli.ts:134`），UI 从你实际勾选的内容构造（`src/ui/public/app.js:161`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:188`）。
+这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli.ts:134`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:188`）。
 
 ### 为什么 BLOCKED 无法被覆盖
 
-封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli.ts:118`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:60`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:88`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。浏览器 UI 守的是同一条线：被封锁的 finding 得到的是一条提示而不是删除按钮（`src/ui/public/app.js:303`），而所有 finding 都被封锁的规则会以 `skip` 发送（`src/ui/public/app.js:164`）。
+封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli.ts:118`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:60`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:88`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。
 
 ## 安装
 
@@ -151,7 +151,6 @@ Xóa? [y/N]
 | --- | --- |
 | `dustless scan` | 交叉扫描所有规则，按大小排序列出 finding，并给出各等级汇总和可回收字节数。只读。 |
 | `dustless apply` | Scan，打印汇总，询问 `Xóa? [y/N]`，然后删除 GREEN 并逐条询问 YELLOW。若有任何条目失败，退出码为 `1`。 |
-| `dustless ui` | 在 127.0.0.1 上启动本地浏览器界面并打开它。见 [Web UI](#web-ui)。 |
 | `dustless rule list` | 打印规则数据库及其等级和描述，并说明加载来源。 |
 | `dustless rule show <id>` | 以 JSON 打印单条规则。 |
 | `dustless rule add <id> <green\|yellow> <desc> <path> [path…]` | 以 `paths.all` 向 `~/.config/dustless/rules.yaml` 追加一条新规则。 |
@@ -167,38 +166,11 @@ Xóa? [y/N]
 | `--json` | 为 `scan`、`apply`、`rule list`、`doctor`、`version` 在 stdout 输出一个 JSON 对象。对 `apply` 它同时意味着取消：没有 `--yes` 就没有提问，所以什么都不会删（`src/cli.ts:148`）。 |
 | `--quiet` | 抑制面向人类阅读的输出行。 |
 | `--yes` | 跳过确认。既跳过汇总提问，**也**跳过每条 YELLOW 的提问。它不跳过验证，也无法解除 BLOCKED 或 RED。 |
-| `--port <n>` | 仅用于 `ui`。监听端口。必须在 1024-65535 之间，在套接字打开之前就检查（`src/cli.ts:176`）。默认为 `4173`。 |
-| `--no-open` | 仅用于 `ui`。启动服务但不打开浏览器。 |
 | `--help` | 用法说明，但仅当它是唯一参数时 —— `dustless --help`。在另一个命令词之后，命令本身优先：`dustless scan --help` 会执行一次 scan。 |
 
 ### `apply --json`
 
 `apply --json` 在 stdout 上恰好打印一个 JSON 对象，在每一条走到它的路径上 —— 已删除、无可删除、已取消 —— 键为 `outcomes`、`freed`、`freeBefore`、`freeAfter`、`elapsedMs`（`src/types.ts:56`）。`freed` 是 `max(0, freeAfter - freeBefore)`：整个卷上剩余空间的差值，不是被删条目之和，所以如果期间有别的东西占满了磁盘，一次真实删除之后它也可能读出 `0`（`src/core/apply.ts:33`）。硬错误 —— 比如格式错误的 `~/.config/dustless/rules.yaml` —— 仍然以 `1` 退出，消息在 stderr 上，stdout 上什么都没有（`src/cli.ts:300`）。
-
-## Web UI
-
-`dustless ui` 启动一个本地服务，并在你的浏览器里打开界面。
-
-```sh
-dustless ui                        # http://127.0.0.1:4173
-dustless ui --port 8080            # 自己选一个端口
-dustless ui --no-open              # 启动但不打开浏览器
-```
-
-它只绑定 **127.0.0.1**（`src/ui/server.ts:19`、`src/ui/server.ts:200`）。超出 1024-65535 范围的端口会在套接字打开之前就被拒绝；如果端口已被占用，命令会以 `EADDRINUSE` 失败，而不是悄悄地换到别处去监听。`Ctrl+C`（或 `SIGTERM`）可停止它。
-
-这个进程有一个会删除你磁盘文件的 `POST /api/apply` 端点，所以这里的护栏才是重点：
-
-- 只有 `Host` 为 `127.0.0.1` 或 `localhost` 的请求能通过处理器的第一行；其他任何请求在路由执行前就会收到 `403`（`src/ui/server.ts:116`、`src/ui/server.ts:147`）。
-- 任何带非回环 `Origin` 的非 `GET` 请求都是 `403`（`src/ui/server.ts:121`、`src/ui/server.ts:155`）。
-- 任何没有 `Content-Type: application/json` 的非 `GET` 请求都是 `415`（`src/ui/server.ts:161`）。
-- 超过 1 MiB 的 body 是 `413`；`tiers` 不是 rule id 到 `green`/`yellow`/`skip` 的对象的 payload 是 `400`（`src/ui/server.ts:99`）。
-
-最后两条正是为什么在 UI 打开期间，一个随机网页无法删除你的缓存。跨源表单或 `fetch` POST 属于 CORS 的*简单请求*：没有预检，而且浏览器会自行设置 `Host: 127.0.0.1:<port>`，所以 Host 检查挡不住它。`Origin` 和 `Content-Type` 检查能挡 —— 简单请求无法设置这两者。
-
-每个响应还携带 `default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer` 和 `Cache-Control: no-store`（`src/ui/server.ts:24`、`src/ui/server.ts:143`）。
-
-路由：`GET /api/scan`、`GET /api/rules`、`GET /api/space`、`POST /api/apply`。
 
 ## macOS app
 
