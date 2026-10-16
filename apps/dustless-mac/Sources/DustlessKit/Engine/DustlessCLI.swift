@@ -88,6 +88,22 @@ public struct DustlessCLI: Sendable {
         return try await decode(RamKillResult.self, from: run(args))
     }
 
+    /// The live AWDL (AirDrop) state. Read-only, so it is safe to call freely.
+    public func awdl() async throws -> AwdlReport {
+        try await decode(AwdlReport.self, from: run(["awdl", "--json"]))
+    }
+
+    /// Toggle AWDL. The engine escalates through the scoped sudo rule itself, so
+    /// the returned report's outcome says whether the change was allowed.
+    public func setAwdl(on: Bool) async throws -> AwdlReport {
+        try await decode(AwdlReport.self, from: run(["awdl", on ? "--on" : "--off", "--json"]))
+    }
+
+    /// The exact sudoers rule to install for a password-free toggle.
+    public func awdlPrivilege() async throws -> AwdlPrivilege {
+        try await decode(AwdlPrivilege.self, from: run(["awdl", "--print-privilege", "--json"]))
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: data)

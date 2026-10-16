@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var login: LoginItem
+    @ObservedObject var awdl: AwdlControl
 
     var body: some View {
         Form {
@@ -65,6 +66,33 @@ struct SettingsView: View {
             }
 
             Section {
+                if awdl.privilegeInstalled {
+                    Label(settings.t("awdlInstalled"), systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.secondary)
+                    Button(settings.t("awdlRemove")) { Task { await awdl.removePrivilege() } }
+                        .disabled(awdl.busy)
+                } else {
+                    Button(settings.t("awdlInstall")) { Task { await awdl.installPrivilege() } }
+                        .disabled(awdl.busy)
+                }
+
+                if let error = awdl.error {
+                    Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(settings.t("awdlTitle"))
+                }
+            } header: {
+                Text(settings.t("awdlTitle"))
+            } footer: {
+                Text(settings.t("awdlNote"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 HStack(spacing: 6) {
                     Text("Dustless")
                         .font(.system(size: 12, weight: .semibold))
@@ -80,6 +108,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .task { await awdl.refresh() }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
     }

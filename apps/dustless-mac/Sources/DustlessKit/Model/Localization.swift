@@ -292,6 +292,20 @@ public enum L10n {
         "largeFilesTrashBody": "Tệp này sẽ được chuyển vào Thùng rác. Nó nằm lại cho tới khi bạn đổ Thùng rác.",
         "largeFilesTrashHelp": "Chuyển {name} vào Thùng rác",
         "largeFilesTrashed": "Đã chuyển vào Thùng rác",
+
+        // native app — AirDrop (AWDL) toggle
+        "awdlTitle": "Wi-Fi & AirDrop",
+        "awdlOn": "AWDL: đang bật — có thể gây gai ping Wi-Fi",
+        "awdlOff": "AWDL: đã tắt — Wi-Fi ổn định",
+        "awdlUnknown": "Chưa đọc được trạng thái AWDL",
+        "awdlTurnOff": "Tắt AirDrop",
+        "awdlTurnOn": "Bật AirDrop",
+        "awdlNote": "AWDL là sóng ngang hàng của AirDrop và Handoff. Trên chip Apple silicon nó có thể gây gai ping và rớt Wi-Fi định kỳ; tắt nó không ảnh hưởng tới internet.",
+        "awdlInstall": "Cài quyền bật/tắt…",
+        "awdlInstalled": "Đã cài quyền bật/tắt",
+        "awdlRemove": "Gỡ quyền",
+        "awdlInstallFailed": "Không cài được quyền bật/tắt.",
+        "awdlNeedsPrivilege": "Thao tác này cần quyền bật/tắt cài một lần.",
     ]
 
     static let en: [String: String] = [
@@ -515,6 +529,20 @@ public enum L10n {
         "largeFilesTrashBody": "This file will be moved to the Trash. It stays there until you empty the Trash.",
         "largeFilesTrashHelp": "Move {name} to the Trash",
         "largeFilesTrashed": "Moved to Trash",
+
+        // native app — AirDrop (AWDL) toggle
+        "awdlTitle": "Wi-Fi & AirDrop",
+        "awdlOn": "AWDL: on — may cause Wi-Fi spikes",
+        "awdlOff": "AWDL: off — Wi-Fi stable",
+        "awdlUnknown": "AWDL state unavailable",
+        "awdlTurnOff": "Turn AirDrop off",
+        "awdlTurnOn": "Turn AirDrop on",
+        "awdlNote": "AWDL is the peer-to-peer radio behind AirDrop and Handoff. On Apple silicon it can cause periodic Wi-Fi spikes and dropouts; turning it off does not affect the internet.",
+        "awdlInstall": "Install toggle permission…",
+        "awdlInstalled": "Toggle permission installed",
+        "awdlRemove": "Remove permission",
+        "awdlInstallFailed": "Could not install the toggle permission.",
+        "awdlNeedsPrivilege": "This needs the one-time toggle permission.",
     ]
 
     static let zh: [String: String] = [
@@ -738,5 +766,19 @@ public enum L10n {
         "largeFilesTrashBody": "此文件将被移至废纸篓。它会一直留在那里，直到你清倒废纸篓。",
         "largeFilesTrashHelp": "将 {name} 移至废纸篓",
         "largeFilesTrashed": "已移至废纸篓",
+
+        // native app — AirDrop (AWDL) toggle
+        "awdlTitle": "Wi-Fi 与 AirDrop",
+        "awdlOn": "AWDL：已开启 — 可能导致 Wi-Fi 卡顿",
+        "awdlOff": "AWDL：已关闭 — Wi-Fi 稳定",
+        "awdlUnknown": "无法读取 AWDL 状态",
+        "awdlTurnOff": "关闭 AirDrop",
+        "awdlTurnOn": "开启 AirDrop",
+        "awdlNote": "AWDL 是 AirDrop 与 Handoff 的点对点射频。在 Apple 芯片上可能造成周期性 Wi-Fi 卡顿与掉线；关闭它不影响上网。",
+        "awdlInstall": "安装切换权限…",
+        "awdlInstalled": "已安装切换权限",
+        "awdlRemove": "移除权限",
+        "awdlInstallFailed": "无法安装切换权限。",
+        "awdlNeedsPrivilege": "此操作需要一次性的切换权限。",
     ]
 }
