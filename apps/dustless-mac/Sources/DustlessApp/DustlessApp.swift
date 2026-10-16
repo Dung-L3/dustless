@@ -7,6 +7,7 @@ struct DustlessApp: App {
     @StateObject private var store = ScanStore()
     @StateObject private var login = LoginItem()
     @StateObject private var settings = AppSettings()
+    @StateObject private var awdl = AwdlControl()
 
     var body: some Scene {
         WindowGroup("Dustless") {
@@ -36,13 +37,13 @@ struct DustlessApp: App {
         }
 
         Settings {
-            SettingsView(settings: settings, login: login)
+            SettingsView(settings: settings, login: login, awdl: awdl)
                 .environmentObject(settings)
                 .preferredColorScheme(settings.appearance.colorScheme)
         }
 
         MenuBarExtra {
-            MenuBarContent(store: store, onOpenWindow: openMainWindow)
+            MenuBarContent(store: store, awdl: awdl, onOpenWindow: openMainWindow)
                 .environmentObject(settings)
         } label: {
             MenuBarLabel()
