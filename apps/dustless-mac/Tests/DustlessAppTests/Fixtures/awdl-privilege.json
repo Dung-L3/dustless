@@ -1,0 +1,1 @@
+{"user":"mac","path":"/etc/sudoers.d/dustless-awdl","allowed":["/sbin/ifconfig awdl0 down","/sbin/ifconfig awdl0 up"],"rule":"mac ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up\n"}
