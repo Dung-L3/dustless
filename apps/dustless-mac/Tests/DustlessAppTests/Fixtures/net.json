@@ -1,0 +1,1 @@
+{"platform":"mac","iface":"en0","gateway":"192.168.1.1","dns":["1.1.1.1","1.0.0.1","8.8.8.8"],"soloRoute":true,"outcomes":[{"op":"reset-dns","status":"ran","detail":"DNS servers reset to DHCP-provided values","before":"1.1.1.1, 1.0.0.1","after":"DHCP-provided values"}]}

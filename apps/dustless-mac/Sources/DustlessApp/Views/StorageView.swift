@@ -12,6 +12,29 @@ enum StorageSection: String, Identifiable {
     var id: String { rawValue }
 }
 
+/// Every dialog this panel shows, as one value.
+///
+/// They used to be four separate `.sheet(item:)` bindings, and an action that
+/// finished a job set its result while clearing its confirmation in the same
+/// update — SwiftUI then tried to present one sheet while dismissing another and
+/// the window locked up. One binding means there is never a cross-sheet
+/// transition: the content swaps in place instead.
+enum StorageSheet: Identifiable {
+    case confirmApp(InstalledApp)
+    case appResult(UninstallReport)
+    case confirmFile(LargeFile)
+    case fileResult(UninstallReport)
+
+    var id: String {
+        switch self {
+        case .confirmApp(let app): "app-confirm:\(app.id)"
+        case .appResult(let report): "app-result:\(report.id)"
+        case .confirmFile(let file): "file-confirm:\(file.id)"
+        case .fileResult(let report): "file-result:\(report.id)"
+        }
+    }
+}
+
 struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
@@ -22,15 +45,19 @@ struct StorageView: View {
     @State private var apps: [InstalledApp] = []
     @State private var isLoadingApps = false
     @State private var appsError: String?
-    @State private var selectedAppForUninstall: InstalledApp?
-    @State private var uninstallReport: UninstallReport?
+    @State private var appsQuery = ""
+    @State private var sheet: StorageSheet?
+    /// The dialog to show once the current sheet is fully gone, then the alert to
+    /// show after that. Presenting while dismissing is what locked this panel up,
+    /// so a result or an error never races the confirmation it replaces.
+    @State private var nextSheet: StorageSheet?
+    @State private var nextAlert: (title: String, message: String)?
     @State private var isUninstalling = false
     @State private var largeFiles: [LargeFile] = []
     @State private var isLoadingFiles = false
     @State private var filesError: String?
     @State private var filesLoaded = false
-    @State private var selectedFileForTrash: LargeFile?
-    @State private var fileReport: UninstallReport?
+    @State private var filesQuery = ""
     @State private var isTrashingFile = false
     @State private var actionErrorTitle = ""
     @State private var actionError: String?
@@ -82,33 +109,12 @@ struct StorageView: View {
                 dataLoaded = true
             }
         }
-        .sheet(item: $selectedAppForUninstall) { app in
-            UninstallConfirmationSheet(
-                app: app,
-                onCancel: { selectedAppForUninstall = nil },
-                onConfirm: { Task { await performUninstall(app) } }
-            )
-        }
-        .sheet(item: $uninstallReport) { report in
-            UninstallResultSheet(
-                report: report,
-                title: settings.t("appsUninstalled"),
-                onDismiss: { uninstallReport = nil }
-            )
-        }
-        .sheet(item: $selectedFileForTrash) { file in
-            LargeFileTrashSheet(
-                file: file,
-                onCancel: { selectedFileForTrash = nil },
-                onConfirm: { Task { await performTrash(file) } }
-            )
-        }
-        .sheet(item: $fileReport) { report in
-            UninstallResultSheet(
-                report: report,
-                title: settings.t("largeFilesTrashed"),
-                onDismiss: { fileReport = nil }
-            )
+        .sheet(item: $sheet, onDismiss: presentNext) { item in
+            sheetContent(item)
+                // A sheet has no traffic lights, so its own Cancel/Done buttons
+                // stay — and Escape has to reach them too, or a confirmation can
+                // only be left through the mouse.
+                .onExitCommand { sheet = nil }
         }
         .alert(
             actionErrorTitle,
@@ -118,6 +124,36 @@ struct StorageView: View {
             Button(settings.t("done")) { actionError = nil }
         } message: { error in
             Text(error)
+        }
+    }
+
+    @ViewBuilder
+    private func sheetContent(_ item: StorageSheet) -> some View {
+        switch item {
+        case .confirmApp(let app):
+            UninstallConfirmationSheet(
+                app: app,
+                onCancel: { sheet = nil },
+                onConfirm: { Task { await performUninstall(app) } }
+            )
+        case .appResult(let report):
+            UninstallResultSheet(
+                report: report,
+                title: settings.t("appsUninstalled"),
+                onDismiss: { sheet = nil }
+            )
+        case .confirmFile(let file):
+            LargeFileTrashSheet(
+                file: file,
+                onCancel: { sheet = nil },
+                onConfirm: { Task { await performTrash(file) } }
+            )
+        case .fileResult(let report):
+            UninstallResultSheet(
+                report: report,
+                title: settings.t("largeFilesTrashed"),
+                onDismiss: { sheet = nil }
+            )
         }
     }
 
@@ -150,19 +186,16 @@ struct StorageView: View {
     }
 
     private var applicationsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let visible = filteredApps
+        let filtering = !needle(appsQuery).isEmpty
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(settings.t("appsTitle"))
                     .panelSectionHeader()
 
                 if !apps.isEmpty {
-                    Text(settings.t("itemMany", ["n": "\(apps.count)"]))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(PanelStyle.rowFill, in: .capsule)
-                        .accessibilityLabel(settings.t("appsCount", ["n": "\(apps.count)"]))
+                    countChip(visible.count, of: apps.count, filtered: filtering)
+                        .accessibilityLabel(countLabel(visible.count, of: apps.count, filtered: filtering, key: "appsCount"))
                 }
 
                 Spacer(minLength: 0)
@@ -173,13 +206,17 @@ struct StorageView: View {
                 }
             }
 
-            appsBody
+            SearchField(placeholder: settings.t("searchApps"), text: $appsQuery)
+                .frame(maxWidth: 320)
+
+            appsBody(visible)
         }
     }
 
-    /// Three distinct states: still loading, failed with a retry, or the list.
+    /// Four distinct states: still loading, failed with a retry, the list, or a
+    /// filter that hides everything. The last one is not an empty list.
     @ViewBuilder
-    private var appsBody: some View {
+    private func appsBody(_ visible: [InstalledApp]) -> some View {
         if let error = appsError {
             PanelStateView(
                 kind: .error,
@@ -195,14 +232,18 @@ struct StorageView: View {
                 message: isLoadingApps ? settings.t("busyApps") : settings.t("appsEmpty")
             )
             .frame(minHeight: 120)
+        } else if visible.isEmpty {
+            // A filter that hides everything is not the same as an empty list.
+            NoMatchesView()
+                .frame(minHeight: 120)
         } else {
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(apps) { app in
+                    ForEach(visible) { app in
                         AppRow(
                             app: app,
                             isUninstalling: isUninstalling,
-                            onUninstall: { selectedAppForUninstall = app }
+                            onUninstall: { sheet = .confirmApp(app) }
                         )
                     }
                 }
@@ -214,19 +255,16 @@ struct StorageView: View {
     /// retry, or the rows.
     @ViewBuilder
     private var largeFilesSection: some View {
+        let visible = filteredFiles
+        let filtering = !needle(filesQuery).isEmpty
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(settings.t("largeFilesTitle"))
                     .panelSectionHeader()
 
                 if !largeFiles.isEmpty {
-                    Text(settings.t("itemMany", ["n": "\(largeFiles.count)"]))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(PanelStyle.rowFill, in: .capsule)
-                        .accessibilityLabel(settings.t("largeFilesCount", ["n": "\(largeFiles.count)"]))
+                    countChip(visible.count, of: largeFiles.count, filtered: filtering)
+                        .accessibilityLabel(countLabel(visible.count, of: largeFiles.count, filtered: filtering, key: "largeFilesCount"))
                 }
 
                 Spacer(minLength: 0)
@@ -237,12 +275,15 @@ struct StorageView: View {
                 }
             }
 
-            largeFilesBody
+            SearchField(placeholder: settings.t("searchFiles"), text: $filesQuery)
+                .frame(maxWidth: 320)
+
+            largeFilesBody(visible)
         }
     }
 
     @ViewBuilder
-    private var largeFilesBody: some View {
+    private func largeFilesBody(_ visible: [LargeFile]) -> some View {
         if let error = filesError {
             PanelStateView(
                 kind: .error,
@@ -257,19 +298,61 @@ struct StorageView: View {
                 message: isLoadingFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty")
             )
             .frame(minHeight: 120)
+        } else if visible.isEmpty {
+            NoMatchesView()
+                .frame(minHeight: 120)
         } else {
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(largeFiles) { file in
+                    ForEach(visible) { file in
                         LargeFileRow(
                             file: file,
                             isTrashing: isTrashingFile,
-                            onTrash: { selectedFileForTrash = file }
+                            onTrash: { sheet = .confirmFile(file) }
                         )
                     }
                 }
             }
         }
+    }
+
+    // MARK: - Filtering
+
+    /// A trimmed, lowercased needle; an all-whitespace box is not a filter.
+    private func needle(_ query: String) -> String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var filteredApps: [InstalledApp] {
+        let needle = needle(appsQuery)
+        guard !needle.isEmpty else { return apps }
+        return apps.filter { $0.matches(needle) }
+    }
+
+    private var filteredFiles: [LargeFile] {
+        let needle = needle(filesQuery)
+        guard !needle.isEmpty else { return largeFiles }
+        return largeFiles.filter { $0.matches(needle) }
+    }
+
+    /// The count pill. With a filter on it reads "3 of 40" instead of pretending
+    /// the whole list is what the user is looking at.
+    private func countChip(_ shown: Int, of total: Int, filtered: Bool) -> some View {
+        Text(filtered
+            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
+            : settings.t("itemMany", ["n": "\(total)"]))
+            .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(PanelStyle.rowFill, in: .capsule)
+    }
+
+    /// The same number, spoken with the panel's own noun.
+    private func countLabel(_ shown: Int, of total: Int, filtered: Bool, key: String) -> String {
+        filtered
+            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
+            : settings.t(key, ["n": "\(total)"])
     }
 
     /// One line, not a card: the volumes above are cards, and a fourth card here
@@ -297,7 +380,14 @@ struct StorageView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Reading volume metadata is synchronous disk I/O, and a network or
+    /// external volume can take seconds to answer — on the main actor that is a
+    /// frozen window, so it runs on a detached task and only the result hops back.
     private func loadVolumes() async {
+        volumes = await Task.detached { Self.readVolumes() }.value
+    }
+
+    private nonisolated static func readVolumes() -> [VolumeInfo] {
         let keys: [URLResourceKey] = [.volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
         var result: [VolumeInfo] = []
@@ -316,7 +406,7 @@ struct StorageView: View {
                 continue
             }
         }
-        volumes = result
+        return result
     }
 
     private func loadApps() async {
@@ -338,8 +428,10 @@ struct StorageView: View {
         do {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.uninstallApp(path: app.path)
-            uninstallReport = report
-            selectedAppForUninstall = nil
+            // The result replaces the confirmation through `presentNext`, once
+            // the confirmation is really gone.
+            nextSheet = .appResult(report)
+            sheet = nil
             await loadApps()
         } catch {
             fail(error, title: settings.t("appsUninstall"))
@@ -364,8 +456,8 @@ struct StorageView: View {
         do {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.deleteLargeFile(path: file.path)
-            fileReport = report
-            selectedFileForTrash = nil
+            nextSheet = .fileResult(report)
+            sheet = nil
             largeFiles.removeAll { $0.path == file.path }
             // The report is on screen already; re-reading the walk is not worth
             // the seconds it takes when the tab is closed again.
@@ -375,12 +467,40 @@ struct StorageView: View {
     }
 
     private func fail(_ error: Error, title: String) {
-        actionErrorTitle = title
-        actionError = error.localizedDescription
+        let message = error.localizedDescription
+        // An alert cannot present on top of a sheet. Dismiss the sheet first and
+        // let `presentNext` raise the alert once it is gone; with no sheet open
+        // there is nothing to wait for.
+        if sheet == nil {
+            actionErrorTitle = title
+            actionError = message
+        } else {
+            nextAlert = (title, message)
+            sheet = nil
+        }
+    }
+
+    /// Presents whatever an action queued, but only after the sheet it replaced
+    /// has finished dismissing.
+    private func presentNext() {
+        guard nextSheet != nil || nextAlert != nil else { return }
+        Task { @MainActor in
+            // A beat for the dismissal animation to settle; without it SwiftUI
+            // can be asked to present while it is still dismissing.
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            if let next = nextSheet {
+                nextSheet = nil
+                sheet = next
+            } else if let alert = nextAlert {
+                nextAlert = nil
+                actionErrorTitle = alert.title
+                actionError = alert.message
+            }
+        }
     }
 }
 
-struct VolumeInfo: Identifiable {
+struct VolumeInfo: Identifiable, Sendable {
     let id = UUID()
     let name: String
     let total: UInt64

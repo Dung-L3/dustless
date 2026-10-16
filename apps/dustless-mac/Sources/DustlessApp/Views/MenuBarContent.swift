@@ -49,6 +49,9 @@ struct MenuBarContent: View {
             Button(settings.t("storage")) {
                 openWindow(id: "storage")
             }
+            Button(settings.t("networkTitle")) {
+                openWindow(id: "network")
+            }
             Button(settings.t("settingsOpen")) { openSettings() }
 
             Divider()

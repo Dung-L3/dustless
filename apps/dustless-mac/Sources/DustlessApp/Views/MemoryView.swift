@@ -6,6 +6,43 @@ import AppKit
 typealias MemProcess = DustlessKit.ProcessInfo
 typealias MemCategory = DustlessKit.Category
 
+/// The category a process can be narrowed to. `all` is the unfiltered default,
+/// so the picker never removes rows on its own.
+enum MemCategoryFilter: String, CaseIterable, Identifiable {
+    case all
+    case browser
+    case editor
+    case container
+    case lsp
+    case other
+
+    var id: String { rawValue }
+
+    /// Reuses the vocabulary the chips already speak, so the picker and the rows
+    /// never disagree about what a "Browser" is.
+    var titleKey: String? {
+        switch self {
+        case .all: nil
+        case .browser: "categoryBrowser"
+        case .editor: "categoryEditor"
+        case .container: "categoryContainer"
+        case .lsp: "categoryLSP"
+        case .other: "categoryOther"
+        }
+    }
+
+    var category: MemCategory? {
+        switch self {
+        case .all: nil
+        case .browser: .browser
+        case .editor: .editor
+        case .container: .container
+        case .lsp: .lsp
+        case .other: .other
+        }
+    }
+}
+
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
@@ -18,6 +55,10 @@ struct MemoryView: View {
     /// The groups the user folded away. `nil` until the first click, which is how
     /// the biggest group starts open: a hog should not need a second click to see.
     @State private var collapsed: Set<String>?
+    /// Name / bundle / process / pid search over the groups.
+    @State private var query = ""
+    /// The category the list is narrowed to, or `.all`.
+    @State private var category: MemCategoryFilter = .all
 
     /// The list is a summary, not a full `ps`. The footer says so. The limit is
     /// on apps, not processes, so a group is never shown with half its memory
@@ -26,15 +67,18 @@ struct MemoryView: View {
 
     var body: some View {
         let report = store.memoryReport
-        // Grouped once here and threaded down: the body re-runs on every hover,
-        // and regrouping the whole list per row would be wasted work.
-        let groups = processGroups(report)
+        // Grouped and filtered once here and threaded down: the body re-runs on
+        // every hover and every keystroke, and regrouping per row would be wasted
+        // work. `matched` is the uncapped result, so the header can say how many
+        // the filter found rather than only how many fit under the cap.
+        let matched = filteredGroups(report)
+        let groups = Array(matched.prefix(Self.groupLimit))
         VStack(alignment: .leading, spacing: 16) {
             header(report)
             Divider()
             metrics(report?.memory)
             Divider()
-            processes(report, groups)
+            processes(report, groups, matched: matched)
         }
         .padding(20)
         .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
@@ -99,15 +143,27 @@ struct MemoryView: View {
     /// One row per application, biggest first, each one opening onto the
     /// processes it owns — twelve helpers eating 4 GB should read as one hog,
     /// not as twelve rows competing for the same attention.
-    private func processes(_ report: MemoryReport?, _ groups: [ProcessGroup]) -> some View {
+    private func processes(_ report: MemoryReport?, _ groups: [ProcessGroup], matched: [ProcessGroup]) -> some View {
         let all = report?.processes ?? []
         let shown = groups.reduce(0) { $0 + $1.count }
+        let matchedCount = matched.reduce(0) { $0 + $1.count }
+        let capped = matched.count > groups.count
+        let filtered = isFiltering
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(settings.t("memoryProcesses"))
                     .panelSectionHeader()
-                if shown < all.count {
+                if filtered {
+                    // Never let the count silently mean "3 of 340" — and when the
+                    // filter matched more than the cap draws, say that instead of
+                    // pretending the cap is the whole answer.
+                    Text(capped
+                        ? settings.t("memoryShowingTop", ["shown": "\(shown)", "total": "\(matchedCount)"])
+                        : settings.t("filterShowing", ["shown": "\(shown)", "total": "\(all.count)"]))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                } else if shown < all.count {
                     Text(settings.t("memoryShowingTop", [
                         "shown": "\(shown)",
                         "total": "\(all.count)",
@@ -118,8 +174,21 @@ struct MemoryView: View {
                 Spacer(minLength: 0)
             }
 
+            SearchField(placeholder: settings.t("searchProcesses"), text: $query)
+                .frame(maxWidth: 320)
+
+            Picker(settings.t("filterCategory"), selection: $category) {
+                ForEach(MemCategoryFilter.allCases) { option in
+                    Text(option.titleKey.flatMap { settings.t($0) } ?? settings.t("filterAll")).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .accessibilityLabel(settings.t("filterCategory"))
+
             if groups.isEmpty {
-                Text(settings.t("memoryNoProcesses"))
+                Text(filtered ? settings.t("noMatches") : settings.t("memoryNoProcesses"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -138,9 +207,34 @@ struct MemoryView: View {
         }
     }
 
-    /// The report's processes as app groups, biggest first.
+    /// The report's processes as app groups, biggest first. The full list, not a
+    /// capped one — the cap is applied after filtering so a category filter
+    /// surfaces the biggest members of that category instead of nothing.
     private func processGroups(_ report: MemoryReport?) -> [ProcessGroup] {
-        Array((report?.processes ?? []).groupedByApp().prefix(Self.groupLimit))
+        (report?.processes ?? []).groupedByApp()
+    }
+
+    // MARK: - Filtering
+
+    /// Trimming first: a box holding only a space is not a search.
+    private var needle: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var isFiltering: Bool {
+        !needle.isEmpty || category != .all
+    }
+
+    /// The groups that answer the search and the category filter, uncapped. The
+    /// caller applies the cap so it can still report how many matched.
+    private func filteredGroups(_ report: MemoryReport?) -> [ProcessGroup] {
+        let needle = needle
+        let wanted = category.category
+        guard !needle.isEmpty || wanted != nil else { return processGroups(report) }
+        return processGroups(report).filter { group in
+            if let wanted, !group.contains(category: wanted) { return false }
+            return group.matches(needle)
+        }
     }
 
     private func groupRow(_ group: ProcessGroup, isLargest: Bool, in groups: [ProcessGroup]) -> some View {
@@ -197,13 +291,14 @@ struct MemoryView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The real bundle icon when there is a bundle. ponytail: NSWorkspace caches
-    /// icons on disk, so asking again on every redraw is cheap enough; a cache
-    /// would only pay off for hundreds of apps.
+    /// The real bundle icon when there is a bundle. `NSWorkspace` reads the icon
+    /// file off disk on every ask and this runs inside `body` — which re-runs on
+    /// every hover change and every keystroke in the filter — so memoise it per
+    /// bundle path.
     @ViewBuilder
     private func groupIcon(_ group: ProcessGroup) -> some View {
         if let path = group.bundlePath {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+            Image(nsImage: Self.icon(for: path))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 16, height: 16)
@@ -213,6 +308,20 @@ struct MemoryView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 16, height: 16)
         }
+    }
+
+    /// Lives for the process: a Mac has a few hundred bundles at most and each
+    /// entry is one icon, so an unbounded map is fine until it isn't — past that
+    /// it is dropped wholesale rather than kept forever.
+    @MainActor
+    private static var iconCache: [String: NSImage] = [:]
+
+    private static func icon(for path: String) -> NSImage {
+        if let cached = iconCache[path] { return cached }
+        if iconCache.count > 400 { iconCache.removeAll(keepingCapacity: true) }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        iconCache[path] = image
+        return image
     }
 
     /// One process inside its group. The stop button and its force-stop context
