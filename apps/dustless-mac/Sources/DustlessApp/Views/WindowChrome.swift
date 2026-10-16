@@ -82,7 +82,9 @@ struct StatusChip: View {
 // MARK: - Header
 
 /// The title row every panel shares: a title, an optional secondary line, then
-/// the panel's controls ending with the close button.
+/// the panel's controls. There is deliberately no close button here — these are
+/// `Window` scenes with the standard traffic lights, and clicking away closes
+/// them (`CloseOnResignKey`).
 struct PanelHeader<Accessory: View>: View {
     let title: String
     var subtitle: String?
@@ -109,32 +111,58 @@ struct PanelHeader<Accessory: View>: View {
             }
             Spacer(minLength: 12)
             accessory
-            CloseWindowButton()
         }
     }
 }
 
 extension PanelHeader where Accessory == EmptyView {
-    /// A title row with nothing but the close button.
+    /// A title row with nothing beside it.
     init(title: String, subtitle: String? = nil) {
         self.init(title: title, subtitle: subtitle) { EmptyView() }
     }
 }
 
-struct CloseWindowButton: View {
+// MARK: - Search
+
+/// The filter field the panels share.
+///
+/// `.searchable` is not an option here: it only renders where a toolbar can host
+/// the field (a `NavigationStack`, `NavigationSplitView` or `List`), and these
+/// panels are plain `VStack`s inside bare `Window` scenes — there it silently
+/// draws nothing while the view still filters, so the search looked broken.
+struct SearchField: View {
+    let placeholder: String
+    @Binding var text: String
+
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.closeWindow) private var closeWindow
 
     var body: some View {
-        Button(action: { closeWindow() }) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.title2)
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .accessibilityLabel(placeholder)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(settings.t("clearFilter"))
+                .accessibilityLabel(settings.t("clearFilter"))
+            }
         }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.cancelAction)
-        .help(settings.t("close"))
-        .accessibilityLabel(settings.t("close"))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(PanelStyle.rowFill, in: .rect(cornerRadius: 6))
     }
 }
 

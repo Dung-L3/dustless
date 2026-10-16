@@ -20,6 +20,20 @@ public struct InstalledApp: Codable, Identifiable, Sendable, Hashable {
     }
 }
 
+extension InstalledApp {
+    /// Whether this application answers a search box. The bundle id is included
+    /// because it is what a support answer or a shell command will quote, and
+    /// the path because that is how a folder is found.
+    ///
+    /// The needle must already be trimmed and lowercased; empty matches all.
+    public func matches(_ needle: String) -> Bool {
+        guard !needle.isEmpty else { return true }
+        return name.lowercased().contains(needle)
+            || bundleId.lowercased().contains(needle)
+            || path.lowercased().contains(needle)
+    }
+}
+
 /// Outcome of uninstalling a single path.
 public struct UninstallOutcome: Codable, Sendable, Identifiable, Hashable {
     public let path: String

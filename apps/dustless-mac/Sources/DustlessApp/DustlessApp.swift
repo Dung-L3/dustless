@@ -7,7 +7,8 @@ struct DustlessApp: App {
     @StateObject private var store = ScanStore()
     @StateObject private var login = LoginItem()
     @StateObject private var settings = AppSettings()
-    @StateObject private var awdl = AwdlControl()
+    @StateObject private var awdl = AwdlControl.shared
+    @StateObject private var net = NetControl()
 
     var body: some Scene {
         WindowGroup("Dustless") {
@@ -63,6 +64,13 @@ struct DustlessApp: App {
                 .environmentObject(settings)
         }
         .defaultSize(width: 620, height: 620)
+
+        Window(settings.t("networkTitle"), id: "network") {
+            NetWindowContent()
+                .environmentObject(net)
+                .environmentObject(settings)
+        }
+        .defaultSize(width: 700, height: 660)
     }
 }
 
@@ -151,7 +159,14 @@ final class CloseOnResignKeyView: NSView {
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
-        observedWindow?.close()
+        guard let window = observedWindow else { return }
+        // A sheet or alert presented from this window takes key status away from
+        // it, so resign-key also fires the moment a confirmation opens. Closing
+        // here tore the panel down under its own dialog, which read as a freeze.
+        // Only a genuine click-away — another app, the desktop, a sibling window
+        // with no child dialog — may close the panel.
+        guard window.attachedSheet == nil, NSApp.modalWindow == nil else { return }
+        window.close()
     }
 
     deinit {
@@ -159,70 +174,6 @@ final class CloseOnResignKeyView: NSView {
             NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
         }
     }
-}
-
-/// Environment key for closing the current window.
-private struct WindowCloseActionKey: EnvironmentKey {
-    static let defaultValue: @Sendable () -> Void = { }
-}
-
-extension EnvironmentValues {
-    var closeWindow: @Sendable () -> Void {
-        get { self[WindowCloseActionKey.self] }
-        set { self[WindowCloseActionKey.self] = newValue }
-    }
-}
-
-/// View modifier that captures the hosting window and injects a `closeWindow`
-/// action into the environment. Use `.windowCloseable()` on the root view of
-/// a window scene.
-struct WindowCloseable: ViewModifier {
-    @State private var closeAction: (@Sendable () -> Void)?
-
-    func body(content: Content) -> some View {
-        content
-            .background(WindowCaptureForClose(closeAction: $closeAction))
-            .environment(\.closeWindow, closeAction ?? {})
-    }
-}
-
-extension View {
-    func windowCloseable() -> some View {
-        modifier(WindowCloseable())
-    }
-}
-
-@MainActor
-final class WindowCaptureForCloseView: NSView {
-    var closeActionBinding: Binding<(@Sendable () -> Void)?>
-
-    init(closeActionBinding: Binding<(@Sendable () -> Void)?>) {
-        self.closeActionBinding = closeActionBinding
-        super.init(frame: .zero)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard let window = window else { return }
-        closeActionBinding.wrappedValue = { [weak window] in
-            // NSWindow.close() is main-actor isolated and this closure is
-            // @Sendable, so hop back to the main actor rather than calling it
-            // from whatever context the environment action is invoked in.
-            Task { @MainActor in window?.close() }
-        }
-    }
-}
-
-struct WindowCaptureForClose: NSViewRepresentable {
-    @Binding var closeAction: (@Sendable () -> Void)?
-
-    func makeNSView(context: Context) -> NSView {
-        WindowCaptureForCloseView(closeActionBinding: $closeAction)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 @MainActor
@@ -277,6 +228,14 @@ struct RootView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    openWindow(id: "network")
+                } label: {
+                    Label(settings.t("networkTitle"), systemImage: "network")
+                }
+                .help(settings.t("networkTitle"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     openSettings()
                 } label: {
                     Label(settings.t("settingsOpen"), systemImage: "gearshape")
@@ -308,7 +267,6 @@ struct MemoryWindowContent: View {
 
     var body: some View {
         state
-            .windowCloseable()
             .background(CloseOnResignKey())
             .task {
                 await store.fetchMemory()
@@ -357,7 +315,6 @@ struct StorageWindowContent: View {
 
     var body: some View {
         state
-            .windowCloseable()
             .background(CloseOnResignKey())
             .task {
                 await store.fetchStorage()
@@ -394,6 +351,41 @@ struct StorageWindowContent: View {
                 action: { Task { await store.fetchStorage() } }
             )
             .frame(width: 660, height: 360)
+        }
+    }
+}
+
+/// Content for the Network window — loads data on appear and includes outside-click close.
+struct NetWindowContent: View {
+    @EnvironmentObject private var net: NetControl
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        state
+            .background(CloseOnResignKey())
+            .task {
+                await net.refresh()
+            }
+    }
+
+    @ViewBuilder
+    private var state: some View {
+        // A failed refresh keeps the last report on screen, so only a window that
+        // has never read the state blanks out and offers a retry.
+        if net.report != nil {
+            NetView(net: net)
+        } else if let error = net.loadError {
+            PanelStateView(
+                kind: .error,
+                message: settings.text(error),
+                title: settings.t("networkUnavailable"),
+                actionTitle: settings.t("retry"),
+                action: { Task { await net.refresh() } }
+            )
+            .frame(width: 640, height: 360)
+        } else {
+            PanelStateView(kind: .loading, message: settings.t("busyNetwork"))
+                .frame(width: 640, height: 360)
         }
     }
 }

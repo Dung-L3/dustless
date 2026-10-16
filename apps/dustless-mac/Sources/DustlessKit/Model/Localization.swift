@@ -230,6 +230,15 @@ public enum L10n {
         "searchFindings": "Lọc kết quả theo rule hoặc đường dẫn",
         "noMatches": "Không khớp kết quả nào",
 
+        // native app — panel filters
+        "searchProcesses": "Lọc tiến trình theo tên, bundle hoặc PID",
+        "searchApps": "Lọc ứng dụng theo tên, bundleId hoặc đường dẫn",
+        "searchFiles": "Lọc tệp theo tên hoặc đường dẫn",
+        "clearFilter": "Xóa bộ lọc",
+        "filterAll": "Tất cả",
+        "filterCategory": "Lọc theo loại",
+        "filterShowing": "{shown} / {total}",
+
         // native app — memory view
         "memory": "Bộ nhớ",
         "memoryPressure": "Áp lực bộ nhớ",
@@ -313,6 +322,36 @@ public enum L10n {
         "awdlRemove": "Gỡ quyền",
         "awdlInstallFailed": "Không cài được quyền bật/tắt.",
         "awdlNeedsPrivilege": "Thao tác này cần quyền bật/tắt cài một lần.",
+
+        // native app — network panel
+        "networkTitle": "Mạng",
+        "networkState": "Kết nối",
+        "networkInterface": "Giao diện mạng",
+        "networkGateway": "Cổng nối",
+        "networkDns": "Máy chủ DNS",
+        "networkSoloRoute": "Đường mạng duy nhất",
+        "networkOps": "Thao tác mạng",
+        "networkSearchPrompt": "Lọc thao tác theo tên hoặc mã",
+        "networkFilterAll": "Tất cả",
+        "networkFilterSafe": "An toàn",
+        "networkFilterAdvanced": "Nâng cao",
+        "networkNeedsAdmin": "Cần quyền admin",
+        "networkNote": "Thao tác nâng cao thay đổi trạng thái mạng đang chạy và hỏi mật khẩu quản trị một lần cho mỗi lần chạy. Không có gì được áp dụng nếu bạn không bấm Chạy.",
+        "networkRun": "Chạy",
+        "networkRunning": "Đang chạy…",
+        "networkRunNamed": "Chạy {name}",
+        "networkUnavailable": "Không đọc được trạng thái mạng",
+        "busyNetwork": "Đang đọc trạng thái mạng…",
+        "networkOpFlushDns": "Xóa cache DNS",
+        "networkOpFlushDnsHelp": "Xóa các câu trả lời DNS đã cache.",
+        "networkOpResetDns": "Đặt lại máy chủ DNS",
+        "networkOpResetDnsHelp": "Bỏ các máy chủ DNS tự đặt, trở lại máy chủ do DHCP cấp.",
+        "networkOpRenewDhcp": "Làm mới thuê bao DHCP",
+        "networkOpRenewDhcpHelp": "Xin một địa chỉ IP mới; sửa địa chỉ đã cũ.",
+        "networkOpClearArp": "Xóa bảng ARP",
+        "networkOpClearArpHelp": "Xóa các ánh xạ IP sang MAC đã cũ.",
+        "networkOpResetMtu": "Đặt lại MTU",
+        "networkOpResetMtuHelp": "Đưa MTU của giao diện về 1500.",
     ]
 
     static let en: [String: String] = [
@@ -474,6 +513,15 @@ public enum L10n {
         "searchFindings": "Filter findings by rule or path",
         "noMatches": "No matches",
 
+        // native app — panel filters
+        "searchProcesses": "Filter processes by name, bundle or pid",
+        "searchApps": "Filter apps by name, bundleId or path",
+        "searchFiles": "Filter files by name or path",
+        "clearFilter": "Clear filter",
+        "filterAll": "All",
+        "filterCategory": "Filter by category",
+        "filterShowing": "{shown} of {total}",
+
         // native app — memory view
         "memory": "Memory",
         "memoryPressure": "Memory Pressure",
@@ -557,6 +605,36 @@ public enum L10n {
         "awdlRemove": "Remove permission",
         "awdlInstallFailed": "Could not install the toggle permission.",
         "awdlNeedsPrivilege": "This needs the one-time toggle permission.",
+
+        // native app — network panel
+        "networkTitle": "Network",
+        "networkState": "Connection",
+        "networkInterface": "Interface",
+        "networkGateway": "Gateway",
+        "networkDns": "DNS servers",
+        "networkSoloRoute": "Only route to the network",
+        "networkOps": "Network operations",
+        "networkSearchPrompt": "Filter operations by name or id",
+        "networkFilterAll": "All",
+        "networkFilterSafe": "Safe",
+        "networkFilterAdvanced": "Advanced",
+        "networkNeedsAdmin": "Needs admin",
+        "networkNote": "Advanced operations change live network state and ask for your admin password once per run. Nothing is applied unless you press Run.",
+        "networkRun": "Run",
+        "networkRunning": "Running…",
+        "networkRunNamed": "Run {name}",
+        "networkUnavailable": "Network state unavailable",
+        "busyNetwork": "Reading network state…",
+        "networkOpFlushDns": "Flush DNS cache",
+        "networkOpFlushDnsHelp": "Clears stale cached DNS answers.",
+        "networkOpResetDns": "Reset DNS servers",
+        "networkOpResetDnsHelp": "Drops manually-set DNS servers and restores the DHCP ones.",
+        "networkOpRenewDhcp": "Renew the DHCP lease",
+        "networkOpRenewDhcpHelp": "Requests a fresh IP lease; fixes stale addresses.",
+        "networkOpClearArp": "Clear the ARP cache",
+        "networkOpClearArpHelp": "Removes stale neighbour (IP-to-MAC) mappings.",
+        "networkOpResetMtu": "Reset the MTU",
+        "networkOpResetMtuHelp": "Sets the interface MTU back to 1500.",
     ]
 
     static let zh: [String: String] = [
@@ -718,6 +796,15 @@ public enum L10n {
         "searchFindings": "按规则或路径筛选结果",
         "noMatches": "无匹配结果",
 
+        // native app — panel filters
+        "searchProcesses": "按名称、bundle 或 PID 筛选进程",
+        "searchApps": "按名称、bundleId 或路径筛选应用",
+        "searchFiles": "按名称或路径筛选文件",
+        "clearFilter": "清除筛选",
+        "filterAll": "全部",
+        "filterCategory": "按类别筛选",
+        "filterShowing": "{shown} / {total}",
+
         // native app — memory view
         "memory": "内存",
         "memoryPressure": "内存压力",
@@ -801,5 +888,35 @@ public enum L10n {
         "awdlRemove": "移除权限",
         "awdlInstallFailed": "无法安装切换权限。",
         "awdlNeedsPrivilege": "此操作需要一次性的切换权限。",
+
+        // native app — network panel
+        "networkTitle": "网络",
+        "networkState": "连接",
+        "networkInterface": "网络接口",
+        "networkGateway": "网关",
+        "networkDns": "DNS 服务器",
+        "networkSoloRoute": "唯一的网络路径",
+        "networkOps": "网络操作",
+        "networkSearchPrompt": "按名称或标识筛选操作",
+        "networkFilterAll": "全部",
+        "networkFilterSafe": "安全",
+        "networkFilterAdvanced": "高级",
+        "networkNeedsAdmin": "需要管理员",
+        "networkNote": "高级操作会修改当前的网络状态，每次运行都会要求一次管理员密码。除非你点击运行，否则不会应用任何改动。",
+        "networkRun": "运行",
+        "networkRunning": "正在运行…",
+        "networkRunNamed": "运行 {name}",
+        "networkUnavailable": "无法读取网络状态",
+        "busyNetwork": "正在读取网络状态…",
+        "networkOpFlushDns": "清除 DNS 缓存",
+        "networkOpFlushDnsHelp": "清除过期的 DNS 缓存结果。",
+        "networkOpResetDns": "重置 DNS 服务器",
+        "networkOpResetDnsHelp": "取消手动设置的 DNS 服务器，恢复 DHCP 提供的服务器。",
+        "networkOpRenewDhcp": "续租 DHCP 地址",
+        "networkOpRenewDhcpHelp": "重新申请 IP 租约，修复过期地址。",
+        "networkOpClearArp": "清除 ARP 缓存",
+        "networkOpClearArpHelp": "清除过期的邻居（IP 到 MAC）映射。",
+        "networkOpResetMtu": "重置 MTU",
+        "networkOpResetMtuHelp": "将接口 MTU 恢复为 1500。",
     ]
 }

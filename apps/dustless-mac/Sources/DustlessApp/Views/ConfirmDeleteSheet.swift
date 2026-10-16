@@ -186,6 +186,8 @@ struct ApplyResultSheet: View {
             .padding(16)
         }
         .frame(minWidth: 620, idealWidth: 720, minHeight: 440, idealHeight: 540)
+        // A sheet has no traffic lights, so Done owns both Return and Escape.
+        .onExitCommand { onDismiss() }
     }
 
     private func symbol(for status: ApplyStatus) -> String {

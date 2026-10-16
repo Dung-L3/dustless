@@ -111,6 +111,53 @@ public struct DustlessCLI: Sendable {
         try await decode(AwdlPrivilege.self, from: run(["awdl", "--print-privilege", "--json"]))
     }
 
+    /// The live network state, read without changing anything: with `--advanced`
+    /// and no named operation `selectOps()` returns an empty list, so the engine
+    /// inspects and runs nothing. Without `--advanced` a bare `net` flushes the
+    /// DNS cache, which is not what a state read should do.
+    public func net() async throws -> NetReport {
+        try await decode(NetReport.self, from: run(["net", "--advanced", "--json"]))
+    }
+
+    /// Runs exactly one network operation and decodes its report.
+    ///
+    /// Advanced operations need root and the engine refuses without it, so they
+    /// run through one admin prompt: scoped to this single command, per run, with
+    /// nothing left behind in /etc/sudoers.d when it is over. A safe operation
+    /// runs directly, so the app never asks for a password it does not need.
+    public func runNetOp(_ id: String, force: Bool) async throws -> NetReport {
+        guard let op = NetOp(rawValue: id) else {
+            throw DustlessError.unreadableOutput("unknown network operation \"\(id)\"")
+        }
+        let arguments = ["net", op.flag, "--json"] + (force ? ["--force"] : [])
+        let result = op.isAdvanced ? try await runAsRoot(arguments) : try await run(arguments)
+        return try decode(NetReport.self, from: result)
+    }
+
+    /// Runs the engine as root through the standard macOS admin prompt.
+    ///
+    /// `|| true` is deliberate: the engine prints its whole report and *then*
+    /// exits 1 whenever an outcome failed or was refused, and osascript turns a
+    /// non-zero exit into an error that throws that report away. The report is
+    /// the answer, so keep it — a run that prints no JSON still fails in
+    /// `decode`, and a cancelled prompt fails there with osascript's own message.
+    private func runAsRoot(_ arguments: [String]) async throws -> RunResult {
+        let line = ([sh(executable.path)] + arguments).joined(separator: " ") + " || true"
+        let literal = line
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return try await run(
+            executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+            ["-e", "do shell script \"\(literal)\" with administrator privileges"]
+        )
+    }
+
+    /// Single-quote one value for /bin/sh. Values here are the resolved engine
+    /// path and our own flag names, never user input.
+    private func sh(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// The engine prints a full JSON report and *then* exits 1 whenever an
     /// outcome failed or was refused (`apply`, `ram --kill`, `apps --uninstall`,
     /// `largefiles --delete`), so a non-zero status is not by itself a failure:
@@ -121,7 +168,11 @@ public struct DustlessCLI: Sendable {
             return try JSONDecoder().decode(type, from: result.data)
         } catch {
             if result.status == 0 {
-                throw DustlessError.unreadableOutput(String(describing: error))
+                // A zero exit with no readable JSON usually means the shell said
+                // why on stderr (a missing tool, a denied prompt); prefer that
+                // sentence over a decoding error nobody can act on.
+                let reason = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw DustlessError.unreadableOutput(reason.isEmpty ? String(describing: error) : reason)
             }
             if result.stderr.localizedCaseInsensitiveContains("not found") {
                 throw BinaryLocationError.notFound([executable])
@@ -137,6 +188,13 @@ public struct DustlessCLI: Sendable {
     }
 
     private func run(_ arguments: [String]) async throws -> RunResult {
+        try await run(executable: executable, arguments)
+    }
+
+    /// One process launch: the pipes, the deadline and the exit status are the
+    /// same whether the engine runs as this user or as root under osascript, so
+    /// both paths share this instead of growing a second copy.
+    private func run(executable tool: URL, _ arguments: [String]) async throws -> RunResult {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<RunResult, Error>) in
             let running = RunningProcess()
             let out = LockedBox(Data())
@@ -149,7 +207,7 @@ public struct DustlessCLI: Sendable {
 
             queue.async {
                 let process = Process()
-                process.executableURL = executable
+                process.executableURL = tool
                 process.arguments = arguments
                 let outPipe = Pipe()
                 let errPipe = Pipe()

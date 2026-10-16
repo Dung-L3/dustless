@@ -96,6 +96,30 @@ public struct ProcessGroup: Identifiable, Sendable {
     }
 }
 
+extension ProcessGroup {
+    /// Whether this group answers a search box: the application it belongs to,
+    /// its bundle path, or any process inside it. Someone typing "Renderer" is
+    /// looking for a process, not for an application name — hiding that group
+    /// would hide the twelve helpers that make the app heavy.
+    ///
+    /// The needle must already be trimmed and lowercased; an empty needle
+    /// matches everything, which is what "no filter" means.
+    public func matches(_ needle: String) -> Bool {
+        guard !needle.isEmpty else { return true }
+        if label.lowercased().contains(needle) { return true }
+        if let bundlePath, bundlePath.lowercased().contains(needle) { return true }
+        return processes.contains {
+            $0.name.lowercased().contains(needle) || "\($0.pid)" == needle
+        }
+    }
+
+    /// A group belongs to a category when any of its processes does, so
+    /// "Browser" still shows the app whose renderer is the big one.
+    public func contains(category: Category) -> Bool {
+        processes.contains { $0.category == category }
+    }
+}
+
 extension [ProcessInfo] {
     /// Group processes by the application that owns them, biggest group first.
     ///

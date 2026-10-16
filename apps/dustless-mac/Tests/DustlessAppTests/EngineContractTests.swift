@@ -234,6 +234,76 @@ struct AppsModelTests {
     }
 }
 
+/// The panel filters. The rule is that the haystack is whatever a person who
+/// knows the machine would actually type: a bundle id, a folder, a helper
+/// process name, or a pid.
+@Suite("panel filters")
+struct PanelFilterTests {
+    private func installedApp(name: String, bundleId: String, path: String) -> InstalledApp {
+        InstalledApp(bundleId: bundleId, name: name, path: path, bytes: 1, relatedPaths: [])
+    }
+
+    @Test func anAppIsFoundByNameBundleIdOrPath() {
+        let app = installedApp(
+            name: "Visual Studio Code",
+            bundleId: "com.microsoft.VSCode",
+            path: "/Applications/Visual Studio Code.app"
+        )
+        #expect(app.matches("visual studio"))
+        #expect(app.matches("microsoft.vscode"))
+        #expect(app.matches("/applications/"))
+        #expect(!app.matches("firefox"))
+    }
+
+    @Test func noNeedleMeansNoFilter() throws {
+        let app = installedApp(name: "Anything", bundleId: "x", path: "/x")
+        #expect(app.matches(""))
+        let files = try JSONDecoder().decode([LargeFile].self, from: fixture("largefiles.json"))
+        #expect(files.allSatisfy { $0.matches("") })
+        let group = try #require(try [process(command: "/usr/bin/x")].groupedByApp().first)
+        #expect(group.matches(""))
+        #expect(group.contains(category: .other))
+    }
+
+    @Test func aFileIsFoundByNameOrFolder() throws {
+        let files = try JSONDecoder().decode([LargeFile].self, from: fixture("largefiles.json"))
+        let file = try #require(files.first { $0.name == "screen recording.mov" })
+        #expect(file.matches("screen recording"))
+        #expect(file.matches((file.path as NSString).deletingLastPathComponent.lowercased()))
+        #expect(!file.matches("a name that is in no folder of this list"))
+    }
+
+    /// The case the grouped list gets wrong on its own: the thing that eats the
+    /// memory is a helper, not the application name the group is labelled with.
+    @Test func aGroupIsFoundByAHelperProcessNameToo() throws {
+        let renderer = "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Helpers/Brave Browser Helper (Renderer) --type=renderer"
+        let groups = try [process(command: renderer, mem: 900, pid: 4242)].groupedByApp()
+
+        let group = try #require(groups.first)
+        #expect(group.matches("brave browser"))
+        #expect(group.matches("brave browser.app"))
+        #expect(group.matches("(renderer)"))
+        #expect(group.matches("4242"))
+        // A pid is an exact identifier, not a fragment: 42 is not 4242.
+        #expect(!group.matches("42"))
+        #expect(!group.matches("safari"))
+    }
+
+    @Test func aGroupJoinsTheCategoryOfAnyProcessItOwns() throws {
+        let browser = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+        let groups = try [
+            process(command: browser, mem: 10, pid: 1),
+            process(command: "/usr/libexec/thingd", mem: 5, pid: 2),
+        ].groupedByApp()
+
+        #expect(groups.count == 2)
+        // Every fixture process is reported as `other`, which is the point: a
+        // category filter must not silently drop a group.
+        #expect(groups.allSatisfy { $0.contains(category: .other) })
+        #expect(groups.allSatisfy { !$0.contains(category: .browser) })
+    }
+}
+
 /// Avoid collision with Foundation.NSProcessInfo, as the Memory view does.
 private typealias MemProcess = DustlessKit.ProcessInfo
 
@@ -527,5 +597,80 @@ struct EngineProcessContractTests {
             }
             #expect(seconds == 1)
         }
+    }
+}
+
+/// The network panel decodes what `src/core/net/index.ts` prints. The status
+/// values are a wire contract: an unknown one must fail the decode rather than
+/// be guessed at, or a new engine status would silently render as nothing.
+@Suite("network model")
+struct NetModelTests {
+    @Test func decodesAReportWithAnOutcome() throws {
+        let report = try JSONDecoder().decode(NetReport.self, from: fixture("net.json"))
+        #expect(report.platform == "mac")
+        #expect(report.iface == "en0")
+        #expect(report.gateway == "192.168.1.1")
+        #expect(report.dns == ["1.1.1.1", "1.0.0.1", "8.8.8.8"])
+        #expect(report.soloRoute)
+        let outcome = try #require(report.outcome(for: "reset-dns"))
+        #expect(outcome.status == .ran)
+        #expect(outcome.before == "1.1.1.1, 1.0.0.1")
+        #expect(outcome.after == "DHCP-provided values")
+        #expect(outcome.needsAttention == false)
+    }
+
+    @Test func decodesAReadOnlyReportWithNoRoute() throws {
+        let report = try JSONDecoder().decode(NetReport.self, from: Data(#"""
+        {"platform":"linux","iface":null,"gateway":null,"dns":[],"soloRoute":false,"outcomes":[]}
+        """#.utf8))
+        #expect(report.iface == nil)
+        #expect(report.gateway == nil)
+        #expect(report.outcomes.isEmpty)
+        #expect(report.outcome(for: "flush-dns") == nil)
+    }
+
+    @Test func notApplicableKeepsItsHyphenatedWireValue() throws {
+        let report = try JSONDecoder().decode(NetReport.self, from: Data(#"""
+        {"platform":"mac","iface":"en0","gateway":"1.1.1.1","dns":[],"soloRoute":true,"outcomes":[{"op":"flush-routing","status":"not-applicable","detail":"no route cache"}]}
+        """#.utf8))
+        #expect(report.outcomes.first?.status == .notApplicable)
+    }
+
+    @Test func aRefusalIsNotAFailure() throws {
+        let report = try JSONDecoder().decode(NetReport.self, from: Data(#"""
+        {"platform":"mac","iface":"en0","gateway":"1.1.1.1","dns":[],"soloRoute":true,"outcomes":[{"op":"renew-dhcp","status":"refused","detail":"needs root"}]}
+        """#.utf8))
+        #expect(report.outcomes.first?.needsAttention == true)
+    }
+
+    @Test func anUnknownStatusThrowsRatherThanGuessing() {
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode(NetReport.self, from: Data(#"""
+            {"platform":"mac","iface":null,"gateway":null,"dns":[],"soloRoute":true,"outcomes":[{"op":"x","status":"maybe","detail":""}]}
+            """#.utf8))
+        }
+    }
+
+    /// The panel prints `settings.t(op.labelKey)` and `op.helpKey`; a key missing
+    /// from a table would render as the raw key, so this pins all three.
+    @Test func everyOfferedOperationIsTranslatedInEveryLanguage() {
+        for op in NetOp.allCases {
+            for lang in Lang.allCases {
+                let table = L10n.table(lang)
+                #expect(table[op.labelKey] != nil, "\(lang)/\(op.labelKey)")
+                #expect(table[op.helpKey] != nil, "\(lang)/\(op.helpKey)")
+            }
+        }
+    }
+
+    @Test func theOfferedSetMatchesTheEngine() {
+        // flush-routing is macOS-refused by design, so the app must not offer it.
+        #expect(NetOp(rawValue: "flush-routing") == nil)
+        #expect(NetOp.allCases.count == 5)
+        #expect(NetOp.flushDns.isAdvanced == false)
+        #expect(NetOp.allCases.filter(\.isAdvanced).count == NetOp.allCases.count - 1)
+        // The flag is the operation id with the CLI's prefix.
+        #expect(NetOp.resetDns.flag == "--reset-dns")
+        #expect(NetOp.renewDhcp.flag == "--renew-dhcp")
     }
 }

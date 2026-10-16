@@ -14,6 +14,11 @@ final class AwdlControl: ObservableObject {
     /// the menu can show installed/not-installed without spawning the engine.
     static let privilegePath = "/etc/sudoers.d/dustless-awdl"
 
+    /// One control for the whole app: the menu bar, Settings and the Network
+    /// panel all read and write the same live state, so a permission installed
+    /// from any of them is not invisible to the others.
+    static let shared = AwdlControl()
+
     @Published private(set) var state: AwdlState?
     @Published private(set) var privilegeInstalled = false
     @Published private(set) var busy = false
