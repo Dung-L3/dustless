@@ -20,7 +20,10 @@ async function inspectMac(run: Runner): Promise<NetInfo> {
   const iface = firstMatch(route.out, /^\s*interface:\s*(\S+)/m);
   const gateway = firstMatch(route.out, /^\s*gateway:\s*(\S+)/m);
   const dnsRes = await run("scutil", ["--dns"]);
-  const dns = allMatches(dnsRes.out, /^\s*nameserver\[\d+\]\s*:\s*(\S+)/gm);
+  // `scutil --dns` prints one block per resolver, and a resolver with several
+  // search domains repeats the same nameservers; the user has a list of servers,
+  // not a list of query scopes, so collapse the duplicates and keep the order.
+  const dns = [...new Set(allMatches(dnsRes.out, /^\s*nameserver\[\d+\]\s*:\s*(\S+)/gm))];
   const ports = await run("networksetup", ["-listallhardwareports"]);
   const service = serviceFor(ports.out, iface);
   const routes = await run("netstat", ["-rn", "-f", "inet"]);

@@ -288,6 +288,16 @@ describe("dry-run", () => {
 });
 
 describe("stub provenance", () => {
+  test("a nameserver repeated across resolvers is listed once", async () => {
+    const { run } = stub("mac", {
+      "scutil --dns": {
+        out: "resolver #1\n  nameserver[0] : 1.1.1.1\n  nameserver[1] : 1.0.0.1\nresolver #2\n  nameserver[0] : 1.1.1.1\n",
+      },
+    });
+    const report = await net({ ops: [], platform: "mac", run });
+    expect(report.dns).toEqual(["1.1.1.1", "1.0.0.1"]);
+  });
+
   test("the report is built from the stub, not the real system", async () => {
     const { run } = stub("mac", {
       "route -n get default": { out: "gateway: 10.0.0.1\ninterface: en7\n" },
