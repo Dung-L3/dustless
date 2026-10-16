@@ -19,20 +19,30 @@ enum StorageSection: String, Identifiable {
 /// update — SwiftUI then tried to present one sheet while dismissing another and
 /// the window locked up. One binding means there is never a cross-sheet
 /// transition: the content swaps in place instead.
+///
+/// Only the confirmations are here. A result needs no decision, so it is drawn
+/// inline by `StorageResultCard` instead of taking over the window.
 enum StorageSheet: Identifiable {
     case confirmApp(InstalledApp)
-    case appResult(UninstallReport)
     case confirmFile(LargeFile)
-    case fileResult(UninstallReport)
 
     var id: String {
         switch self {
         case .confirmApp(let app): "app-confirm:\(app.id)"
-        case .appResult(let report): "app-result:\(report.id)"
         case .confirmFile(let file): "file-confirm:\(file.id)"
-        case .fileResult(let report): "file-result:\(report.id)"
         }
     }
+}
+
+/// The report of the last finished action, plus the wording its title needs.
+/// "Uninstalled" reads wrong for a file that was only moved to the Trash, so the
+/// key is stored and resolved at render time rather than baking one language into
+/// state that outlives a switch.
+struct StorageResult: Identifiable {
+    let report: UninstallReport
+    let titleKey: String
+
+    var id: String { report.id }
 }
 
 struct StorageView: View {
@@ -47,10 +57,13 @@ struct StorageView: View {
     @State private var appsError: String?
     @State private var appsQuery = ""
     @State private var sheet: StorageSheet?
-    /// The dialog to show once the current sheet is fully gone, then the alert to
-    /// show after that. Presenting while dismissing is what locked this panel up,
-    /// so a result or an error never races the confirmation it replaces.
-    @State private var nextSheet: StorageSheet?
+    /// What the last uninstall or trash removed, drawn inline above the list.
+    /// No modal result: the confirmation is the only thing that ever takes the
+    /// window over, because it is the only one that asks for a decision.
+    @State private var result: StorageResult?
+    /// The alert to show once the current sheet is fully gone. An alert cannot
+    /// present on top of a sheet, so an error waits for the dismissal instead of
+    /// racing it.
     @State private var nextAlert: (title: String, message: String)?
     @State private var isUninstalling = false
     @State private var largeFiles: [LargeFile] = []
@@ -136,32 +149,33 @@ struct StorageView: View {
                 onCancel: { sheet = nil },
                 onConfirm: { Task { await performUninstall(app) } }
             )
-        case .appResult(let report):
-            UninstallResultSheet(
-                report: report,
-                title: settings.t("appsUninstalled"),
-                onDismiss: { sheet = nil }
-            )
         case .confirmFile(let file):
             LargeFileTrashSheet(
                 file: file,
                 onCancel: { sheet = nil },
                 onConfirm: { Task { await performTrash(file) } }
             )
-        case .fileResult(let report):
-            UninstallResultSheet(
-                report: report,
-                title: settings.t("largeFilesTrashed"),
-                onDismiss: { sheet = nil }
-            )
         }
     }
 
     @ViewBuilder
     private var inventorySection: some View {
-        switch section {
-        case .apps: applicationsSection
-        case .files: largeFilesSection
+        VStack(alignment: .leading, spacing: 10) {
+            // Above the list, not over it: after the action the user should still
+            // be able to read what is left.
+            if let result {
+                StorageResultCard(
+                    report: result.report,
+                    title: settings.t(result.titleKey),
+                    onClose: { self.result = nil }
+                )
+                .frame(maxHeight: 200)
+            }
+
+            switch section {
+            case .apps: applicationsSection
+            case .files: largeFilesSection
+            }
         }
     }
 
@@ -428,9 +442,9 @@ struct StorageView: View {
         do {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.uninstallApp(path: app.path)
-            // The result replaces the confirmation through `presentNext`, once
-            // the confirmation is really gone.
-            nextSheet = .appResult(report)
+            // A state write, not a presentation: the report appears in the window
+            // without waiting for the confirmation to finish dismissing.
+            result = StorageResult(report: report, titleKey: "appsUninstalled")
             sheet = nil
             await loadApps()
         } catch {
@@ -456,7 +470,7 @@ struct StorageView: View {
         do {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.deleteLargeFile(path: file.path)
-            nextSheet = .fileResult(report)
+            result = StorageResult(report: report, titleKey: "largeFilesTrashed")
             sheet = nil
             largeFiles.removeAll { $0.path == file.path }
             // The report is on screen already; re-reading the walk is not worth
@@ -480,22 +494,17 @@ struct StorageView: View {
         }
     }
 
-    /// Presents whatever an action queued, but only after the sheet it replaced
-    /// has finished dismissing.
+    /// Raises whatever error an action queued, but only after the confirmation
+    /// sheet it came from has finished dismissing.
     private func presentNext() {
-        guard nextSheet != nil || nextAlert != nil else { return }
+        guard let alert = nextAlert else { return }
         Task { @MainActor in
             // A beat for the dismissal animation to settle; without it SwiftUI
             // can be asked to present while it is still dismissing.
             try? await Task.sleep(nanoseconds: 260_000_000)
-            if let next = nextSheet {
-                nextSheet = nil
-                sheet = next
-            } else if let alert = nextAlert {
-                nextAlert = nil
-                actionErrorTitle = alert.title
-                actionError = alert.message
-            }
+            nextAlert = nil
+            actionErrorTitle = alert.title
+            actionError = alert.message
         }
     }
 }
@@ -847,80 +856,99 @@ struct AppUninstallRow: View {
     }
 }
 
-struct UninstallResultSheet: View {
+/// The outcome of an uninstall or a trash, drawn inline in the inventory.
+///
+/// This was a modal result sheet ending in Done, which asked for a second
+/// acknowledgement nobody needed: the action had already finished and the list
+/// behind it shows what is left. A card says the same thing without blocking,
+/// and its corner × is a card affordance rather than a page exit — nothing is
+/// waiting behind it.
+struct StorageResultCard: View {
     let report: UninstallReport
     /// "Uninstalled" reads wrong for a file that was only moved to the Trash.
     let title: String
-    let onDismiss: () -> Void
+    let onClose: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+
+            // Bounded: one app can report dozens of leftover paths, and a report
+            // that grows the window is worse than a report you scroll.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(report.outcomes) { outcome in
+                        outcomeRow(outcome)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .panelCard(PanelStyle.rowFill)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                 Text(settings.t("appsResultSummary", [
                     "freed": ByteFormat.string(report.summary.totalBytes),
                     "count": "\(report.outcomes.count)",
                 ]))
-                .font(.system(size: 11.5))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
 
-            Divider()
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(settings.t("close"))
+            .accessibilityLabel(settings.t("close"))
+        }
+    }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(report.outcomes) { outcome in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: symbol(for: outcome.status))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(tint(for: outcome.status))
-                                .frame(width: 14)
-                                .help(settings.t("outcomeStatus", ["status": settings.t(statusKey(for: outcome.status))]))
-                                .accessibilityLabel(settings.t("outcomeStatus", ["status": settings.t(statusKey(for: outcome.status))]))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(outcome.path)
-                                    .font(.system(size: 11.5, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .lineLimit(nil)
-                                    .multilineTextAlignment(.leading)
-                                if !outcome.detail.isEmpty {
-                                    Text(outcome.detail)
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(.tertiary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .lineLimit(nil)
-                                }
-                            }
-                            Spacer(minLength: 10)
-                            Text(ByteFormat.string(outcome.bytes))
-                                .font(.system(size: 11.5, design: .rounded).monospacedDigit())
-                                .frame(width: 66, alignment: .trailing)
-                        }
-                        .padding(.vertical, 7)
-                        .padding(.horizontal, 14)
-                        .pathContextMenu(outcome.path)
-                        Divider().opacity(0.4)
-                    }
+    private func outcomeRow(_ outcome: UninstallOutcome) -> some View {
+        // One lookup, not one per line: the glyph and its spoken label must agree.
+        let status = settings.t(statusKey(for: outcome.status))
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol(for: outcome.status))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(tint(for: outcome.status))
+                .frame(width: 14)
+                .help(settings.t("outcomeStatus", ["status": status]))
+                .accessibilityLabel(settings.t("outcomeStatus", ["status": status]))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(outcome.path)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+                if !outcome.detail.isEmpty {
+                    Text(outcome.detail)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(nil)
                 }
             }
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button(settings.t("done"), action: onDismiss)
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding(16)
+            Spacer(minLength: 10)
+            Text(ByteFormat.string(outcome.bytes))
+                .font(.system(size: 11.5, design: .rounded).monospacedDigit())
+                .frame(width: 66, alignment: .trailing)
         }
-        .frame(minWidth: 620, idealWidth: 720, minHeight: 440, idealHeight: 540)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 2)
+        .pathContextMenu(outcome.path)
     }
 
     private func symbol(for status: UninstallOutcome.Status) -> String {
@@ -941,7 +969,7 @@ struct UninstallResultSheet: View {
         }
     }
 
-    /// Reuses the shared cleanup vocabulary so both result sheets read alike.
+    /// Reuses the shared cleanup vocabulary, so this reads like the rest of the panel.
     private func statusKey(for status: UninstallOutcome.Status) -> String {
         switch status {
         case .trashed: "deleted"
