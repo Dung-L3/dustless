@@ -8,6 +8,7 @@ import {
   BUILD_ONE,
   BUILD_THREE,
   BUILD_TWO,
+  buildReport,
   EMPTY_REPORT,
   GREEN_RULE,
   MIXED_REPORT,
@@ -15,6 +16,7 @@ import {
   RED_HOME,
   RED_REPORT,
   RULES,
+  SEEDS,
   SPACE,
   YELLOW_RULE,
 } from "./fixture.ts";
@@ -46,15 +48,19 @@ const APPLY_OK = {
 
 let mode: "mixed" | "empty" | "red" | "error" = "mixed";
 let report = MIXED_REPORT;
+let afterApply: typeof MIXED_REPORT | null = null;
+let applyFails = false;
 
 const stub = installDom(HTML, (path) => {
   if (path === "/api/scan") {
     if (mode === "error") return { status: 500, body: { error: "scan exploded" } };
-    return { status: 200, body: report };
+    return { status: 200, body: afterApply ?? report };
   }
   if (path === "/api/rules") return { status: 200, body: RULES };
   if (path === "/api/space") return { status: 200, body: SPACE };
-  if (path === "/api/apply") return { status: 200, body: APPLY_OK };
+  if (path === "/api/apply") {
+    return applyFails ? { status: 500, body: { error: "apply exploded" } } : { status: 200, body: APPLY_OK };
+  }
   return { status: 404, body: { error: `no route for ${path}` } };
 });
 
@@ -80,6 +86,8 @@ const scanFinished = () => stub.byId("scanState").hidden;
 beforeEach(async () => {
   mode = "mixed";
   report = MIXED_REPORT;
+  afterApply = null;
+  applyFails = false;
   stub.click(stub.byId('langs').querySelector('[data-lang="en"]') as El);
   stub.click(stub.byId("scanBtn"));
   await waitFor(scanFinished, "the stubbed scan to settle");
@@ -261,13 +269,16 @@ describe("the apply payload", () => {
 
   test("apply deletes a whole rule, so the payload never covers an unchosen finding", async () => {
     stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    // Snapshot what the user saw chosen before the apply: the payload must agree
+    // with it, and must never cover a finding the user left unchosen.
+    const chosenBefore = new Map(
+      MIXED_REPORT.findings.map((finding) => [finding.path, rowFor(finding.ruleId, finding.path)?.dataset.chosen]),
+    );
     const tiers = await postApply();
     expect(Object.entries(tiers).filter(([, tier]) => tier !== "skip")).toEqual([[GREEN_RULE, "green"]]);
-    // Every non-locked finding under a rule we asked to delete must read as chosen.
     for (const finding of MIXED_REPORT.findings.filter((f) => !f.blocked)) {
       const asked = tiers[finding.ruleId] !== "skip";
-      const row = rowFor(finding.ruleId, finding.path);
-      expect({ path: finding.path, asked, chosen: row?.dataset.chosen }).toEqual({
+      expect({ path: finding.path, asked, chosen: chosenBefore.get(finding.path) }).toEqual({
         path: finding.path,
         asked,
         chosen: String(asked),
@@ -335,5 +346,116 @@ describe("language switching", () => {
     expect(stub.byId("themeBtn").getAttribute("aria-label")).toBe(STRINGS["vi"]?.["theme"] ?? "");
     stub.click(stub.byId('langs').querySelector('[data-lang="zh"]') as El);
     expect(stub.byId("themeBtn").getAttribute("title")).toBe(STRINGS["zh"]?.["theme"] ?? "");
+  });
+});
+
+describe("apply refreshes the stale report", () => {
+  const applyNow = async (): Promise<void> => {
+    stub.click(stub.byId("cleanBtn"));
+    const dialog = stub.byId("confirm");
+    dialog.returnValue = "confirm";
+    dialog.close();
+    await waitFor(() => !stub.byId("result").hidden, "the apply result");
+  };
+
+  test("after a successful apply the selection is empty and the CTA is disabled", async () => {
+    stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    expect(stub.byId("cleanBtn").disabled).toBe(false);
+    afterApply = buildReport(SEEDS.filter((seed) => seed.ruleId !== GREEN_RULE));
+    await applyNow();
+    await waitFor(() => rowFor(GREEN_RULE, NPM_CACHE) === undefined, "the deleted rows to clear");
+    // The result panel stays up, but the report behind it is the post-apply one.
+    expect(stub.byId("result").hidden).toBe(false);
+    expect(stub.byId("cleanBtn").disabled).toBe(true);
+    expect(stub.byId("selectStat").textContent).toBe(t("selectedOf", { selected: 0, found: afterApply.findings.length }));
+    expect(heroBytes()).toBe(0);
+  });
+
+  test("the deleted findings and their groups are gone from every tab", async () => {
+    stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    afterApply = buildReport(SEEDS.filter((seed) => seed.ruleId !== GREEN_RULE));
+    await applyNow();
+    await waitFor(() => rowFor(GREEN_RULE, NPM_CACHE) === undefined, "the deleted rows to clear");
+    expect(rows().some((row) => row.dataset.decision?.startsWith(`${GREEN_RULE} :: `))).toBe(false);
+    expect(allGroups().some((group) => group.querySelector(".group__head")?.getAttribute("data-rule") === GREEN_RULE)).toBe(false);
+  });
+
+  test("a failed apply is announced as a delete failure, not a scan failure", async () => {
+    stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    applyFails = true;
+    stub.click(stub.byId("cleanBtn"));
+    const dialog = stub.byId("confirm");
+    dialog.returnValue = "confirm";
+    dialog.close();
+    await waitFor(() => stub.byId("toast").textContent.includes(t("applyErrorTitle")), "the apply error toast");
+    const toast = stub.byId("toast").textContent;
+    expect(toast).not.toContain(t("errorTitle"));
+  });
+});
+
+describe("language switching reformats the reclaimable figure", () => {
+  test("the hero re-formats with the new locale's separators", async () => {
+    report = buildReport([
+      { ruleId: GREEN_RULE, tier: "green", desc: "big cache", path: NPM_CACHE, bytes: 1000 * 1024 * 1024, ageDays: 40 },
+    ]);
+    stub.click(stub.byId("scanBtn"));
+    await waitFor(scanFinished, "the big scan");
+    stub.click(checkboxFor(rowFor(GREEN_RULE, NPM_CACHE) as El) as El);
+    const en = stub.byId("reclaimValue").textContent;
+    stub.click(stub.byId('langs').querySelector('[data-lang="vi"]') as El);
+    const vi = stub.byId("reclaimValue").textContent;
+    expect(en).toBe("1,000");
+    expect(vi).toBe("1.000");
+  });
+});
+
+describe("the disk meter names what it draws", () => {
+  test("the meter's label is used space, matching the bar and the percent", () => {
+    const percent = stub.byId("usedPercent").textContent;
+    expect(percent).not.toBe("—");
+    expect(stub.byId("diskMeter").getAttribute("aria-label")).toBe(`${t("freeMeter")}: ${percent}`);
+  });
+});
+
+describe("group controls and decision boxes name themselves", () => {
+  test("each group toggle includes its own name, so the buttons differ", () => {
+    const heads = allGroups().map((group) => group.querySelector(".group__head") as El);
+    const names = heads.map((head) => stub.accessibleName(head));
+    expect(names.length).toBe(3);
+    for (const head of heads) {
+      const own = (head.querySelector(".group__name") as El).textContent;
+      expect(stub.accessibleName(head)).toContain(own);
+    }
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  test("each decision checkbox names its own finding path", () => {
+    const named = rows().flatMap((row) => {
+      const input = checkboxFor(row);
+      const path = row.dataset.decision?.split(" :: ")[1] ?? "";
+      return input ? [{ path, name: stub.accessibleName(input) }] : [];
+    });
+    expect(named.length).toBeGreaterThan(1);
+    for (const { path, name } of named) expect(name).toContain(path);
+    expect(new Set(named.map((entry) => entry.name)).size).toBe(named.length);
+  });
+});
+
+describe("a re-render hands focus back to the control the user used", () => {
+  test("ticking a decision checkbox keeps focus on that same checkbox", () => {
+    stub.click(checkboxFor(rowFor(YELLOW_RULE, BUILD_ONE) as El) as El);
+    const active = stub.document.activeElement;
+    expect(active?.getAttribute("type")).toBe("checkbox");
+    expect(active?.dataset.key).toBe(`${YELLOW_RULE} :: ${BUILD_ONE}`);
+  });
+
+  test("toggling a group keeps focus on that group's head", () => {
+    const head = allGroups()
+      .find((group) => (group.querySelector(".group__head") as El).dataset.rule === YELLOW_RULE)
+      ?.querySelector(".group__head") as El;
+    stub.click(head);
+    const active = stub.document.activeElement;
+    expect(active?.classList.contains("group__head")).toBe(true);
+    expect(active?.dataset.rule).toBe(YELLOW_RULE);
   });
 });

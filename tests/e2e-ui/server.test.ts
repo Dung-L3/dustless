@@ -181,6 +181,19 @@ describe("apply is inert unless the payload says so", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(await box.fingerprint()).toBe(before);
   });
+
+  test("an origin that only looks like loopback is refused", async () => {
+    const before = await box.fingerprint();
+    for (const origin of ["http://127.0.0.1.evil.example.com", "http://127.evil.example.com"]) {
+      const res = await fetch(`${server.url}/api/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({ tiers: skipAll(report) }),
+      });
+      expect({ origin, status: res.status }).toEqual({ origin, status: 403 });
+    }
+    expect(await box.fingerprint()).toBe(before);
+  });
 });
 
 describe("a blocked finding survives even when the ui asks for its rule", () => {
