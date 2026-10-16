@@ -83,6 +83,12 @@ export const STRINGS = {
     confirmSelectedCount: "{n} mục được chọn",
     cleanSelected: "Dọn {amount}",
     selectedNone: "Chưa chọn mục nào",
+    applyErrorTitle: "Không xóa được",
+    skipToFindings: "Tới kết quả tìm được",
+    riskTabs: "Các tab mức an toàn",
+    risk: "Mức an toàn",
+    httpError: "Lỗi HTTP {status}",
+    decisionA11y: "Áp dụng cho toàn bộ nhóm: {path}",
   },
   en: {
     language: "Language",
@@ -162,6 +168,12 @@ export const STRINGS = {
     confirmSelectedCount: "{n} selected",
     cleanSelected: "Clean {amount}",
     selectedNone: "Nothing selected",
+    applyErrorTitle: "Delete failed",
+    skipToFindings: "Skip to findings",
+    riskTabs: "Risk tabs",
+    risk: "Risk",
+    httpError: "HTTP {status}",
+    decisionA11y: "Apply to whole group: {path}",
   },
   zh: {
     language: "语言",
@@ -241,6 +253,12 @@ export const STRINGS = {
     confirmSelectedCount: "{n} 项已选",
     cleanSelected: "清理 {amount}",
     selectedNone: "未选择任何项目",
+    applyErrorTitle: "删除失败",
+    skipToFindings: "跳到扫描结果",
+    riskTabs: "风险标签页",
+    risk: "风险",
+    httpError: "HTTP 错误 {status}",
+    decisionA11y: "适用于整个分组：{path}",
   },
 };
 
