@@ -31,6 +31,7 @@ const dom = {
   safeGroup: $("tabSafe")?.querySelector('[data-tab-group="safe"]'),
   reviewGroup: $("tabReview")?.querySelector('[data-tab-group="review"]'),
   lockedGroup: $("tabLocked")?.querySelector('[data-tab-group="locked"]'),
+  tiers: $("tiers"), tablist: $("tablist"),
 };
 
 const state = {
@@ -64,7 +65,7 @@ function readTheme() {
 async function api(path, options) {
   const response = await fetch(path, options);
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+  if (!response.ok) throw new Error(payload.error ?? t("httpError", { status: response.status }));
   return payload;
 }
 
@@ -137,6 +138,8 @@ function paintText() {
   dom.langs.setAttribute("aria-label", t("language"));
   dom.themeBtn.setAttribute("aria-label", t("theme"));
   dom.themeBtn.setAttribute("title", t("theme"));
+  dom.tiers.setAttribute("aria-label", t("riskTabs"));
+  dom.tablist.setAttribute("aria-label", t("risk"));
   for (const button of dom.langs.querySelectorAll("[data-lang]")) {
     button.setAttribute("aria-pressed", String(button.dataset.lang === state.lang));
   }
@@ -154,10 +157,13 @@ function paintTheme() {
 function paintMeter() {
   const { free, total } = state.space;
   if (!total) return;
-  dom.diskFill.style.setProperty("--used", String(Math.min(1, (total - free) / total)));
+  const used = Math.min(1, (total - free) / total);
+  const percent = `${number(state.lang, used * 100, 0)}%`;
+  dom.diskFill.style.setProperty("--used", String(used));
   dom.freeValue.textContent = size(state.lang, free);
-  dom.usedPercent.textContent = `${number(state.lang, ((total - free) / total) * 100, 0)}%`;
-  dom.diskMeter.setAttribute("aria-label", `${t("freeSpace")}: ${size(state.lang, free)}`);
+  dom.usedPercent.textContent = percent;
+  // The bar's width encodes *used* space, so the name must say used too.
+  dom.diskMeter.setAttribute("aria-label", `${t("freeMeter")}: ${percent}`);
 }
 
 function paintSummary() {
@@ -245,7 +251,11 @@ function renderDecision(finding) {
   const on = state.selected.has(key);
   return h("div", { class: "decision" },
     h("label", { class: "switch", role: "group", "aria-label": t("ruleWide") },
-      h("input", { type: "checkbox", checked: on, "data-key": key, onclick: () => toggleFinding(key) }),
+      h("input", {
+        type: "checkbox", checked: on, "data-key": key,
+        "aria-label": t("decisionA11y", { path: finding.path }),
+        onclick: () => toggleFinding(key),
+      }),
       h("span", { text: t(on ? "willDelete" : "kept") })));
 }
 
@@ -258,7 +268,8 @@ function renderGroup(group, index, tab, stagger) {
   },
     h("button", {
       type: "button", class: "group__head", "aria-expanded": String(open),
-      "aria-label": t(open ? "collapseGroup" : "expandGroup"),
+      "aria-label": `${t(open ? "collapseGroup" : "expandGroup")}: ${group.desc}`,
+      "data-rule": group.ruleId,
       onclick: () => toggleGroup(group.ruleId),
     },
       glyph(group.items[0]?.blocked ? "blocked" : group.tier, "group__glyph"),
@@ -317,10 +328,23 @@ function setTab(tab) {
   }
 }
 
+// `replaceChildren` discards the old nodes, which drops keyboard focus to
+// <body>. Hand focus back to the control the user just activated.
+function focusByKey(root, key) {
+  const control = [...root.querySelectorAll("input[data-key]")].find((el) => el.dataset.key === key);
+  if (control) control.focus();
+}
+
+function focusGroupHead(ruleId) {
+  const head = [...document.querySelectorAll(".group__head")].find((el) => el.dataset.rule === ruleId);
+  if (head) head.focus();
+}
+
 function toggleGroup(ruleId) {
   const current = state.openGroups.get(ruleId) ?? true;
   state.openGroups.set(ruleId, !current);
   renderAllTabs(false);
+  focusGroupHead(ruleId);
 }
 
 // `/api/apply` answers with one tier per rule and `apply()` deletes every
@@ -328,7 +352,7 @@ function toggleGroup(ruleId) {
 // item of a rule and the engine removes its siblings the user never chose.
 // Ticking therefore selects the whole rule — which is what the control's own
 // `ruleWide` label already promised.
-function toggleFinding(key) {
+function toggleFinding(key, where = "row") {
   const finding = byKey.get(key);
   if (!finding) return;
   const group = state.report?.findings.filter((f) => f.ruleId === finding.ruleId && !isLocked(f)) ?? [];
@@ -340,6 +364,7 @@ function toggleFinding(key) {
   paintSummary();
   renderAllTabs(false);
   renderConfirm();
+  focusByKey(where === "confirm" ? dom.confirmList : document, key);
 }
 
 function renderConfirm() {
@@ -349,7 +374,7 @@ function renderConfirm() {
     const key = findingKey(finding);
     const checked = state.selected.has(key);
     return h("label", { class: "sheet__item", data: { tier: finding.tier } },
-      h("input", { type: "checkbox", checked, "data-key": key, onclick: () => toggleFinding(key) }),
+      h("input", { type: "checkbox", checked, "data-key": key, onclick: () => toggleFinding(key, "confirm") }),
       h("span", { class: "sheet__path", title: finding.path }, h("bdi", { text: finding.path })),
       h("b", { text: size(state.lang, finding.bytes) }),
       h("span", { class: "sheet__provenance", text: provenance(finding) }));
@@ -371,6 +396,9 @@ function setLanguage(code) {
   state.lang = code;
   localStorage.setItem(LANG_KEY, code);
   t = createTranslator(code);
+  // The hero number is formatted per-locale; the byte count is unchanged, so
+  // invalidate the memo or it would keep the previous language's separators.
+  state.shownBytes = -1;
   paintText();
   paintStates();
   paintSummary();
@@ -420,6 +448,22 @@ async function runScan() {
   }
 }
 
+// After a successful delete the report on screen is stale: deleted rows keep
+// rendering and the hero keeps counting their bytes. Re-scan quietly, rebuild
+// every derived structure, and drop the selection so the CTA cannot re-apply
+// over paths that no longer exist. The caller keeps the result panel visible.
+async function refreshAfterApply() {
+  const fresh = await api("/api/scan").catch(() => null);
+  if (!fresh) return;
+  state.report = fresh;
+  byKey.clear();
+  for (const finding of fresh.findings) byKey.set(findingKey(finding), finding);
+  state.selected.clear();
+  state.openGroups.clear();
+  dom.platformValue.textContent = fresh.platform;
+  renderAllTabs(false);
+}
+
 async function runApply() {
   state.status = "working";
   paintStates();
@@ -443,10 +487,11 @@ async function runApply() {
     countUp(dom.freedValue, freed.value, (value) => number(state.lang, value, freed.digits), 2000);
     dom.freedUnit.textContent = freed.unit;
     paintMeter();
+    await refreshAfterApply();
     announce(t("resultTitle"));
   } catch (error) {
     state.status = "ready";
-    announce(`${t("errorTitle")}: ${error instanceof Error ? error.message : String(error)}`);
+    announce(`${t("applyErrorTitle")}: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     clearInterval(clock);
     paintStates();

@@ -125,7 +125,7 @@ function crossOrigin(req: IncomingMessage): string | null {
   if (!origin) return null;
   try {
     const url = new URL(origin);
-    if (url.hostname === "localhost" || /^127\./.test(url.hostname)) return null;
+    if (LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) return null;
     return origin;
   } catch {
     return origin;

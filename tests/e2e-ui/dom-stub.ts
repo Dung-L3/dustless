@@ -130,6 +130,7 @@ export class El {
   readonly #handlers = new Map<string, ((event: StubEvent) => void)[]>();
   parent: El | null = null;
   documentElement: El | null = null;
+  activeElement: El | null = null;
   hidden = false;
   disabled = false;
   open = false;
@@ -230,6 +231,14 @@ export class El {
 
   getBoundingClientRect(): { width: number; height: number; top: number; left: number; right: number; bottom: number } {
     return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 };
+  }
+
+  // Minimal focus model: focus() records the element on the document root so a
+  // test can assert app.js restored focus after a re-render.
+  focus(): void {
+    let node: El = this;
+    while (node.parent) node = node.parent;
+    node.activeElement = this;
   }
 
   animate(): { finished: Promise<void> } {
