@@ -149,6 +149,12 @@ public enum L10n {
         "confirmSelectedCount": "{n} mục được chọn",
         "cleanSelected": "Dọn {amount}",
         "selectedNone": "Chưa chọn mục nào",
+        "applyErrorTitle": "Không xóa được",
+        "skipToFindings": "Tới kết quả tìm được",
+        "riskTabs": "Các tab mức an toàn",
+        "risk": "Mức an toàn",
+        "httpError": "Lỗi HTTP {status}",
+        "decisionA11y": "Áp dụng cho toàn bộ nhóm: {path}",
 
         // native app
         "storage": "Lưu trữ",
@@ -190,6 +196,7 @@ public enum L10n {
         "cleanItemsMenu": "Dọn {n} mục…",
         "openDustless": "Mở Dustless",
         "launchAtLogin": "Mở khi đăng nhập",
+        "loginRequiresApproval": "Mở khi đăng nhập cần được duyệt trong Cài đặt Hệ thống.",
         "quitDustless": "Thoát Dustless",
         "settingsOpen": "Cài đặt…",
         "general": "Chung",
@@ -386,6 +393,12 @@ public enum L10n {
         "confirmSelectedCount": "{n} selected",
         "cleanSelected": "Clean {amount}",
         "selectedNone": "Nothing selected",
+        "applyErrorTitle": "Delete failed",
+        "skipToFindings": "Skip to findings",
+        "riskTabs": "Risk tabs",
+        "risk": "Risk",
+        "httpError": "HTTP {status}",
+        "decisionA11y": "Apply to whole group: {path}",
 
         // native app
         "storage": "Storage",
@@ -427,6 +440,7 @@ public enum L10n {
         "cleanItemsMenu": "Clean {n} Items…",
         "openDustless": "Open Dustless",
         "launchAtLogin": "Launch at login",
+        "loginRequiresApproval": "Launch at login needs approval in System Settings.",
         "quitDustless": "Quit Dustless",
         "settingsOpen": "Settings…",
         "general": "General",
@@ -623,6 +637,12 @@ public enum L10n {
         "confirmSelectedCount": "{n} 项已选",
         "cleanSelected": "清理 {amount}",
         "selectedNone": "未选择任何项目",
+        "applyErrorTitle": "删除失败",
+        "skipToFindings": "跳到扫描结果",
+        "riskTabs": "风险标签页",
+        "risk": "风险",
+        "httpError": "HTTP 错误 {status}",
+        "decisionA11y": "适用于整个分组：{path}",
 
         // native app
         "storage": "存储",
@@ -664,6 +684,7 @@ public enum L10n {
         "cleanItemsMenu": "清理 {n} 项…",
         "openDustless": "打开 Dustless",
         "launchAtLogin": "登录时启动",
+        "loginRequiresApproval": "登录时启动需要在系统设置中批准。",
         "quitDustless": "退出 Dustless",
         "settingsOpen": "设置…",
         "general": "通用",
