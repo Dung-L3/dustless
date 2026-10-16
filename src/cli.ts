@@ -13,6 +13,7 @@ import { scan } from "./core/scan.ts";
 import { apply } from "./core/apply.ts";
 import { diskUsage, freeSpace } from "./core/space.ts";
 import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
+import { awdlPrivilege, awdlStatus, setAwdl, validSudoersUser, type AwdlReport } from "./core/net/awdl.ts";
 import { serveMcp } from "./mcp/server.ts";
 import { runRam } from "./core/ram/index.ts";
 import { writeOut } from "./core/output.ts";
@@ -38,6 +39,7 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
   dustless doctor               chẩn đoán môi trường
   dustless net                  flush DNS cache; --reset-dns v.v. là nâng cao, từng lệnh một
+  dustless awdl [--json]        trạng thái AWDL (AirDrop); --off | --on để tắt/bật
   dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
   dustless apps [--json]        liệt kê ứng dụng .app
   dustless apps --uninstall <path> --confirm [--purge] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
@@ -328,6 +330,52 @@ async function printNet(report: NetReport): Promise<void> {
   say("");
 }
 
+async function runAwdl(): Promise<number> {
+  if (flag("print-privilege")) {
+    const user = process.env["USER"] ?? "";
+    if (!validSudoersUser(user)) {
+      say(`✖ không dùng được "${user}" cho quy tắc sudoers`);
+      return 1;
+    }
+    const privilege = awdlPrivilege(user);
+    if (flag("json")) {
+      await writeOut(`${JSON.stringify(privilege)}\n`);
+      return 0;
+    }
+    await writeOut(privilege.rule);
+    return 0;
+  }
+  const on = flag("on");
+  const off = flag("off");
+  if (on && off) {
+    say("✖ chọn một trong hai: --on hoặc --off");
+    return 1;
+  }
+  const report = on || off ? await setAwdl(on) : await awdlStatus();
+  await printAwdl(report);
+  return report.outcome?.status === "failed" ? 1 : 0;
+}
+
+async function printAwdl(report: AwdlReport): Promise<void> {
+  if (flag("json")) {
+    await writeOut(`${JSON.stringify(report)}\n`);
+    return;
+  }
+  say(bold(`\ndustless awdl — ${report.platform}`));
+  say(`  interface  ${report.interface ?? dim("không có")}`);
+  const state =
+    report.state === "on" ? "BẬT — AirDrop/Handoff chạy được" : report.state === "off" ? dim("TẮT — Wi-Fi ổn định") : dim("không có mặt");
+  say(`  AWDL       ${state}`);
+  if (report.outcome) {
+    const mark =
+      report.outcome.status === "ran" ? paint("32", "✔") : report.outcome.status === "refused" ? paint("33", "⛔") : paint("31", "✖");
+    say(`  ${mark} ${report.outcome.detail}`);
+  } else if (report.state === "on") {
+    say(dim("  AWDL đang bật — có thể gây gai ping và rớt Wi-Fi. Tắt bằng: sudo dustless awdl --off"));
+  }
+  say("");
+}
+
 async function printUninstall(report: UninstallReport): Promise<number> {
   if (flag("json")) {
     await writeOut(`${JSON.stringify(report)}\n`);
@@ -464,6 +512,7 @@ async function main(): Promise<number> {
   if (command === "doctor") return await runDoctor();
   if (command === "ui") return await runUi();
   if (command === "net") return await runNet();
+  if (command === "awdl") return await runAwdl();
   if (command === "mcp") {
     await serveMcp();
     return 0;

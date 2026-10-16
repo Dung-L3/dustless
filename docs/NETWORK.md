@@ -80,3 +80,49 @@ they help at all, is a broken or stale state, not a slow one:
   correct, so "resetting" it changes nothing.
 
 The CLI output reports what changed, not a fabricated improvement. It never prints a speed number.
+
+## `dustless awdl` — the AirDrop radio that fights Wi-Fi
+
+AWDL (Apple Wireless Direct Link, `awdl0`) is the peer-to-peer radio behind AirDrop, Handoff and
+Universal Clipboard. On Apple silicon it timeshares the Wi-Fi chip with your normal connection, and
+when it scans it shows up as periodic ping spikes and random dropouts — often blamed on the router
+or the ISP until you ping the gateway and watch the spikes land on the *first* hop.
+
+The trade is small and reversible: putting `awdl0` down keeps Wi-Fi and the internet fully working
+and only stops those Apple continuity features.
+
+| Command | What it does | Needs root? |
+|---|---|---|
+| `dustless awdl` | Prints the live `awdl0` state. Read-only. | No |
+| `dustless awdl --off` | `ifconfig awdl0 down` — Wi-Fi stable, AirDrop off | Yes |
+| `dustless awdl --on` | `ifconfig awdl0 up` — AirDrop/Handoff available again | Yes |
+| `dustless awdl --print-privilege` | Prints the sudoers line the menu-bar app installs | No |
+
+`--json` on any of them yields a machine-readable report; `--print-privilege --json` returns the
+rule and the two commands it allows.
+
+Unlike `dustless net`, the operations here do not refuse outright when they are not root: they try
+`sudo -n` once, and if that fails they report `refused` with a message naming the fix. This is the
+one place in Dustless that escalates, and it is scoped deliberately:
+
+- The privilege rule lives at `/etc/sudoers.d/dustless-awdl` and permits **exactly two commands**,
+  each absolute and exact — `/sbin/ifconfig awdl0 down` and `/sbin/ifconfig awdl0 up`. No wildcards,
+  no shell, no argument passthrough.
+- It is written by the macOS app's one-time "AirDrop toggle" setup (an admin prompt), or by hand
+  from the output of `--print-privilege`. Remove it any time with
+  `sudo rm /etc/sudoers.d/dustless-awdl`.
+- Without the rule, `dustless awdl --off` still works when run as root.
+
+### Honest positioning
+
+Disabling AWDL does not make anything faster and does not change the link's ceiling. What it removes
+is *interference*: the periodic radio hand-off that produced the spikes in the first place. If
+pinging your gateway is clean, AWDL is not your problem and none of this will help. Measure the
+first hop before believing any of it:
+
+```
+ping -c 60 -i 0.5 192.168.1.1    # your gateway, not 1.1.1.1
+```
+
+A clean LAN ping is single-digit milliseconds with near-zero jitter. Spikes here, on the hop *before*
+the internet, are the signal this command addresses.
