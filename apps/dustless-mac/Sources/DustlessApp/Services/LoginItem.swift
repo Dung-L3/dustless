@@ -5,6 +5,10 @@ import ServiceManagement
 enum LoginItemState: Equatable {
     case unknown
     case registered
+    /// Registered, but the user must approve it in System Settings before it
+    /// takes effect. Collapsing this into `.notRegistered` made the toggle read
+    /// OFF right after a successful register(), so the user re-toggled forever.
+    case requiresApproval
     case notRegistered
     case unsupported(String)
 
@@ -27,7 +31,15 @@ final class LoginItem: ObservableObject {
             state = .unsupported("loginNeedsBundle")
             return
         }
-        state = service.status == .enabled ? .registered : .notRegistered
+        switch service.status {
+        case .enabled:
+            state = .registered
+        case .requiresApproval:
+            state = .requiresApproval
+        // .notRegistered and .notFound both read as "off" in the UI.
+        default:
+            state = .notRegistered
+        }
     }
 
     func setEnabled(_ enabled: Bool) {

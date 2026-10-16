@@ -50,6 +50,14 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if case .requiresApproval = login.state {
+                    Label(settings.t("loginRequiresApproval"), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(settings.t("loginRequiresApproval"))
+                }
+
                 if let error = login.lastError {
                     Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)

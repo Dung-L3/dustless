@@ -80,5 +80,13 @@ struct MenuBarContent: View {
         } else {
             Text(settings.t("awdlUnknown"))
         }
+
+        // A failed install or a refused toggle must be visible right here, not
+        // only in Settings: otherwise the menu item silently does nothing.
+        if let error = awdl.error {
+            Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.orange)
+        }
     }
 }

@@ -466,3 +466,66 @@ struct AwdlModelTests {
         }
     }
 }
+
+/// The run helper must treat the engine's non-zero exit as data, not as the
+/// error: the engine prints a complete report and *then* exits 1 whenever an
+/// outcome failed or was refused. Its deadline must also actually fire, or a
+/// hung engine would hang the app forever.
+@Suite("engine process contract")
+struct EngineProcessContractTests {
+    /// Writes a throwaway executable shell script and returns its URL. The test
+    /// target ships no bundle resources, so the script is created on disk.
+    private func script(_ body: String) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dustless-engine-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("engine.sh")
+        try ("#!/bin/sh\n" + body + "\n").write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    @Test func decodesTheReportEvenWhenTheEngineExitsNonZero() async throws {
+        // The real scan fixture, printed whole, then exit 1 — the exact shape of
+        // a partially-failed clean or a refused toggle.
+        let json = String(decoding: try fixture("scan.json"), as: UTF8.self)
+        let cli = DustlessCLI(
+            executable: try script("cat <<'DUSTLESS_EOF'\n\(json)\nDUSTLESS_EOF\nexit 1"),
+            timeout: 5
+        )
+        let report = try await cli.scan()
+        #expect(report.platform == "mac")
+        #expect(!report.findings.isEmpty)
+    }
+
+    @Test func aNonJSONFailureStillThrowsTheExitStatus() async throws {
+        let cli = DustlessCLI(executable: try script("echo 'boom' >&2\nexit 3"), timeout: 5)
+        do {
+            _ = try await cli.scan()
+            Issue.record("expected a non-zero exit with no report to throw")
+        } catch let error as DustlessError {
+            guard case .exited(let status, let stderr) = error else {
+                Issue.record("expected .exited, got \(error)")
+                return
+            }
+            #expect(status == 3)
+            #expect(stderr.contains("boom"))
+        }
+    }
+
+    @Test func aHungEngineIsKilledAtTheDeadline() async throws {
+        // `exec` replaces the shell with sleep, so SIGTERM reaches sleep itself
+        // and the run cannot outlive the deadline.
+        let cli = DustlessCLI(executable: try script("exec sleep 30"), timeout: 1)
+        do {
+            _ = try await cli.scan()
+            Issue.record("expected the deadline to throw .timedOut")
+        } catch let error as DustlessError {
+            guard case .timedOut(let seconds) = error else {
+                Issue.record("expected .timedOut, got \(error)")
+                return
+            }
+            #expect(seconds == 1)
+        }
+    }
+}
