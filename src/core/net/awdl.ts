@@ -135,5 +135,13 @@ export function awdlPrivilege(user: string): AwdlPrivilege {
 
 /** A sudoers user/group name must not smuggle extra rules past the writer. */
 export function validSudoersUser(user: string): boolean {
-  return /^[A-Za-z0-9._-]{1,32}$/.test(user) && !user.startsWith("-") && user !== ".";
+  // `ALL` is the sudoers wildcard for every user and `..` is a path traversal
+  // token; neither is a real account name, and either would widen the rule.
+  return (
+    /^[A-Za-z0-9._-]{1,32}$/.test(user) &&
+    !user.startsWith("-") &&
+    user !== "." &&
+    user !== ".." &&
+    user.toLowerCase() !== "all"
+  );
 }

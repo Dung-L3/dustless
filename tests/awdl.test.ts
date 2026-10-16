@@ -167,4 +167,8 @@ describe("validSudoersUser", () => {
       expect(validSudoersUser(user)).toBe(false);
     }
   });
+
+  test("rejects the sudoers wildcard and traversal tokens", () => {
+    for (const user of ["ALL", "all", "All", "aLL", ".."]) expect(validSudoersUser(user)).toBe(false);
+  });
 });
