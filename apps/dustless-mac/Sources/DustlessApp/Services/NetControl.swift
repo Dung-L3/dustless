@@ -1,3 +1,4 @@
+import Combine
 import DustlessKit
 import Foundation
 
@@ -25,6 +26,17 @@ final class NetControl: ObservableObject {
     @Published private(set) var runError: L10nText?
 
     let awdl = AwdlControl.shared
+
+    private var cancellables: Set<AnyCancellable> = []
+
+    init() {
+        // The panel observes this object, not the AirDrop control, so forward
+        // its changes: without this the freshly installed permission would not
+        // turn the install button into the installed fact until a reopen.
+        awdl.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
 
     /// One run at a time: two admin prompts asking for a password at once is a
     /// question no one can answer.
@@ -60,7 +72,15 @@ final class NetControl: ObservableObject {
         guard !isBusy else { return }
         running.insert(op.id)
         runError = nil
-        defer { running.remove(op.id) }
+        // Only advanced operations reach the system admin prompt (the engine
+        // runs them through osascript); a safe one never leaves the app, so
+        // gating it would only cost the panel its outside-click close.
+        let gated = op.isAdvanced
+        if gated { AutoCloseGate.shared.begin() }
+        defer {
+            if gated { AutoCloseGate.shared.end() }
+            running.remove(op.id)
+        }
         do {
             // --force: the engine refuses the interface-touching operations while
             // this Mac is on its only route, which is exactly the situation the
