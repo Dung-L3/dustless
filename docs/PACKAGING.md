@@ -58,8 +58,14 @@ Dustless.app/Contents/Info.plist
 `Info.plist` carries `CFBundleIdentifier` (`dev.dustless.mac`),
 `CFBundleShortVersionString`/`CFBundleVersion` (from `package.json`),
 `CFBundleIconFile`, `LSMinimumSystemVersion` (`14.0`, matching the package's
-`.macOS(.v14)` deployment target), `NSHighResolutionCapable`, and
-`LSUIElement` (the app is a menu-bar utility).
+`.macOS(.v14)` deployment target) and `NSHighResolutionCapable`.
+
+There is deliberately **no `LSUIElement`**. The app is a normal app — Dock icon,
+app menu bar, ⌘Tab — and the menu-bar-only shape is a runtime choice: Settings →
+General → **Show in Dock** flips `NSApp.setActivationPolicy` between `.regular`
+and `.accessory` (`AppSettings.applyActivationPolicy`). A plist key cannot be
+changed after launch and would have forced a reinstall to switch back, and the
+menu-bar item works under either policy.
 
 The engine is placed at `Contents/Resources/dustless`, which is the first path
 `BinaryLocator` searches (`Bundle.main.resourceURL`). The layout matches what

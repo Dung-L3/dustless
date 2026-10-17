@@ -22,7 +22,6 @@ function infoPlist(version: string): string {
   <key>CFBundleVersion</key><string>${version}</string>
   <key>CFBundleIconFile</key><string>Dustless.icns</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
-  <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
