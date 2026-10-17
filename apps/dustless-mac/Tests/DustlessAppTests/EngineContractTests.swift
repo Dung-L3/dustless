@@ -150,8 +150,6 @@ struct SafetyInvariantTests {
 
     @Test func aFreshScanNeverPreSelectsAnything() throws {
         let report = try JSONDecoder().decode(ScanReport.self, from: fixture("scan.json"))
-        // The fixture has deletable findings, so an empty selection is a real
-        // decision and not an artefact of an empty report.
         #expect(!report.deletable.isEmpty)
         #expect(report.initialSelection.isEmpty)
     }
@@ -205,7 +203,6 @@ struct AppsModelTests {
         #expect(report.outcomes.count == 3)
         #expect(report.outcomes[0].status == .trashed)
         #expect(report.outcomes[2].status == .skipped)
-        // The summary counters are item counts, not bytes.
         #expect(report.summary.trashed == 2)
         #expect(report.summary.purged == 0)
         #expect(report.summary.skipped == 1)
@@ -233,16 +230,12 @@ struct AppsModelTests {
         }
     }
 
-    /// The purge confirmation is the only warning the user gets before a bundle
-    /// and its leftovers are erased for good, so a missing or placeholder-less
-    /// entry in any language would leave a destructive action unexplained.
     @Test func thePurgeConfirmationIsTranslatedInEveryLanguage() {
         for key in ["appsPurgeTitle", "appsPurgeBody", "appsPurgeAction"] {
             for lang in Lang.allCases {
                 #expect(L10n.table(lang)[key] != nil, "\(lang)/\(key)")
             }
         }
-        // The count of related files is part of the promise being made.
         for lang in Lang.allCases {
             #expect(L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("3"), "\(lang)")
             #expect(!L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("{n}"), "\(lang)")
@@ -250,9 +243,6 @@ struct AppsModelTests {
     }
 }
 
-/// The panel filters. The rule is that the haystack is whatever a person who
-/// knows the machine would actually type: a bundle id, a folder, a helper
-/// process name, or a pid.
 @Suite("panel filters")
 struct PanelFilterTests {
     private func installedApp(name: String, bundleId: String, path: String) -> InstalledApp {
@@ -289,8 +279,6 @@ struct PanelFilterTests {
         #expect(!file.matches("a name that is in no folder of this list"))
     }
 
-    /// The case the grouped list gets wrong on its own: the thing that eats the
-    /// memory is a helper, not the application name the group is labelled with.
     @Test func aGroupIsFoundByAHelperProcessNameToo() throws {
         let renderer = "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Helpers/Brave Browser Helper (Renderer) --type=renderer"
         let groups = try [process(command: renderer, mem: 900, pid: 4242)].groupedByApp()
@@ -300,7 +288,6 @@ struct PanelFilterTests {
         #expect(group.matches("brave browser.app"))
         #expect(group.matches("(renderer)"))
         #expect(group.matches("4242"))
-        // A pid is an exact identifier, not a fragment: 42 is not 4242.
         #expect(!group.matches("42"))
         #expect(!group.matches("safari"))
     }
@@ -313,18 +300,13 @@ struct PanelFilterTests {
         ].groupedByApp()
 
         #expect(groups.count == 2)
-        // Every fixture process is reported as `other`, which is the point: a
-        // category filter must not silently drop a group.
         #expect(groups.allSatisfy { $0.contains(category: .other) })
         #expect(groups.allSatisfy { !$0.contains(category: .browser) })
     }
 }
 
-/// Avoid collision with Foundation.NSProcessInfo, as the Memory view does.
 private typealias MemProcess = DustlessKit.ProcessInfo
 
-/// Builds the payload shape the engine reports, the same way the model tests
-/// above build their findings. The command is the only field grouping reads.
 private func process(command: String, mem: UInt64 = 1, pid: Int = 1) throws -> MemProcess {
     let executable = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? command
     let name = executable.split(separator: "/").last.map(String.init) ?? executable
@@ -336,8 +318,6 @@ private func process(command: String, mem: UInt64 = 1, pid: Int = 1) throws -> M
 
 @Suite("process grouping")
 struct ProcessGroupTests {
-    /// The rule under test: the first `.app` bundle in the command owns the
-    /// process. Twelve Brave helpers must land in one group, not twelve.
     @Test func helpersJoinTheirApplicationBundle() throws {
         let brave = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
         let renderer = "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/155/Helpers/Brave Browser Helper (Renderer).app/Contents/MacOS/Brave Browser Helper (Renderer) --type=renderer"
@@ -353,9 +333,6 @@ struct ProcessGroupTests {
         #expect(group.bytes == 150)
     }
 
-    /// The bundle is found between `/` boundaries, not by splitting on
-    /// whitespace: a space in the application name is what breaks the engine's
-    /// own `name` field.
     @Test func bundleNamesMayContainSpaces() throws {
         let groups = try [process(command: "/Users/me/Apps/My Cool App.app/Contents/MacOS/cool")]
             .groupedByApp()
@@ -379,8 +356,6 @@ struct ProcessGroupTests {
         #expect(groups.contains { $0.label == "node" })
     }
 
-    /// ".apple" and ".xpc" paths are not bundles; a stray mention in an argument
-    /// is not either.
     @Test func thingsThatMerelyEndInAppAreNotBundles() throws {
         let groups = try [
             process(command: "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/WebContent"),
@@ -405,16 +380,12 @@ struct ProcessGroupTests {
         #expect(groups.last?.bytes == 10)
     }
 
-    /// Same total, two groups: the order must be by key, or the list reshuffles
-    /// between two refreshes of the same report.
     @Test func tiesBreakOnTheGroupKey() throws {
         let procs = try [process(command: "/usr/bin/b"), process(command: "/usr/bin/a", pid: 2)]
         #expect(procs.groupedByApp().map(\.id) == ["/usr/bin/a", "/usr/bin/b"])
     }
 
     @Test func groupMembersAreSortedBiggestFirst() throws {
-        // Same executable, different pids: without a bundle the rule groups on
-        // the executable path, so these are ONE group.
         let group = try #require(try [
             process(command: "/usr/bin/a", mem: 1, pid: 1),
             process(command: "/usr/bin/a", mem: 9, pid: 2),
@@ -438,9 +409,6 @@ struct ProcessGroupTests {
         #expect(none.groupedByApp().isEmpty)
     }
 
-    /// The two opencode rows in the fixture have different executables — one
-    /// absolute, one from a PATH — so they stay apart. Everything else must
-    /// survive the grouping untouched.
     @Test func groupingNeverLosesAnythingFromTheRealPayload() throws {
         let report = try JSONDecoder().decode(MemoryReport.self, from: fixture("ram.json"))
         let groups = report.processes.groupedByApp()
@@ -448,8 +416,6 @@ struct ProcessGroupTests {
         #expect(groups.reduce(UInt64(0)) { $0 + $1.bytes } == report.processes.reduce(UInt64(0)) { $0 + $1.mem })
         #expect(Set(groups.flatMap(\.processes)) == Set(report.processes))
         #expect(groups.map(\.bytes) == groups.map(\.bytes).sorted(by: >))
-        // The bundled process in the payload resolves to its bundle, not to the
-        // truncated name the engine reports.
         #expect(groups.contains { $0.bundlePath == "/Applications/Stremio.app" && $0.label == "Stremio" })
     }
 }
@@ -463,7 +429,6 @@ struct LargeFilesModelTests {
         #expect(first.name == "screen recording.mov")
         #expect(first.path.hasPrefix("/"))
         #expect(first.size == 4_823_449_600)
-        // Milliseconds, like every other mtime the engine reports.
         #expect(abs(first.modified.timeIntervalSince1970 - 1_680_674_828) < 1)
         #expect(files.allSatisfy { $0.size > 0 })
     }
@@ -504,8 +469,6 @@ struct AwdlModelTests {
         #expect(report.outcome == nil, "a read-only status call carries no outcome")
     }
 
-    /// The rule must grant exactly the two ifconfig commands: a wildcard here
-    /// would widen what the password-free toggle is allowed to run.
     @Test func thePrivilegeRuleIsScopedToTwoExactCommands() throws {
         let privilege = try JSONDecoder().decode(AwdlPrivilege.self, from: fixture("awdl-privilege.json"))
         #expect(privilege.path == "/etc/sudoers.d/dustless-awdl")
@@ -553,14 +516,8 @@ struct AwdlModelTests {
     }
 }
 
-/// The run helper must treat the engine's non-zero exit as data, not as the
-/// error: the engine prints a complete report and *then* exits 1 whenever an
-/// outcome failed or was refused. Its deadline must also actually fire, or a
-/// hung engine would hang the app forever.
 @Suite("engine process contract")
 struct EngineProcessContractTests {
-    /// Writes a throwaway executable shell script and returns its URL. The test
-    /// target ships no bundle resources, so the script is created on disk.
     private func script(_ body: String) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("dustless-engine-test-\(UUID().uuidString)", isDirectory: true)
@@ -572,8 +529,6 @@ struct EngineProcessContractTests {
     }
 
     @Test func decodesTheReportEvenWhenTheEngineExitsNonZero() async throws {
-        // The real scan fixture, printed whole, then exit 1 — the exact shape of
-        // a partially-failed clean or a refused toggle.
         let json = String(decoding: try fixture("scan.json"), as: UTF8.self)
         let cli = DustlessCLI(
             executable: try script("cat <<'DUSTLESS_EOF'\n\(json)\nDUSTLESS_EOF\nexit 1"),
@@ -600,8 +555,6 @@ struct EngineProcessContractTests {
     }
 
     @Test func aHungEngineIsKilledAtTheDeadline() async throws {
-        // `exec` replaces the shell with sleep, so SIGTERM reaches sleep itself
-        // and the run cannot outlive the deadline.
         let cli = DustlessCLI(executable: try script("exec sleep 30"), timeout: 1)
         do {
             _ = try await cli.scan()
@@ -615,9 +568,6 @@ struct EngineProcessContractTests {
         }
     }
 
-    /// A fake engine that records what it was asked for — argv and the contents
-    /// of the file `--only-file` pointed at — into `capture`, then prints
-    /// `report` and exits with `status`.
     private func recordingEngine(capture: URL, report: String = "{}", status: Int = 0) throws -> URL {
         try script(
             """
@@ -642,9 +592,6 @@ struct EngineProcessContractTests {
 
     private let applyReport = #"{"outcomes":[],"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
 
-    /// The whole point of `--only-file`: the engine re-scans on its own, so the
-    /// ticked paths have to travel with the command or a clean turns into "delete
-    /// every green/yellow finding".
     @Test func theCleanCarriesExactlyTheSelectedPaths() async throws {
         let capture = try captureDir()
         let cli = DustlessCLI(
@@ -660,7 +607,6 @@ struct EngineProcessContractTests {
         #expect(selection.hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path), "\(selection)")
         #expect(try JSONDecoder().decode([String].self, from: Data(try captured(capture, "selection.json").utf8))
             == ["/Users/me/.gradle/caches", "/Users/me/.npm/_cacache"])
-        // The file names the user's own paths, so the run must not leave it.
         #expect(!FileManager.default.fileExists(atPath: selection))
     }
 
@@ -686,9 +632,6 @@ struct EngineProcessContractTests {
         #expect(!FileManager.default.fileExists(atPath: selection))
     }
 
-    /// With `--json` the engine's argument/validation error is `{"error":"…"}` on
-    /// stdout and nothing on stderr, so decoding must surface it instead of the
-    /// bare exit status.
     @Test func theEngineErrorPayloadBecomesTheMessage() async throws {
         let cli = DustlessCLI(
             executable: try script("echo '{\"error\":\"cần một giá trị cho --only-file\"}'\nexit 1"),
@@ -714,8 +657,6 @@ struct EngineProcessContractTests {
         return dir
     }
 
-    /// An uninstall that removed the bundle for good, and the same run refused
-    /// because the bundle is root-owned — the two outcomes the app must show.
     private let purgedReport = #"""
     {"outcomes":[{"path":"/Applications/Test.app","status":"purged","bytes":2048,"detail":"permanently deleted"}],
      "summary":{"trashed":0,"purged":1,"skipped":0,"failed":0,"totalBytes":2048}}
@@ -726,9 +667,6 @@ struct EngineProcessContractTests {
      "summary":{"trashed":0,"purged":0,"skipped":0,"failed":1,"totalBytes":0}}
     """#
 
-    /// Uninstalling is permanent now, so the run has to carry `--purge`: without
-    /// it the engine moves the bundle to the Trash, which is a different promise
-    /// than the one the confirmation makes.
     @Test func anUninstallAsksTheEngineToPurge() async throws {
         let capture = try captureDir()
         let cli = DustlessCLI(
@@ -743,8 +681,6 @@ struct EngineProcessContractTests {
         #expect(report.summary.purged == 1)
     }
 
-    /// The default is still the recoverable path, which is what the large-file
-    /// Trash flow and any other caller rely on.
     @Test func anUninstallWithoutPurgeNeverAsksForIt() async throws {
         let capture = try captureDir()
         let cli = DustlessCLI(
@@ -758,9 +694,6 @@ struct EngineProcessContractTests {
         #expect(!argv.contains("--purge"))
     }
 
-    /// A refused purge (a root-owned bundle) is an outcome to show, not an
-    /// exception to swallow: the report is decoded even though the engine exits
-    /// 1, and nothing is quietly moved to the Trash instead.
     @Test func aRefusedPurgeSurfacesAsFailed() async throws {
         let capture = try captureDir()
         let cli = DustlessCLI(
@@ -778,9 +711,6 @@ struct EngineProcessContractTests {
     }
 }
 
-/// The network panel decodes what `src/core/net/index.ts` prints. The status
-/// values are a wire contract: an unknown one must fail the decode rather than
-/// be guessed at, or a new engine status would silently render as nothing.
 @Suite("network model")
 struct NetModelTests {
     @Test func decodesAReportWithAnOutcome() throws {
@@ -829,8 +759,6 @@ struct NetModelTests {
         }
     }
 
-    /// The panel prints `settings.t(op.labelKey)` and `op.helpKey`; a key missing
-    /// from a table would render as the raw key, so this pins all three.
     @Test func everyOfferedOperationIsTranslatedInEveryLanguage() {
         for op in NetOp.allCases {
             for lang in Lang.allCases {
@@ -842,19 +770,14 @@ struct NetModelTests {
     }
 
     @Test func theOfferedSetMatchesTheEngine() {
-        // flush-routing is macOS-refused by design, so the app must not offer it.
         #expect(NetOp(rawValue: "flush-routing") == nil)
         #expect(NetOp.allCases.count == 5)
         #expect(NetOp.flushDns.isAdvanced == false)
         #expect(NetOp.allCases.filter(\.isAdvanced).count == NetOp.allCases.count - 1)
-        // The flag is the operation id with the CLI's prefix.
         #expect(NetOp.resetDns.flag == "--reset-dns")
         #expect(NetOp.renewDhcp.flag == "--renew-dhcp")
     }
 
-    /// The rule is the whole permission: four absolute, exact commands and
-    /// nothing else. A wildcard or a relative path here would silently widen
-    /// what the app can run as root without a prompt.
     @Test func thePrivilegeRuleIsScopedToFourExactCommands() throws {
         let privilege = try JSONDecoder().decode(NetPrivilege.self, from: fixture("net-privilege.json"))
         #expect(privilege.path == "/etc/sudoers.d/dustless-net")
@@ -870,19 +793,14 @@ struct NetModelTests {
         }
     }
 
-    /// A service name with spaces is double-quoted so sudoers matches the single
-    /// argument the engine passes, and the rule is newline-terminated because a
-    /// sudoers file without one is not read.
     @Test func aSpacedServiceIsQuotedAndTheRuleEndsWithANewline() throws {
         let privilege = try JSONDecoder().decode(NetPrivilege.self, from: fixture("net-privilege.json"))
         #expect(privilege.allowed[0].contains("\"USB 10/100/1000 LAN\""))
-        // The interface has no spaces and must stay unquoted.
         #expect(privilege.allowed[1] == "/usr/sbin/ipconfig set en5 DHCP")
         #expect(privilege.rule.hasSuffix("\n"))
         #expect(privilege.path.split(separator: "/").last?.contains(".") == false)
     }
 
-    /// The panel's own row keys, so a missing entry cannot render as a raw key.
     @Test func thePermissionKeysAreTranslatedInEveryLanguage() {
         for key in ["netRemember", "netRemembered", "netRememberExplain", "netForget", "netRememberFailed", "netNeedsPermission"] {
             for lang in Lang.allCases {

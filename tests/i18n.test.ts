@@ -2,10 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// These three Swift tables are the only place the app's wording lives, so they
-// are the single source. Nothing here parses another file: this parses
-// Localization.swift directly and fails on any drift between the languages, so
-// a translator adding a key to one table cannot quietly leave the others behind.
 const SWIFT = join(
   import.meta.dir,
   "..",
@@ -18,8 +14,6 @@ const SWIFT = join(
 );
 const src = await readFile(SWIFT, "utf8");
 
-// Taken from the `Lang` enum rather than hardcoded, so adding a language to the
-// app makes this test cover it instead of silently skipping it.
 function languages(): string[] {
   const enumBody = /public enum Lang: String[^{]*\{([\s\S]*?)\n\}/.exec(src);
   expect(enumBody, "Lang enum not found in Localization.swift").not.toBeNull();
@@ -84,8 +78,6 @@ describe("Localization.swift string tables", () => {
   });
 
   test("no key is declared twice in a table", () => {
-    // A duplicate is a silent data loss: Swift keeps the last literal, and the
-    // Map above would have quietly collapsed it into one entry.
     const dupes: string[] = [];
     for (const code of CODES) {
       const keys = [...block(code).matchAll(/^\s*"([^"]+)":/gm)].map((match) => match[1]!);

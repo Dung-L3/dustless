@@ -12,18 +12,6 @@ struct DustlessApp: App {
     @StateObject private var router = AppRouter()
 
     var body: some Scene {
-        // One window. Memory, Storage and Network used to be three more
-        // `Window` scenes, which meant two navigation systems and three
-        // click-away panels; they are destinations in this window now.
-        //
-        // No `.preferredColorScheme` in this file: light/dark is applied once,
-        // app-wide, by `AppSettings.applyAppearance()` writing `NSApp.appearance`.
-        //
-        // The scene modifier was not broken — it does follow a live switch, and it
-        // does release when handed `nil` back — but it pins the choice on that
-        // scene's window, and the menu-bar popover is AppKit's surface rather than a
-        // SwiftUI scene's, so it never got it. `NSApp.appearance` is the one value
-        // every window, sheet and AppKit-drawn control reads. See `AppSettings`.
         WindowGroup("Dustless") {
             RootView(store: store, router: router, net: net)
                 .environmentObject(store)
@@ -39,16 +27,10 @@ struct DustlessApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(after: .newItem) {
-                // ⌘R lives here and nowhere else. `SummaryHeader` used to
-                // register the same shortcut with a different disable rule, so
-                // which of the two answered the key depended on which module was
-                // open — and in Cleanup the two rules disagreed.
                 Button(settings.t("rescan")) { Task { await store.rescan() } }
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(store.isBusy)
             }
-            // The Go menu used to switch safety tiers. Those are a selection
-            // inside Cleanup now, so the menu goes to the modules instead.
             CommandMenu(settings.t("goMenu")) {
                 ForEach(Module.allCases) { module in
                     Button(settings.t(module.titleKey)) { router.select(module) }
@@ -62,11 +44,6 @@ struct DustlessApp: App {
                 .environmentObject(settings)
         }
 
-        // A popover, not a menu: `.window` lets the surface carry measurements
-        // rather than a list of commands. Its wording comes from `AppSettings` on
-        // every render, so it follows the language without a relaunch; its
-        // appearance comes from `NSApp`, since this popover is AppKit's window
-        // rather than a SwiftUI scene's.
         MenuBarExtra {
             MenuBarContent(store: store, router: router, net: net, awdl: awdl, onOpenWindow: openMainWindow)
                 .environmentObject(settings)
@@ -133,23 +110,11 @@ struct WindowCapture: NSViewRepresentable {
     }
 }
 
-/// Holds the app responsive while a system admin prompt is up, and brings it
-/// back once it is done.
-///
-/// Why this exists: the macOS authorization dialog is owned by another process
-/// (SecurityAgent, reached through osascript), so it makes our app inactive and
-/// takes key status without ever attaching a sheet to our window. Nothing in
-/// SwiftUI sees that, so without the gate the admin prompt reads as a click-away
-/// and the window is brought forward while the user is still typing their
-/// password. Depth-counted so overlapping prompts cannot release each other's
-/// hold.
 @MainActor
 final class AutoCloseGate {
     static let shared = AutoCloseGate()
 
     private var depth = 0
-    /// The window that was frontmost when the first prompt went up — the one to
-    /// hand focus back to.
     private weak var pendingWindow: NSWindow?
 
     var isActive: Bool { depth > 0 }
@@ -168,11 +133,7 @@ final class AutoCloseGate {
         guard depth == 0 else { return }
         let window = pendingWindow
         pendingWindow = nil
-        // The prompt belongs to us, so coming back to us is the expected
-        // outcome — without it the window is on screen but unusable.
         NSApp.activate(ignoringOtherApps: true)
-        // Only if that flow is still live: a prompt the user cancelled must not
-        // be resurrected by its own release.
         if let window, window.isVisible {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
@@ -232,10 +193,6 @@ struct RootView: View {
                 .help(settings.t("settingsOpen"))
             }
         }
-        // Only the confirmation is a sheet. The result of a finished cleanup is
-        // drawn inline by `CleanupResultCard` above the findings list: the
-        // deletion is already done and the list behind it shows what is left, so
-        // a modal would only ask for a second acknowledgement.
         .sheet(isPresented: $store.showingConfirmation) {
             ConfirmDeleteSheet(
                 findings: store.selectedFindings,

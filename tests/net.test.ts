@@ -8,8 +8,6 @@ import type { Platform } from "../src/types.ts";
 type Call = { cmd: string; args: string[] };
 type Presets = Record<Platform, Record<string, string>>;
 
-// Inspection presets mirror what each platform's `inspect()` actually runs, so
-// the injected platform produces a self-consistent NetInfo from the stub alone.
 const PRESETS: Presets = {
   mac: {
     "route -n get default": "   route to: default\n    gateway: 192.168.1.1\n  interface: en0\n",
@@ -50,11 +48,6 @@ const READ_CMDS: Record<Platform, Set<string>> = {
   win: new Set(["route", "ipconfig"]),
 };
 
-// The one state-changing write each advanced op issues per platform, derived
-// straight from buildSteps. This is what we assert a given op actually issued,
-// and what the DNS-flush safety check ensures is never touched on the default path.
-// The macOS writes are absolute because the sudoers rule has to name an
-// absolute path and the engine must invoke exactly what the rule permits.
 const OP_WRITES: Partial<Record<NetOpId, Partial<Record<Platform, Call>>>> = {
   "reset-dns": {
     mac: { cmd: MAC_COMMANDS.networksetup, args: ["-setdnsservers", "Wi-Fi", "Empty"] },
@@ -81,8 +74,6 @@ const OP_WRITES: Partial<Record<NetOpId, Partial<Record<Platform, Call>>>> = {
   },
 };
 
-// The flush is a non-advanced op; the canonical per-platform flush command is
-// asserted directly in the default-path tests rather than conflated with writes.
 const FLUSH: Record<Platform, Call> = {
   mac: { cmd: "dscacheutil", args: ["-flushcache"] },
   linux: { cmd: "resolvectl", args: ["flush-caches"] },
@@ -233,12 +224,9 @@ describe("safety", () => {
     const { run, calls } = stub("mac");
     const report = await net({ ops: ["reset-dns"], platform: "mac", run, isRootUser: () => false, force: true });
     expect(report.outcomes[0]?.status).toBe("ran");
-    // `sudo -n <absolute path>`: the rule permits the absolute path, and -n
-    // means it can never block on a prompt the caller cannot answer.
     expect(calls.filter((c) => c.cmd === "sudo")).toEqual([
       { cmd: "sudo", args: ["-n", MAC_COMMANDS.networksetup, "-setdnsservers", "Wi-Fi", "Empty"] },
     ]);
-    // No unprivileged fallback: the bare command must never have been tried.
     expect(calls.filter((c) => c.cmd === MAC_COMMANDS.networksetup)).toEqual([]);
   });
 
@@ -252,11 +240,8 @@ describe("safety", () => {
     const report = await net({ ops: ["reset-dns"], platform: "mac", run, isRootUser: () => false, force: true });
     const outcome = report.outcomes[0];
     expect(outcome?.status).toBe("refused");
-    // The hint names the one-time install step, not sudo's own sentence.
     expect(outcome?.detail).not.toContain("password is required");
     expect(outcome?.detail).toContain("sudo");
-    // The one attempt was the escalated one. A fallback here would mean a
-    // half-applied network change the user never consented to.
     expect(calls.filter((c) => c.cmd !== "sudo")).toEqual(
       calls.filter((c) => READ_CMDS.mac.has(c.cmd)),
     );
@@ -272,10 +257,6 @@ describe("safety", () => {
   });
 
   test("a stale rule — 'not allowed to execute' — is a refusal, not a failure", async () => {
-    // sudo says this when a rule exists but does not match: a different
-    // interface, a renamed service, a path that moved. Same fix as no rule at
-    // all, so it must be `refused` with the honest hint rather than `failed`
-    // with sudo's own sentence.
     const { run, calls } = stub("mac", {
       [`sudo -n ${MAC_COMMANDS.networksetup} -setdnsservers Wi-Fi Empty`]: {
         ok: false,
@@ -358,11 +339,6 @@ describe("dry-run", () => {
 });
 
 describe("resolving the network service", () => {
-  // `-listallhardwareports` is not the whole list of services: it omits VPN,
-  // bridge and some USB entries. When the device is missing from it, the raw
-  // device name used to be handed back as if it were a service name — and
-  // `networksetup` answers "not a recognized network service", so the sudoers
-  // rule built from it named a command that could only ever fail.
   const ORDER = "An asterisk (*) denotes that a network service is disabled.\n"
     + "(1) Wi-Fi\n(Hardware Port: Wi-Fi, Device: en0)\n\n"
     + "(2) Thunderbolt Bridge\n(Hardware Port: Thunderbolt Bridge, Device: bridge0)\n\n"
@@ -375,7 +351,6 @@ describe("resolving the network service", () => {
       "networksetup -listnetworkserviceorder": { out: ORDER },
     });
     const info = await inspect("mac", run);
-    // The service name, not the device: that is the name `networksetup` takes.
     expect(info.iface).toBe("en7");
     expect(info.service).toBe("USB 10/100/1000 LAN");
     const privilege = netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, iface: info.iface, service: info.service }));
@@ -398,8 +373,6 @@ describe("resolving the network service", () => {
       "networksetup -listnetworkserviceorder": { out: ORDER },
     });
     const info = await inspect("mac", run);
-    // Never the raw interface name: that is what made `--print-privilege`
-    // emit a rule whose commands `networksetup` rejects.
     expect(info.service).toBe("");
     expect(() => netPrivilege("mac", netPrivilegeSteps(info))).toThrow();
     expect(calls.some((c) => c.args.includes("-listnetworkserviceorder"))).toBe(true);
@@ -416,8 +389,6 @@ describe("resolving the network service", () => {
 });
 
 describe("exit status", () => {
-  // "Did nothing" has to be distinguishable from "did the thing", and only the
-  // process exit status carries that for a script.
   const report = (...statuses: ("ran" | "refused" | "failed" | "skipped" | "not-applicable")[]) =>
     ({ outcomes: statuses.map((status) => ({ op: "reset-dns" as const, status, detail: "" })) });
 
@@ -470,7 +441,6 @@ describe("stub provenance", () => {
   });
 });
 
-// The steps a rule is built from, for the stub's own interface/service (en0/Wi-Fi).
 const MAC_INFO = { iface: "en0", gateway: "192.168.1.1", dns: [], service: "Wi-Fi", soloRoute: true };
 
 describe("netPrivilege", () => {
@@ -490,11 +460,9 @@ describe("netPrivilege", () => {
         + " /usr/sbin/arp -d -a,"
         + " /usr/sbin/networksetup -setMTU Wi-Fi 1500\n",
     );
-    // Scoped, absolute, no wildcard that would widen the rule.
     expect(privilege.rule).toContain("NOPASSWD:");
     expect(privilege.rule).not.toContain("*");
     for (const allowed of privilege.allowed) expect(allowed.startsWith("/")).toBe(true);
-    // sudo ignores a sudoers.d file whose name contains a dot.
     expect(NET_PRIVILEGE_PATH.split("/").pop()).not.toContain(".");
   });
 
@@ -503,15 +471,10 @@ describe("netPrivilege", () => {
     const privilege = netPrivilege("mac", netPrivilegeSteps(info));
     expect(privilege.allowed[0]).toBe(`${MAC_COMMANDS.networksetup} -setdnsservers "USB 10/100/1000 LAN" Empty`);
     expect(privilege.allowed[3]).toBe(`${MAC_COMMANDS.networksetup} -setMTU "USB 10/100/1000 LAN" 1500`);
-    // The interface step has no space in it and must stay unquoted, or sudo
-    // would be matching a different argument than the engine passes.
     expect(privilege.allowed[1]).toBe(`${MAC_COMMANDS.ipconfig} set en0 DHCP`);
   });
 
   test("the rule's quoted service matches the argv the engine actually passes", async () => {
-    // The point of quoting: sudo joins argv with spaces, so a rule written
-    // unquoted would not match, and a rule written with the wrong quoting would
-    // not match either. Assert the two agree on this exact service name.
     const service = "USB 10/100/1000 LAN";
     const allowed = netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service })).allowed[0]!;
     const [quoted] = allowed.slice(allowed.indexOf('"')).match(/"([^"]*)"/)!;
@@ -522,35 +485,25 @@ describe("netPrivilege", () => {
     const report = await net({ ops: ["reset-dns"], platform: "mac", run, isRootUser: () => false, force: true });
     expect(report.outcomes[0]?.status).toBe("ran");
     const call = calls.find((c) => c.cmd === "sudo")!;
-    // argv element verbatim == the quoted text in the rule, minus the quotes.
     expect(call.args[call.args.indexOf(service)]).toBe(quoted.slice(1, -1));
   });
 
   test("an absent interface or service refuses to produce a rule", () => {
-    // A rule that names an empty argument would match nothing useful, and one
-    // that widened to a wildcard would match everything — refuse both.
     for (const info of [{ ...MAC_INFO, iface: null }, { ...MAC_INFO, service: "" }]) {
       expect(() => netPrivilege("mac", netPrivilegeSteps(info))).toThrow();
     }
   });
 
   test("a service name that could end the argument is refused", () => {
-    // `"` would close the quoted argument and let the rest through as a second
-    // command spec; `#` would start a comment that hides what follows.
     for (const service of ['Wi"Fi', "Wi-Fi # x", "Wi-Fi\nALL=(root) ALL", ""]) {
       expect(() => netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service }))).toThrow();
     }
   });
 
   test("a service name holding a sudoers wildcard is refused", () => {
-    // sudoers reads `* ? [ ] \` as wildcards, so a rule containing one no
-    // longer pins one command — it matches a family of them, which is exactly
-    // what the scoped rule exists to prevent. Escaping does not help: sudoers
-    // does not define a shell-style escape for these.
     for (const service of ["Wi*Fi", "Wi?Fi", "Wi-Fi[0-9]", "Wi\\Fi"]) {
       expect(() => netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service }))).toThrow();
     }
-    // And the rule that does get built still has no wildcard in it.
     expect(netPrivilege("mac", netPrivilegeSteps(MAC_INFO)).rule).not.toMatch(/[*?[\]\\]/);
   });
 

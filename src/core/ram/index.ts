@@ -104,8 +104,6 @@ export function createRam(deps: RamDeps = {}) {
     const say = (line = ""): void => {
       if (!quiet && !json) console.log(line);
     };
-    // An argument error is not a result: `--quiet` must not swallow it and
-    // `--json` must still get one parseable object on stdout.
     const fail = async (message: string): Promise<number> => {
       if (json) await writeOut(`${JSON.stringify({ error: message })}\n`);
       else console.error(`✖ ${message}`);
@@ -126,8 +124,6 @@ export function createRam(deps: RamDeps = {}) {
           say(`Estimated reclaimable: ${bytesOf(result.reclaimable ?? 0)}`);
           say(`Measured change: ${bytesOf(result.reclaimed ?? 0)}`);
         } else {
-          // The reason a run exited non-zero is an error, not a result: it goes
-          // to stderr and `--quiet` does not take it away.
           console.error(`✖ Refused: ${result.reason}`);
           if (result.reclaimable !== undefined) say(`Estimated reclaimable: ${bytesOf(result.reclaimable)}`);
         }
@@ -220,9 +216,6 @@ function parseSwap(text: string): { total: number; used: number } {
 
 function parseSize(value: number, unit: string | undefined): number {
   const multipliers: Record<string, number> = { B: 1, K: KIB, M: KIB * KIB, G: KIB * KIB * KIB, T: KIB * KIB * KIB * KIB };
-  // `sysctl vm.swapusage` prints fractional values (e.g. "used = 5.12M"), so
-  // round to whole bytes: a byte count must be an integer, and the JSON
-  // contract feeds strict decoders that reject 5368709.12.
   return Math.round(value * (multipliers[unit ?? "B"] ?? 1));
 }
 

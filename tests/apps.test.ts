@@ -20,7 +20,6 @@ beforeAll(async () => {
   await mkdir(libraryDir, { recursive: true });
   await mkdir(trashDir, { recursive: true });
 
-  // Create MyApp.app bundle
   const appBundle = join(appsDir, "MyApp.app");
   await mkdir(join(appBundle, "Contents", "MacOS"), { recursive: true });
   await mkdir(join(appBundle, "Contents", "Resources"), { recursive: true });
@@ -46,7 +45,6 @@ beforeAll(async () => {
   await writeFile(join(appBundle, "Contents", "MacOS", "MyApp"), "#!/bin/sh\necho hello\n");
   await writeFile(join(appBundle, "Contents", "Resources", "data.bin"), Buffer.alloc(1024 * 100, 0x42));
 
-  // Create related leftover paths
   const leftovers = [
     "Application Support/com.example.myapp",
     "Caches/com.example.myapp",
@@ -73,7 +71,6 @@ beforeAll(async () => {
     }
   }
 
-  // Create another app that has no leftovers
   const otherApp = join(appsDir, "OtherApp.app");
   await mkdir(join(otherApp, "Contents", "MacOS"), { recursive: true });
   await writeFile(
@@ -98,7 +95,6 @@ function dirname(path: string): string {
   return path.split(/[/\\]/).slice(0, -1).join("/");
 }
 
-// Helper to create a test app bundle
 async function createTestApp(bundleId: string, name: string, appDir: string): Promise<string> {
   const appPath = join(appDir, `${name}.app`);
   await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
@@ -196,7 +192,6 @@ describe("uninstall", () => {
     const target = apps.find((a) => a.bundleId === "com.example.myapp");
     expect(target).toBeDefined();
 
-    // Try to uninstall HOME itself
     const report = await uninstall({
       home,
       appPath: home,
@@ -236,23 +231,19 @@ describe("uninstall", () => {
     expect(report.summary.failed).toBe(0);
     expect(report.summary.skipped).toBe(0);
 
-    // Original paths should be gone
     expect(await stat(target.path).then(() => false, () => true)).toBe(true);
     for (const p of target.relatedPaths) {
       expect(await stat(p).then(() => false, () => true)).toBe(true);
     }
 
-    // Trash should contain them
     const trashContents = await readdir(trashDir, { withFileTypes: true });
     expect(trashContents.length).toBeGreaterThanOrEqual(1 + target.relatedPaths.length);
 
-    // Other app should be untouched
     const otherApp = apps.find((a) => a.bundleId === "com.example.other")!;
     expect(await stat(otherApp.path).then(() => true, () => false)).toBe(true);
   });
 
   test("purge permanently deletes instead of trashing", async () => {
-    // Recreate the app and leftovers for this test
     const appBundle = join(appsDir, "PurgeApp.app");
     await mkdir(join(appBundle, "Contents", "MacOS"), { recursive: true });
     await writeFile(
@@ -287,7 +278,6 @@ describe("uninstall", () => {
     expect(report.summary.purged).toBe(1 + target.relatedPaths.length);
     expect(report.summary.trashed).toBe(0);
 
-    // Paths should be gone
     expect(await stat(target.path).then(() => false, () => true)).toBe(true);
     for (const p of target.relatedPaths) {
       expect(await stat(p).then(() => false, () => true)).toBe(true);
@@ -295,7 +285,6 @@ describe("uninstall", () => {
   });
 
   test("skips non-existing related paths", async () => {
-    // Recreate the app since previous test deleted it
     await createTestApp("com.example.myapp", "MyApp", appsDir);
     await createLeftover(home, "com.example.myapp", "Application Support/{id}");
     await createLeftover(home, "com.example.myapp", "Caches/{id}");
@@ -303,7 +292,6 @@ describe("uninstall", () => {
     const apps = await listApps({ home, appDirs: [appsDir] });
     const target = apps.find((a) => a.bundleId === "com.example.myapp")!;
 
-    // Add a valid but non-existing leftover path (Logs is a valid pattern but not created)
     const nonExistingValid = join(home, "Library", "Logs", "com.example.myapp");
     const withExtra = [...target.relatedPaths, nonExistingValid];
 
@@ -320,7 +308,6 @@ describe("uninstall", () => {
   });
 
   test("refuses unrelated paths not in relatedPaths list", async () => {
-    // Recreate both apps since previous test deleted myapp
     await createTestApp("com.example.myapp", "MyApp", appsDir);
     await createTestApp("com.example.other", "OtherApp", appsDir);
     await createLeftover(home, "com.example.myapp", "Application Support/{id}");
@@ -343,10 +330,6 @@ describe("uninstall", () => {
 });
 
 describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", () => {
-  // `join(home, "Library/Caches/{id}")` collapses `..`, so a bundle id of
-  // `../../../victim` resolves to <root>/victim — outside the home the
-  // uninstall is supposed to stay inside — and `--purge` made that a permanent
-  // `rm -rf`. The whole point of this block is that the victim survives.
   const TRAVERSAL = "../../../victim";
   let root: string;
   let box: { home: string; victim: string; appPath: string };
@@ -367,8 +350,6 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
   });
 
   test("no leftover path is derived from an id that contains a traversal", async () => {
-    // The collapse that made the bug possible, stated exactly: this is the path
-    // `join()` produced for the template, and it is the victim, outside HOME.
     expect(join(box.home, "Library", "Caches", TRAVERSAL)).toBe(box.victim);
     expect(box.victim.startsWith(box.home + "/")).toBe(false);
 
@@ -382,8 +363,6 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
     const report = await uninstall({
       home: box.home,
       appPath: box.appPath,
-      // A caller that passed traversal-resolved paths anyway must still be
-      // refused: the id is rejected before any path is derived from it.
       relatedPaths: [box.victim, join(box.home, "Library", "Caches", TRAVERSAL)],
       confirm: true,
       purge: true,
@@ -414,8 +393,6 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
   });
 
   test("a leftover that resolves outside HOME is refused on its own", async () => {
-    // Belt to the braces of the bundle-id check: even for a well-formed id, a
-    // relatedPath that does not resolve strictly inside HOME is never moved.
     const good = await createTestApp("com.example.good", "Good", join(box.home, "Applications"));
     const report = await uninstall({ home: box.home, appPath: good, relatedPaths: [box.victim], confirm: true });
     expect(report.summary.trashed).toBe(0);

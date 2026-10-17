@@ -12,11 +12,6 @@ export const VERSION = JSON.parse(
   await readFile(join(REPO, "package.json"), "utf8"),
 ).version as string;
 
-// Every e2e test drives the compiled binary. Build it once here if it is
-// missing, so the suite does not depend on CI's step order or on which test
-// file the runner happens to load first. That missing guarantee made the
-// deep-tree and concurrent-scan tests fail on the macOS and Windows runners,
-// where the binary had not been produced before those files ran.
 if (!(await stat(BINARY).then(() => true, () => false))) {
   const built = await Bun.$`bun run build`.cwd(REPO).quiet().nothrow();
   if (built.exitCode !== 0 || !(await stat(BINARY).then(() => true, () => false))) {

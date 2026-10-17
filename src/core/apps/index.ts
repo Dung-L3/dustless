@@ -50,7 +50,6 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function dirSize(path: string): Promise<number> {
-  // A plain file is its own size; readdir() on one throws and reports 0.
   const root = await lstat(path).catch(() => null);
   if (root?.isFile()) return root.size;
   let total = 0;
@@ -69,7 +68,6 @@ async function dirSize(path: string): Promise<number> {
         }
       }
     } catch {
-      // ignore unreadable
     }
   }
   return total;
@@ -77,8 +75,6 @@ async function dirSize(path: string): Promise<number> {
 
 function parseInfoPlist(xml: string): { bundleId?: string; name?: string; displayName?: string } {
   const result: { bundleId?: string; name?: string; displayName?: string } = {};
-  // Apple writes `<key>X</key>` and `<string>Y</string>` on separate lines, but
-  // generated plists often put them on one line, so match across whitespace.
   for (const match of xml.matchAll(/<key>\s*([^<]+?)\s*<\/key>\s*<string>([^<]*)<\/string>/g)) {
     const key = match[1];
     const value = match[2];
@@ -102,13 +98,6 @@ async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name
   }
 }
 
-/**
- * A bundle id is a reverse-DNS identifier, never a path. `join()` collapses
- * `..`, so a crafted `CFBundleIdentifier` of `../../../victim` turned every
- * leftover template into a path outside HOME — and `--purge` made that a
- * permanent `rm -rf` of whatever it pointed at. A separator or a `..` is not a
- * bundle id at all; refuse to build paths from one.
- */
 function isSafeBundleId(bundleId: string): boolean {
   return bundleId.length > 0 && !bundleId.includes("/") && !bundleId.includes("\\") && !bundleId.includes("..");
 }
@@ -134,7 +123,7 @@ function isAllowedAppDir(appPath: string, appDirs: string[]): boolean {
     const expanded = expandHome(dir, homedir());
     if (isUnder(resolved, expanded)) {
       const rel = relative(expanded, resolved);
-      return !rel.includes(sep); // directly under, not nested
+      return !rel.includes(sep);
     }
   }
   return false;
@@ -144,7 +133,6 @@ function isDenied(path: string, home: string): boolean {
   const resolved = resolve(path);
   const resolvedHome = resolve(home);
 
-  // Check if this is an app bundle directly under allowed app directories
   const isAllowedAppBundle = (p: string) => {
     const appDirs = ["/Applications", join(homedir(), "Applications")];
     for (const dir of appDirs) {
@@ -227,7 +215,6 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Shared with `largefiles`: both surfaces move to the Trash the same way. */
 export async function moveToTrash(src: string, trashDir: string): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
   const bytes = await dirSize(src);
   const name = src.split(sep).filter(Boolean).pop() ?? "unknown";
@@ -301,7 +288,6 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
     };
   }
 
-  // Read bundle ID to validate relatedPaths
   const bundleInfo = await readBundleInfo(resolvedAppPath);
   if (!bundleInfo) {
     return {
@@ -309,10 +295,6 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
-  // A bundle id that is not a bundle id cannot be expanded into leftovers, and
-  // the whole point of refusing it is that we do not know where it would point.
-  // Refuse the uninstall rather than remove the bundle and leave the user
-  // guessing which of its directories was left behind.
   if (!isSafeBundleId(bundleInfo.bundleId)) {
     return {
       outcomes: [
@@ -326,11 +308,6 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
 
   const resolvedRelatedPaths = relatedPaths.map((p) => resolve(p));
 
-  // Validate that each relatedPath is a legitimate leftover for this bundle ID.
-  // Two independent properties, both required: it resolves strictly inside HOME,
-  // and it is exactly one of this bundle id's own template expansions. Either
-  // one alone would be enough to stop the `..` escape — the HOME check catches a
-  // bundle id that climbs out, the template check catches anything else.
   for (const p of resolvedRelatedPaths) {
     if (!isUnder(p, home) || resolve(p) === resolve(home)) {
       return {

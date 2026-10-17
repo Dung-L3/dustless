@@ -14,9 +14,6 @@ import {
   type Sandbox,
 } from "./harness.ts";
 
-// The engine's argument contract, driven through the compiled binary in a
-// sandbox HOME: a selection the caller chose, a flag with no value, and one
-// shape for every argument or validation error.
 afterAll(cleanupAll);
 
 const exists = async (path: string): Promise<boolean> => await Bun.$`test -e ${path}`.quiet().nothrow().then((r) => r.exitCode === 0);
@@ -63,8 +60,6 @@ describe("apply --only-file deletes exactly the selected paths", () => {
   });
 
   test("a selected path that is not in the report is ignored and deletes nothing", async () => {
-    // The selection can be stale — a row the user ticked that a later scan no
-    // longer offers. Fail closed: the set only ever narrows what runs.
     const other = await sandbox("only-unknown");
     await plant(join(other.home, ".npm", "_cacache"), 1 * MB, 1);
     await plant(join(other.home, ".bun", "install", "cache"), 1 * MB, 1);
@@ -99,7 +94,6 @@ describe("apply --only-file deletes exactly the selected paths", () => {
     await plant(join(asked.home, ".bun", "install", "cache"), 1 * MB, 1);
     const file = join(asked.home, "selection.json");
     await writeFile(file, JSON.stringify([join(asked.home, ".npm", "_cacache")]));
-    // No --yes and no TTY: the summary is printed, then the run cancels.
     const run = await asked.run(["apply", "--only-file", file]);
     expect(run.code).toBe(0);
     expect(run.stdout).toContain("Đã hủy. Không có gì bị xóa");
@@ -206,8 +200,6 @@ describe("every argument error is one JSON object and exit 1", () => {
   });
 
   test("net --print-privilege --json with no usable account reports one error", async () => {
-    // The sandbox env carries no USER, so there is no account to write a rule
-    // for. The app reads stdout, so the error has to be JSON there.
     const run = await box.run(["net", "--print-privilege", "--json"]);
     expect(run.code).toBe(1);
     expect(String(oneJsonObject(run.stdout)["error"])).toMatch(/không dùng được|macOS/);
@@ -217,9 +209,6 @@ describe("every argument error is one JSON object and exit 1", () => {
 describe.skipIf(process.platform !== "darwin")("net --print-privilege refuses an unresolvable service", () => {
   test("prints an error and exits 1 instead of a rule that cannot work", async () => {
     const box = await sandbox("privempty");
-    // An empty PATH: `route` cannot run, so there is no interface and no
-    // service. The old fallback used the raw device name and emitted a sudoers
-    // rule naming a command `networksetup` rejects every time.
     const empty = assertTempRoot(join(box.home, "no-such-bin"));
     await mkdir(empty, { recursive: true });
     const run = await exec(
@@ -244,8 +233,6 @@ describe("arguments are validated before anything runs", () => {
     await box.dispose();
   });
 
-  // `mcp` is excluded on purpose: a validation bug there would start a stdio
-  // server and hang the suite instead of failing a test.
   const commands = ["scan", "apply", "rule", "doctor", "net", "awdl", "ram", "apps", "largefiles"];
 
   test("an unknown flag is refused for every command, as one JSON object", async () => {

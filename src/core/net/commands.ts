@@ -22,10 +22,6 @@ export type Op = {
 
 export type Step = { cmd: string; args: string[] };
 
-// Absolute paths for the macOS writes that need root. A sudoers rule has to
-// name an absolute path (a bare `networksetup` would not match, and a relative
-// one would be a hole), so the engine invokes exactly the paths the rule names
-// — one definition, and the rule cannot drift from what is actually run.
 export const MAC_COMMANDS = {
   networksetup: "/usr/sbin/networksetup",
   ipconfig: "/usr/sbin/ipconfig",
@@ -135,12 +131,6 @@ export function buildSteps(id: NetOpId, info: NetInfo, p: Platform): Step[] {
   }
 }
 
-/**
- * The exact advanced macOS steps the scoped sudo rule permits, resolved for the
- * interface and service `inspect()` found. This list *is* the rule's content —
- * nothing outside it can be run through `sudo -n`, which is why it is derived
- * from `buildSteps` instead of being written out a second time.
- */
 export function netPrivilegeSteps(info: NetInfo): Step[] {
   return (["reset-dns", "renew-dhcp", "clear-arp", "reset-mtu"] as const).flatMap((id) =>
     buildSteps(id, info, "mac"),

@@ -20,9 +20,6 @@ final class ScanStore: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
-    /// When the report on screen was produced. `ScanReport` carries no
-    /// timestamp of its own, so the Overview provenance line has to be told the
-    /// moment a report landed rather than guess it from a file's mtime.
     @Published private(set) var scannedAt: Date?
     @Published private(set) var lastApply: ApplyReport?
     @Published private(set) var memoryReport: MemoryReport?
@@ -30,33 +27,17 @@ final class ScanStore: ObservableObject {
     @Published private(set) var engineError: L10nText?
     @Published private(set) var busyMessage: L10nText?
     @Published var showingConfirmation = false
-    /// Whether the inline cleanup result card is on screen. The card has no
-    /// modal behind it any more — only the confirmation takes the window over,
-    /// because only the confirmation asks for a decision — but it is dismissed
-    /// deliberately, so it still needs its own flag.
     @Published var showingCleanupResult = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
-    /// The findings list's own filter, held here rather than in the view: the
-    /// detail pane is rebuilt on every module switch, so `@State` would drop the
-    /// query the user typed the moment they looked at Memory.
     @Published var findingsQuery = ""
 
-    // Independent loading state for Memory/Storage windows — does NOT touch main phase/cli
     @Published private(set) var memoryPhase: LoadPhase = .idle
-    /// When the last successful memory read landed, so a module switch can reuse
-    /// it instead of paying for `ram --json` again.
     private(set) var memoryLoadedAt: Date?
     @Published private(set) var memoryError: L10nText?
     @Published private(set) var storagePhase: LoadPhase = .idle
     @Published private(set) var storageError: L10nText?
 
-    // Storage inventory: the volume strip and the two lists in StorageView.
-    // Held here rather than in the view because StorageView is rebuilt on every
-    // module switch — its @State used to throw the inventory away, so every visit
-    // re-read the app list and every mounted volume. A last-loaded timestamp lets
-    // a return inside the window repaint from cache and re-read only when the
-    // list is genuinely old.
     @Published private(set) var storageVolumes: [VolumeInfo] = []
     @Published private(set) var storageApps: [InstalledApp] = []
     @Published private(set) var storageLargeFiles: [LargeFile] = []
@@ -64,9 +45,6 @@ final class ScanStore: ObservableObject {
     @Published private(set) var isLoadingStorageFiles = false
     @Published private(set) var storageAppsError: L10nText?
     @Published private(set) var storageFilesError: L10nText?
-    /// When the last successful read of each inventory landed, so a module
-    /// switch can reuse it instead of paying for the engine again. `nil` until
-    /// the first success, which is how a failed read retries on the next visit.
     private(set) var storageVolumesLoadedAt: Date?
     private(set) var storageAppsLoadedAt: Date?
     private(set) var storageFilesLoadedAt: Date?
@@ -78,10 +56,6 @@ final class ScanStore: ObservableObject {
         return !selectedFindings.isEmpty
     }
 
-    /// While the engine is being located or is walking the disk. Every control
-    /// that would start a second run, or that acts on a list about to be
-    /// replaced, is held for this long — not merely ignored by a guard inside
-    /// `rescan()`, which looks live and does nothing.
     var isBusy: Bool { phase == .scanning || phase == .resolvingEngine }
 
     var selectedFindings: [Finding] {
@@ -112,19 +86,11 @@ final class ScanStore: ObservableObject {
             self.report = report
             self.scannedAt = Date()
             selection = report.initialSelection
-            // Both, together: a card with no report behind it and an Overview
-            // "freed" stat that disagrees with the list under it are the two
-            // ways the same rescan can leave the window telling two stories.
             lastApply = nil
             showingCleanupResult = false
             busyMessage = nil
             phase = .ready
         } catch {
-            // A failed rescan keeps the last good report, its age and its
-            // selection on screen: stale numbers beat a blank panel, and the
-            // error banner is how the user learns they are stale. With a report
-            // to stand on the engine handle is still live, so it stays too —
-            // otherwise the list would be readable and unactionable.
             if report == nil { cli = nil }
             engineError = Self.describe(error)
             busyMessage = nil
@@ -132,12 +98,9 @@ final class ScanStore: ObservableObject {
         }
     }
 
-    /// Clears the stale-report banner without touching the report itself.
     func dismissEngineError() { engineError = nil }
 
     func clean() async {
-        // Snapshot once: the engine is handed this list and nothing else, so the
-        // paths counted in the busy message are the paths that get deleted.
         let selected = selectedFindings
         guard let cli, !selected.isEmpty else { return }
         showingConfirmation = false
@@ -197,9 +160,6 @@ final class ScanStore: ObservableObject {
         }
     }
 
-    /// Reuses the last successful read when it is recent. The dashboard and the
-    /// Memory module both appear on a module switch, which is not a reason to
-    /// re-read the whole process table.
     func ensureMemory(maxAge: TimeInterval = 45) async {
         if let at = memoryLoadedAt, memoryReport != nil, Date().timeIntervalSince(at) < maxAge { return }
         await fetchMemory()
@@ -221,12 +181,6 @@ final class ScanStore: ObservableObject {
         }
     }
 
-    // MARK: - Storage inventory
-
-    /// Reuses the last successful read when it is recent. A module switch is not
-    /// a reason to re-read every mounted volume or the app list; a stale panel
-    /// is. The uninstall path and the retry buttons call the `fetch…` versions
-    /// directly, which never consult the window.
     func ensureStorageVolumes(maxAge: TimeInterval = 45) async {
         if let at = storageVolumesLoadedAt, Date().timeIntervalSince(at) < maxAge { return }
         await fetchStorageVolumes()
@@ -242,9 +196,6 @@ final class ScanStore: ObservableObject {
         await fetchStorageFiles()
     }
 
-    /// Reads every mounted volume. Synchronous disk I/O, and a network or
-    /// external volume can take seconds to answer — on the main actor that is a
-    /// frozen window, so it runs on a detached task and only the result hops back.
     func fetchStorageVolumes() async {
         storageVolumes = await Task.detached { Self.readVolumes() }.value
         storageVolumesLoadedAt = Date()
@@ -272,8 +223,6 @@ final class ScanStore: ObservableObject {
         return result
     }
 
-    /// Always re-reads the app list, bypassing the staleness window. The
-    /// uninstall path and the retry button both force a fresh answer.
     func fetchStorageApps() async {
         guard !isLoadingStorageApps else { return }
         isLoadingStorageApps = true
@@ -289,9 +238,6 @@ final class ScanStore: ObservableObject {
         isLoadingStorageApps = false
     }
 
-    /// Always re-walks the home directory, bypassing the staleness window. The
-    /// retry button forces it; a trash just removes the row and leaves the walk
-    /// for the next stale visit.
     func fetchStorageFiles() async {
         guard !isLoadingStorageFiles else { return }
         isLoadingStorageFiles = true
@@ -306,14 +252,10 @@ final class ScanStore: ObservableObject {
         isLoadingStorageFiles = false
     }
 
-    /// The app is gone now, so it leaves the list on this run rather than when
-    /// the next read finishes: a slow or failed refresh must not leave a deleted
-    /// bundle sitting in the inventory.
     func removeStorageApp(atPath path: String) {
         storageApps.removeAll { $0.path == path }
     }
 
-    /// The file was moved to the Trash, so it leaves the list on this run.
     func removeStorageFile(atPath path: String) {
         storageLargeFiles.removeAll { $0.path == path }
     }

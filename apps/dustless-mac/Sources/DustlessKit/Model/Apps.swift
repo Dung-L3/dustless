@@ -1,12 +1,10 @@
 import Foundation
 
-/// An installed .app bundle, as reported by `dustless apps --json`.
 public struct InstalledApp: Codable, Identifiable, Sendable, Hashable {
     public let bundleId: String
     public let name: String
     public let path: String
     public let bytes: UInt64
-    /// Leftover files/dirs tied to the bundle id (plain paths, as the CLI emits).
     public let relatedPaths: [String]
 
     public var id: String { path }
@@ -21,11 +19,6 @@ public struct InstalledApp: Codable, Identifiable, Sendable, Hashable {
 }
 
 extension InstalledApp {
-    /// Whether this application answers a search box. The bundle id is included
-    /// because it is what a support answer or a shell command will quote, and
-    /// the path because that is how a folder is found.
-    ///
-    /// The needle must already be trimmed and lowercased; empty matches all.
     public func matches(_ needle: String) -> Bool {
         guard !needle.isEmpty else { return true }
         return name.lowercased().contains(needle)
@@ -34,7 +27,6 @@ extension InstalledApp {
     }
 }
 
-/// Outcome of uninstalling a single path.
 public struct UninstallOutcome: Codable, Sendable, Identifiable, Hashable {
     public let path: String
     public let status: Status
@@ -58,7 +50,6 @@ public struct UninstallOutcome: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
-/// Full report from `dustless apps --uninstall`.
 public struct UninstallReport: Codable, Sendable, Identifiable {
     public let outcomes: [UninstallOutcome]
     public let summary: Summary

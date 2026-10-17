@@ -1,26 +1,14 @@
 import DustlessKit
 import SwiftUI
 
-/// The Overview dashboard: what this Mac actually looks like right now, and
-/// nothing else.
-///
-/// Every number here is read from a report the engine produced or from the live
-/// system — there is no score, no grade, no ring and no "health" percentage,
-/// because none of those can be measured from what we have. The view is also
-/// deliberately honest about the gaps: a scan that could not verify an item
-/// says so, and an unscanned machine says "not scanned" instead of drawing
-/// zeros that look like a result.
 struct OverviewView: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var net: NetControl
-    /// Held, not observed: the dashboard only asks the router to navigate, and
-    /// observing it would redraw the whole view on every module switch.
     let router: AppRouter
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The hero number, counting up to the newest report's reclaimable total.
     @State private var shownReclaimable: Double = 0
 
     var body: some View {
@@ -29,8 +17,6 @@ struct OverviewView: View {
         } summary: {
             hero
         } filters: {
-            // The scaffold's four bands, one of which the dashboard has no use
-            // for. Filling it keeps the panel rhythm identical across modules.
             EmptyView()
         } content: {
             ScrollView {
@@ -45,29 +31,16 @@ struct OverviewView: View {
         }
         .task(id: reclaimable) { await countUp(to: Double(reclaimable)) }
         .task {
-            // Reuse recent reads so returning to the dashboard is instant, but
-            // free space is re-read every time: uninstalling an app in Storage
-            // changes it, and the panel should not show yesterday's number.
             await store.ensureMemory()
             await net.refreshIfStale()
             await store.fetchStorage()
         }
     }
 
-    // MARK: - Provenance
-
-    /// Where the numbers came from, in one line. The rule count is derived from
-    /// the report's own findings rather than from a hard-coded list: a rule that
-    /// found nothing never reaches the user as a claim.
     private var provenance: String {
         settings.provenance(store.report, scannedAt: store.scannedAt)
     }
 
-    // MARK: - Hero
-
-    /// The one number worth the top of the window, with the definition under it
-    /// so it is never a bare figure. Same source and same formatter as
-    /// `SummaryHeader` — one reclaimable total, said once.
     private var hero: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
             HStack(spacing: 5) {
@@ -83,9 +56,6 @@ struct OverviewView: View {
                 .font(PanelFont.hero)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            // With no report the definition would be a definition of a number
-            // that was never measured, so the line under it says what is true
-            // instead: there is nothing here yet.
             Text(store.report == nil ? settings.t("overviewNoScan") : settings.t("reclaimableHelp"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
@@ -93,15 +63,11 @@ struct OverviewView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-        // The target, not the value mid-count: a screen reader should not
-        // announce a number that is still climbing.
         .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
     }
 
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
 
-    /// Count up on a new report so a changed number is noticed, ease-out over
-    /// ~0.45s, and nothing at all when the user asked for less motion.
     private func countUp(to target: Double) async {
         guard !reduceMotion, target > 0, shownReclaimable < target else {
             shownReclaimable = target
@@ -115,12 +81,6 @@ struct OverviewView: View {
         }
     }
 
-    // MARK: - Free space
-
-    /// Free space as measured — the engine's own reading, or the live volume
-    /// read when there is no report yet. After a clean it also carries the
-    /// measured delta, which is the only number here that came from deleting
-    /// something.
     private var freeSpace: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             PanelStatStrip(stats: freeStats)
@@ -143,19 +103,12 @@ struct OverviewView: View {
         if let free {
             stats.append((label: settings.t("freeNow"), value: ByteFormat.string(free)))
         }
-        // Freed is a fact about a finished clean, so it only exists once one
-        // has happened — never as a projection of the reclaimable total.
         if let apply = store.lastApply {
             stats.append((label: settings.t("freed"), value: ByteFormat.string(apply.freed)))
         }
         return stats
     }
 
-    // MARK: - Tiers
-
-    /// The three tiers with their live counts, each row a door into that tier of
-    /// the Cleanup module. The Locked row is here on purpose: what the engine
-    /// refuses to delete is part of what the scan found.
     private func tiers(_ report: ScanReport) -> some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             Text(settings.t("tiers"))
@@ -198,11 +151,6 @@ struct OverviewView: View {
         .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"])) · \(ByteFormat.string(bytes))")
     }
 
-    // MARK: - Coverage
-
-    /// What the engine could not read. A partial scan that looks complete is
-    /// the failure this whole view exists to avoid, so the withheld items are
-    /// stated with their size — and nothing is drawn when there are none.
     private var blocked: (count: Int, bytes: UInt64)? {
         guard let blocked = store.report?.totals.blocked, blocked.count > 0 else { return nil }
         return (blocked.count, blocked.bytes)
@@ -229,18 +177,12 @@ struct OverviewView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Module lines
-
-    /// One line per module: what it is currently reporting, and a way in. No
-    /// verdict, no score — the state the module shows is the whole claim.
     private var moduleLines: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             Text(settings.t("modules"))
                 .panelSectionHeader()
             moduleLine(.memory, settings.t("memory"), memoryLine)
             moduleLine(.network, settings.t("networkTitle"), networkLine)
-            // The AirDrop radio is part of the Network module, so that is where
-            // the row's View action goes.
             moduleLine(.network, settings.t("awdlTitle"), airDropLine)
         }
         .padding(PanelStyle.Space.m)
@@ -288,8 +230,6 @@ struct OverviewView: View {
         return "\(settings.t("networkInterface")): \(iface) · \(settings.t("networkGateway")): \(gateway)"
     }
 
-    /// The AirDrop radio's own words, not a paraphrase of them: the module bar
-    /// and the Network module say the same three things about it.
     private var airDropLine: String {
         switch net.awdl.state {
         case .on: settings.t("awdlOn")
@@ -298,13 +238,6 @@ struct OverviewView: View {
         }
     }
 
-    // MARK: - Call to action
-
-    /// The one destructive path, and it opens the existing confirmation sheet —
-    /// this view never deletes anything itself. With nothing scanned there is
-    /// no count to review, so the same slot offers the scan that produces one.
-    /// The count is the *selected* items either way, because a scan pre-selects
-    /// nothing and the button must not imply otherwise.
     private var cta: some View {
         HStack {
             Spacer(minLength: 0)

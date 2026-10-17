@@ -17,13 +17,6 @@ type Options = {
   tiers?: TierChoice;
   assumeYes?: boolean;
   onPrompt?: (finding: Finding) => Promise<boolean>;
-  /**
-   * The caller's explicit selection: the exact resolved paths it wants gone. A
-   * finding outside the set is skipped and nothing is removed for it, so a
-   * per-row choice survives instead of being widened to everything this scan
-   * found. Leaving it undefined keeps the historical behaviour — every green
-   * and yellow finding, subject to the tiers below.
-   */
   only?: ReadonlySet<string>;
 };
 
