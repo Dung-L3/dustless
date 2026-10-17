@@ -1,0 +1,11 @@
+{
+  "user": "mac",
+  "path": "/etc/sudoers.d/dustless-net",
+  "allowed": [
+    "/usr/sbin/networksetup -setdnsservers \"USB 10/100/1000 LAN\" Empty",
+    "/usr/sbin/ipconfig set en5 DHCP",
+    "/usr/sbin/arp -d -a",
+    "/usr/sbin/networksetup -setMTU \"USB 10/100/1000 LAN\" 1500"
+  ],
+  "rule": "mac ALL=(root) NOPASSWD: /usr/sbin/networksetup -setdnsservers \"USB 10/100/1000 LAN\" Empty, /usr/sbin/ipconfig set en5 DHCP, /usr/sbin/arp -d -a, /usr/sbin/networksetup -setMTU \"USB 10/100/1000 LAN\" 1500\n"
+}

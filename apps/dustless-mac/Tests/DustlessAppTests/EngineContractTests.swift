@@ -673,4 +673,43 @@ struct NetModelTests {
         #expect(NetOp.resetDns.flag == "--reset-dns")
         #expect(NetOp.renewDhcp.flag == "--renew-dhcp")
     }
+
+    /// The rule is the whole permission: four absolute, exact commands and
+    /// nothing else. A wildcard or a relative path here would silently widen
+    /// what the app can run as root without a prompt.
+    @Test func thePrivilegeRuleIsScopedToFourExactCommands() throws {
+        let privilege = try JSONDecoder().decode(NetPrivilege.self, from: fixture("net-privilege.json"))
+        #expect(privilege.path == "/etc/sudoers.d/dustless-net")
+        #expect(privilege.user == "mac")
+        #expect(privilege.allowed.count == 4)
+        for command in privilege.allowed {
+            #expect(command.hasPrefix("/usr/sbin/") || command.hasPrefix("/sbin/"))
+        }
+        #expect(privilege.rule.contains("NOPASSWD:"))
+        #expect(!privilege.rule.contains("*"))
+        for command in privilege.allowed {
+            #expect(privilege.rule.contains(command))
+        }
+    }
+
+    /// A service name with spaces is double-quoted so sudoers matches the single
+    /// argument the engine passes, and the rule is newline-terminated because a
+    /// sudoers file without one is not read.
+    @Test func aSpacedServiceIsQuotedAndTheRuleEndsWithANewline() throws {
+        let privilege = try JSONDecoder().decode(NetPrivilege.self, from: fixture("net-privilege.json"))
+        #expect(privilege.allowed[0].contains("\"USB 10/100/1000 LAN\""))
+        // The interface has no spaces and must stay unquoted.
+        #expect(privilege.allowed[1] == "/usr/sbin/ipconfig set en5 DHCP")
+        #expect(privilege.rule.hasSuffix("\n"))
+        #expect(privilege.path.split(separator: "/").last?.contains(".") == false)
+    }
+
+    /// The panel's own row keys, so a missing entry cannot render as a raw key.
+    @Test func thePermissionKeysAreTranslatedInEveryLanguage() {
+        for key in ["netRemember", "netRemembered", "netRememberExplain", "netForget", "netRememberFailed", "netNeedsPermission"] {
+            for lang in Lang.allCases {
+                #expect(L10n.table(lang)[key] != nil, "\(lang)/\(key)")
+            }
+        }
+    }
 }

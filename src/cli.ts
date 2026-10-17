@@ -12,7 +12,10 @@ import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
 import { apply } from "./core/apply.ts";
 import { diskUsage, freeSpace } from "./core/space.ts";
-import { net, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
+import { net, netPrivilege, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
+import { netPrivilegeSteps } from "./core/net/commands.ts";
+import { inspect } from "./core/net/inspect.ts";
+import { systemRun } from "./core/net/run.ts";
 import { awdlPrivilege, awdlStatus, setAwdl, validSudoersUser, type AwdlReport } from "./core/net/awdl.ts";
 import { serveMcp } from "./mcp/server.ts";
 import { runRam } from "./core/ram/index.ts";
@@ -38,6 +41,7 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
   dustless doctor               chẩn đoán môi trường
   dustless net                  flush DNS cache; --reset-dns v.v. là nâng cao, từng lệnh một
+  dustless net --print-privilege   in quy tắc sudo giới hạn cho thao tác nâng cao (không cần root)
   dustless awdl [--json]        trạng thái AWDL (AirDrop); --off | --on để tắt/bật
   dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
   dustless apps [--json]        liệt kê ứng dụng .app
@@ -273,6 +277,7 @@ async function runDoctor(): Promise<number> {
 }
 
 async function runNet(): Promise<number> {
+  if (flag("print-privilege")) return await printNetPrivilege();
   const flags: NetFlags = {
     advanced: flag("advanced"),
     flushDns: flag("flush-dns"),
@@ -285,6 +290,35 @@ async function runNet(): Promise<number> {
   const report = await net({ ops: selectOps(flags), dryRun: flag("dry-run"), force: flag("force") });
   await printNet(report);
   return report.outcomes.some((o) => o.status === "failed") ? 1 : 0;
+}
+
+/**
+ * Prints the sudoers rule the Network panel installs, so the one-time
+ * "remember this authorization" step has exactly one definition of what it
+ * allows. No root needed: this only reads the current interface and service.
+ */
+async function printNetPrivilege(): Promise<number> {
+  if (platform !== "mac") {
+    say("✖ quy tắc sudoers cho net chỉ áp dụng trên macOS");
+    return 1;
+  }
+  const user = process.env["USER"] ?? "";
+  if (!validSudoersUser(user)) {
+    say(`✖ không dùng được "${user}" cho quy tắc sudoers`);
+    return 1;
+  }
+  try {
+    const privilege = netPrivilege(user, netPrivilegeSteps(await inspect(platform, systemRun)));
+    if (flag("json")) {
+      await writeOut(`${JSON.stringify(privilege)}\n`);
+      return 0;
+    }
+    await writeOut(privilege.rule);
+    return 0;
+  } catch (error) {
+    say(`✖ ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
 }
 
 async function printNet(report: NetReport): Promise<void> {
