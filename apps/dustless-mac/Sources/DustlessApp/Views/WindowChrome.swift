@@ -2,17 +2,56 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-/// One visual language for the app's secondary windows. The Memory and Storage
-/// panels used to spell their own headers, cards and row helpers, so the two
-/// drifted apart; everything shared now lives here.
+/// One visual language for the app's management windows. Memory, Storage and
+/// Network each used to spell their own tokens, headers, cards and row helpers,
+/// so three windows built from the same ideas drifted apart; the tokens and
+/// everything shared now live here.
 
-// MARK: - Cards
+// MARK: - Tokens
 
-/// Metrics used by every tile, volume card and metric grid in both windows.
+/// Every metric the panels draw with. The Memory and Storage windows used to
+/// spell their own gaps and fills, which is how two windows built from the same
+/// ideas ended up looking like two products; this is the one place a value is
+/// allowed to live.
 enum PanelStyle {
+    /// The 8pt spacing scale: 4 / 8 / 12 / 16, and nothing else. The chrome above
+    /// a list is a budget, so the gaps between its sections are not free — they
+    /// come from here and nowhere else.
+    enum Space {
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+    }
+
     static let cardFill = Color.secondary.opacity(0.18)
     static let rowFill = Color.secondary.opacity(0.10)
+    /// One corner radius for strips, rows and fields, so nothing reads as a card
+    /// from one window and a block from another.
     static let radius: CGFloat = 8
+}
+
+/// The five sizes the panels are allowed to set. They were 12.5 / 11.5 / 13.5 and
+/// whatever a view felt like at the time; a type scale only works when the
+/// off-scale sizes are gone.
+enum PanelFont {
+    /// Panel title.
+    static let title = Font.system(size: 22, weight: .semibold)
+    /// 13pt: a row title, a number, a sheet heading — anything the eye lands on.
+    static func emphasis(_ weight: Font.Weight = .medium) -> Font {
+        .system(size: 13, weight: weight)
+    }
+    /// A number that must not jitter as it updates.
+    static func number(_ weight: Font.Weight = .medium) -> Font {
+        .system(size: 13, weight: weight, design: .rounded).monospacedDigit()
+    }
+    static let body = Font.system(size: 12)
+    static let secondary = Font.system(size: 11)
+    static let caption = Font.system(size: 10.5)
+    /// Monospaced, for paths, pids and the engine's own sentences.
+    static func mono(_ size: CGFloat = 11, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
 }
 
 extension View {
@@ -21,35 +60,109 @@ extension View {
         background(fill, in: .rect(cornerRadius: PanelStyle.radius))
     }
 
-    /// Section label above a group of rows or cards.
+    /// Section label above a group of rows.
     func panelSectionHeader() -> some View {
-        font(.system(size: 12, weight: .semibold))
+        font(PanelFont.emphasis(.semibold))
             .foregroundStyle(.secondary)
     }
 }
 
-/// A labelled number. The Memory metric grid and the volume cards both render
-/// their numbers through this, so a byte value looks the same in either window.
-struct MetricCard: View {
+// MARK: - Panel skeleton
+
+/// The frame the three management windows share: header, summary strip, filter
+/// bar, then content that takes whatever height is left.
+///
+/// Every panel used to invent its own vertical rhythm — a divider here, a picker
+/// on its own row there — and the result was chrome eating the list. The order
+/// and the gaps live here instead, so "the list gets the rest" is true of all
+/// three and a panel can only fill in the four bands.
+struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>: View {
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let summary: () -> Summary
+    @ViewBuilder let filters: () -> Filters
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
+            header()
+            summary()
+            filters()
+            content()
+                .frame(maxHeight: .infinity)
+        }
+        .padding(PanelStyle.Space.l)
+        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
+        .background(.regularMaterial)
+    }
+}
+
+/// The single filter row: the panel's filter control on the left, its count and
+/// search field on the right.
+///
+/// Split across three rows it was the largest thing in the window that never told
+/// the user anything — three bands of chrome for one decision. One row keeps the
+/// filtering obvious (a dense screen with no visible filter is the failure mode)
+/// and gives the list the height back.
+struct PanelFilterBar<Filter: View, Trailing: View>: View {
+    let placeholder: String
+    @Binding var text: String
+    @ViewBuilder let filter: () -> Filter
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: PanelStyle.Space.s) {
+            filter()
+            Spacer(minLength: PanelStyle.Space.s)
+            trailing()
+            SearchField(placeholder: placeholder, text: $text)
+                .frame(maxWidth: 220)
+        }
+    }
+}
+
+// MARK: - Stats
+
+/// One labelled number for the summary strip. It is a caption over a value, not a
+/// card: the metric grids this replaced spent a third of the window on six tiles
+/// that said the same thing in a taller box.
+struct PanelStat: View {
     let label: String
     let value: String
-    /// Volume cards pack three tiles side by side, so they get the smaller scale.
-    var compact: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(compact ? .caption2 : .caption)
+                .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: compact ? 12 : 13, weight: .medium, design: .rounded).monospacedDigit())
-                .foregroundStyle(.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .truncationMode(.tail)
+            Text(value)
+                .font(PanelFont.number())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(value)")
+    }
+}
+
+/// A row of stats that wraps instead of squeezing: six of them fit across the
+/// window, and a narrow one folds to a second row instead of truncating every
+/// label to nothing.
+struct PanelStatStrip: View {
+    let stats: [(label: String, value: String)]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 88, maximum: 200), spacing: PanelStyle.Space.m)],
+            alignment: .leading,
+            spacing: PanelStyle.Space.s
+        ) {
+            ForEach(stats, id: \.label) { stat in
+                PanelStat(label: stat.label, value: stat.value)
+            }
+        }
     }
 }
 
@@ -69,11 +182,11 @@ struct StatusChip: View {
                 .fill(color)
                 .frame(width: 7, height: 7)
             Text(text)
-                .font(.system(size: 11, weight: .medium))
+                .font(PanelFont.secondary)
                 .foregroundStyle(prominent ? Color.primary : Color.secondary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, PanelStyle.Space.s)
+        .padding(.vertical, PanelStyle.Space.xs)
         .background(color.opacity(prominent ? 0.16 : 0.12), in: .capsule)
         .accessibilityElement(children: .combine)
     }
@@ -99,17 +212,19 @@ struct PanelHeader<Accessory: View>: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: PanelStyle.Space.s) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.title2.weight(.semibold))
+                    .font(PanelFont.title)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(PanelFont.secondary)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
-            Spacer(minLength: 12)
+            Spacer(minLength: PanelStyle.Space.m)
             accessory
         }
     }
@@ -144,7 +259,7 @@ struct SearchField: View {
 
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(PanelFont.body)
                 .accessibilityLabel(placeholder)
 
             if !text.isEmpty {
@@ -160,9 +275,9 @@ struct SearchField: View {
                 .accessibilityLabel(settings.t("clearFilter"))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(PanelStyle.rowFill, in: .rect(cornerRadius: 6))
+        .padding(.horizontal, PanelStyle.Space.s)
+        .padding(.vertical, PanelStyle.Space.xs)
+        .background(PanelStyle.rowFill, in: .rect(cornerRadius: PanelStyle.radius))
     }
 }
 
@@ -233,7 +348,7 @@ struct PanelStateView: View {
 
             if let title {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(PanelFont.emphasis(.semibold))
             }
 
             messageLabel
@@ -243,7 +358,7 @@ struct PanelStateView: View {
                     .controlSize(.large)
             }
         }
-        .padding(28)
+        .padding(PanelStyle.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
     }
@@ -251,9 +366,7 @@ struct PanelStateView: View {
     /// An engine error is worth copying, so it is selectable and monospaced.
     private var messageLabel: some View {
         Text(message)
-            .font(kind == .error
-                ? .system(size: 11.5, design: .monospaced)
-                : .system(size: 12))
+            .font(kind == .error ? PanelFont.mono(11) : PanelFont.body)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
