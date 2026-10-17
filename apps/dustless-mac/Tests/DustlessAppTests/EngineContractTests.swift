@@ -232,6 +232,22 @@ struct AppsModelTests {
             try JSONDecoder().decode(UninstallReport.self, from: Data(#"{"outcomes":"nope"}"#.utf8))
         }
     }
+
+    /// The purge confirmation is the only warning the user gets before a bundle
+    /// and its leftovers are erased for good, so a missing or placeholder-less
+    /// entry in any language would leave a destructive action unexplained.
+    @Test func thePurgeConfirmationIsTranslatedInEveryLanguage() {
+        for key in ["appsPurgeTitle", "appsPurgeBody", "appsPurgeAction"] {
+            for lang in Lang.allCases {
+                #expect(L10n.table(lang)[key] != nil, "\(lang)/\(key)")
+            }
+        }
+        // The count of related files is part of the promise being made.
+        for lang in Lang.allCases {
+            #expect(L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("3"), "\(lang)")
+            #expect(!L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("{n}"), "\(lang)")
+        }
+    }
 }
 
 /// The panel filters. The rule is that the haystack is whatever a person who
@@ -696,6 +712,69 @@ struct EngineProcessContractTests {
             .appendingPathComponent("dustless-capture-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    /// An uninstall that removed the bundle for good, and the same run refused
+    /// because the bundle is root-owned — the two outcomes the app must show.
+    private let purgedReport = #"""
+    {"outcomes":[{"path":"/Applications/Test.app","status":"purged","bytes":2048,"detail":"permanently deleted"}],
+     "summary":{"trashed":0,"purged":1,"skipped":0,"failed":0,"totalBytes":2048}}
+    """#
+
+    private let failedPurgeReport = #"""
+    {"outcomes":[{"path":"/Applications/Root.app","status":"failed","bytes":0,"detail":"EACCES: permission denied"}],
+     "summary":{"trashed":0,"purged":0,"skipped":0,"failed":1,"totalBytes":0}}
+    """#
+
+    /// Uninstalling is permanent now, so the run has to carry `--purge`: without
+    /// it the engine moves the bundle to the Trash, which is a different promise
+    /// than the one the confirmation makes.
+    @Test func anUninstallAsksTheEngineToPurge() async throws {
+        let capture = try captureDir()
+        let cli = DustlessCLI(
+            executable: try recordingEngine(capture: capture, report: purgedReport),
+            timeout: 5
+        )
+        let report = try await cli.uninstallApp(path: "/Applications/Test.app", purge: true)
+
+        let argv = try captured(capture, "argv").split(separator: "\n").map(String.init)
+        #expect(argv == ["apps", "--uninstall", "/Applications/Test.app", "--confirm", "--json", "--purge"])
+        #expect(report.outcomes.first?.status == .purged)
+        #expect(report.summary.purged == 1)
+    }
+
+    /// The default is still the recoverable path, which is what the large-file
+    /// Trash flow and any other caller rely on.
+    @Test func anUninstallWithoutPurgeNeverAsksForIt() async throws {
+        let capture = try captureDir()
+        let cli = DustlessCLI(
+            executable: try recordingEngine(capture: capture, report: purgedReport),
+            timeout: 5
+        )
+        _ = try await cli.uninstallApp(path: "/Applications/Test.app")
+
+        let argv = try captured(capture, "argv").split(separator: "\n").map(String.init)
+        #expect(argv == ["apps", "--uninstall", "/Applications/Test.app", "--confirm", "--json"])
+        #expect(!argv.contains("--purge"))
+    }
+
+    /// A refused purge (a root-owned bundle) is an outcome to show, not an
+    /// exception to swallow: the report is decoded even though the engine exits
+    /// 1, and nothing is quietly moved to the Trash instead.
+    @Test func aRefusedPurgeSurfacesAsFailed() async throws {
+        let capture = try captureDir()
+        let cli = DustlessCLI(
+            executable: try recordingEngine(capture: capture, report: failedPurgeReport, status: 1),
+            timeout: 5
+        )
+        let report = try await cli.uninstallApp(path: "/Applications/Root.app", purge: true)
+
+        let argv = try captured(capture, "argv").split(separator: "\n").map(String.init)
+        #expect(argv.contains("--purge"), "the refusal is about the purge it refused: \(argv)")
+        #expect(report.outcomes.map(\.status) == [.failed])
+        #expect(report.summary.failed == 1)
+        #expect(report.summary.trashed == 0, "never downgraded to the Trash")
+        #expect(report.summary.purged == 0)
     }
 }
 

@@ -99,8 +99,18 @@ public struct DustlessCLI: Sendable {
         try await decode([InstalledApp].self, from: run(["apps", "--json"]))
     }
 
-    public func uninstallApp(path: String) async throws -> UninstallReport {
-        try await decode(UninstallReport.self, from: run(["apps", "--uninstall", path, "--confirm", "--json"]))
+    /// Removes an application for good.
+    ///
+    /// `purge: true` adds the engine's `--purge`, which `rm -rf`s the bundle and
+    /// its leftovers instead of moving them to the Trash — nothing is recoverable
+    /// afterwards, which is why the confirmation says so. The engine still runs
+    /// its own safety validation (bundle id, paths under HOME, the red list)
+    /// before anything is deleted, and a refusal comes back as a report whose
+    /// outcome is `failed`, not as a silent fallback to the Trash.
+    public func uninstallApp(path: String, purge: Bool = false) async throws -> UninstallReport {
+        var args = ["apps", "--uninstall", path, "--confirm", "--json"]
+        if purge { args.append("--purge") }
+        return try await decode(UninstallReport.self, from: run(args))
     }
 
     /// The engine's own defaults: files over 200 MiB, the biggest 50 first.
