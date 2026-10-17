@@ -1,9 +1,30 @@
+import AppKit
+import Combine
 import DustlessKit
 import SwiftUI
 
+/// The menu-bar popover — the app's second surface, and the one reached without
+/// opening the window.
+///
+/// Presented with `.menuBarExtraStyle(.window)` rather than `.menu`, so it can
+/// carry measurements instead of a list of commands: the last scan's provenance,
+/// free space, reclaimable bytes, memory pressure and the network interface,
+/// then the two actions worth taking without the window and a row per module.
+///
+/// It is built from the window's own tokens (`PanelStyle`, `PanelFont`,
+/// `panelCard`) so the popover and the window read as one product, and it takes
+/// its appearance from `NSApp.appearance` — the menu-bar surface is AppKit's,
+/// outside every SwiftUI scene, which is the one place a scene-level colour
+/// scheme never reached.
+///
+/// Honesty rules, unchanged from the rest of the app: no score, no ring, no
+/// projection. A figure the engine did not measure draws as `—`, a scan that
+/// failed says so, and a number from an older report is labelled with its age
+/// rather than presented as current.
 struct MenuBarContent: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var router: AppRouter
+    @ObservedObject var net: NetControl
     @ObservedObject var awdl: AwdlControl
     let onOpenWindow: () -> Void
 
@@ -11,99 +32,384 @@ struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Group {
-            if let report = store.report {
-                Text(settings.t("freeStat", ["amount": ByteFormat.string(report.freeBefore)]))
-                Text("\(settings.t("reclaimableMetric")): \(ByteFormat.string(report.reclaimable))")
-                if store.engineError != nil {
-                    // The numbers above are from the last good scan; silently
-                    // showing them after a failed one is the menu bar lying.
-                    Text(settings.t("menuStale"))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                }
-                Divider()
-                Button(store.phase == .scanning ? settings.t("scanningShort") : settings.t("rescan")) {
-                    Task { await store.rescan() }
-                }
-                .disabled(store.isBusy)
-
-                Button(settings.t("cleanItemsMenu", ["n": "\(store.selectedFindings.count)"])) {
-                    router.select(.cleanup)
-                    store.showingConfirmation = true
-                }
-                .disabled(!store.canClean)
-            } else {
-                Text("Dustless")
-                if let error = store.engineError {
-                    Divider()
-                    Text(settings.t("engineUnavailable"))
-                    Text(settings.text(error))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(settings.t("nothingScanned"))
-                    Button(settings.t("rescan")) { Task { await store.rescan() } }
-                        // Both busy phases, like every other rescan control: while
-                        // the engine is still being located this one used to sit
-                        // live and silently do nothing.
-                        .disabled(store.isBusy)
-                }
-            }
-
+        VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
+            header
+            metrics
+            actions
             Divider()
-            Button(settings.t("openDustless"), action: onOpenWindow)
-            // These used to open three separate `Window` scenes; they navigate
-            // the one window now.
-            Button(settings.t("memory")) {
-                router.select(.memory)
-            }
-            Button(settings.t("storage")) {
-                router.select(.storage)
-            }
-            Button(settings.t("networkTitle")) {
-                router.select(.network)
-            }
-            Button(settings.t("settingsOpen")) { openSettings() }
-
+            destinations
             Divider()
-            Text(settings.t("awdlTitle"))
-            awdlRow
-
+            airDrop
             Divider()
-            // No bare "q": this menu is open over the whole screen, so any `q`
-            // typed anywhere — a search field, a path — terminated the app. ⌘Q
-            // is the system's own Quit and needs no second copy.
-            Button(settings.t("quitDustless")) { NSApp.terminate(nil) }
+            footer
         }
-        .task { await awdl.refresh() }
+        .padding(PanelStyle.Space.m)
+        // Wide enough for two stat columns and the button labels, narrow enough to
+        // stay a popover rather than a window.
+        .frame(width: 320)
+        .task { await refreshLive() }
+        // `.task` above fires once: a `.window` popover keeps its content view
+        // alive across open/close, so appearing is not an "opened" event and a
+        // second open would keep the first open's numbers. The popover window
+        // becoming key is the event that actually repeats. Every read behind
+        // `refreshLive` is throttled, so the times the main window or a sheet takes
+        // key cost nothing.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            guard let window = note.object as? NSWindow,
+                  window !== MainWindowTracker.shared.window else { return }
+            Task { await refreshLive() }
+        }
     }
 
-    /// The AirDrop (AWDL) toggle. The first press installs the scoped sudo rule
-    /// behind one admin prompt; after that the flip is password-free.
-    @ViewBuilder
-    private var awdlRow: some View {
-        if let state = awdl.state, state != .absent {
-            Text(state == .on ? settings.t("awdlOn") : settings.t("awdlOff"))
-            Button(awdl.isOn ? settings.t("awdlTurnOff") : settings.t("awdlTurnOn")) {
-                Task {
-                    if !awdl.privilegeInstalled {
-                        guard await awdl.installPrivilege() else { return }
-                    }
-                    await awdl.setEnabled(!awdl.isOn)
-                }
-            }
-            .disabled(awdl.busy)
-        } else {
-            Text(settings.t("awdlUnknown"))
-        }
+    // MARK: - Header
 
-        // A failed install or a refused toggle must be visible right here, not
-        // only in Settings: otherwise the menu item silently does nothing.
-        if let error = awdl.error {
-            Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.orange)
+    private var header: some View {
+        let provenance = settings.provenance(store.report, scannedAt: store.scannedAt)
+        return VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
+            HStack(spacing: PanelStyle.Space.s) {
+                Text("Dustless")
+                    .font(PanelFont.emphasis(.semibold))
+                Spacer(minLength: PanelStyle.Space.s)
+                refreshButton
+            }
+
+            Text(provenance)
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(provenance)
+
+            failure
         }
+    }
+
+    /// The last read failed. Two different facts hide behind that, and the menu
+    /// bar must not conflate them: with a report on screen the numbers above are
+    /// from the last good scan and are now stale; with no report at all there are
+    /// no numbers to be stale, and the honest statement is that the engine is
+    /// unavailable. Either way the engine's own sentence is shown, capped — a
+    /// failure the user only discovers by hovering is barely reported.
+    @ViewBuilder
+    private var failure: some View {
+        if let error = store.engineError {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(
+                    settings.t(store.report == nil ? "engineUnavailable" : "menuStale"),
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(PanelFont.caption)
+                .foregroundStyle(.orange)
+
+                Text(settings.text(error))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .help(settings.text(error))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var refreshButton: some View {
+        Button {
+            Task { await refreshLive() }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 11, weight: .medium))
+        }
+        .buttonStyle(.borderless)
+        .help(settings.t("refreshHelp"))
+        .accessibilityLabel(settings.t("refresh"))
+    }
+
+    // MARK: - Metrics
+
+    /// The live numbers, as two columns. Each is a measurement or a dash: the
+    /// reclaimable figure is the last scan's, the free-space figure falls back to
+    /// the live volume read when there is no report, memory and network come from
+    /// the same reads the window uses.
+    private var metrics: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
+                GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
+            ],
+            alignment: .leading,
+            spacing: PanelStyle.Space.s
+        ) {
+            ForEach(stats) { stat in
+                PanelStat(label: stat.label, value: stat.value)
+                    .help(stat.help ?? stat.label)
+            }
+        }
+        .padding(PanelStyle.Space.m)
+        .panelCard()
+    }
+
+    private struct Stat: Identifiable {
+        let label: String
+        let value: String
+        var help: String?
+        var id: String { label }
+    }
+
+    private var stats: [Stat] {
+        [
+            Stat(
+                label: settings.t("freeNow"),
+                value: freeSpace,
+                help: settings.t("freeNowHelp")
+            ),
+            Stat(
+                label: settings.t("reclaimableMetric"),
+                value: store.report.map { ByteFormat.string($0.reclaimable) } ?? "—",
+                help: settings.t("reclaimableHelp")
+            ),
+            Stat(label: settings.t("memoryPressure"), value: memoryValue),
+            Stat(label: settings.t("networkTitle"), value: networkValue, help: networkHelp),
+        ]
+    }
+
+    private var freeSpace: String {
+        if let report = store.report { return ByteFormat.string(report.freeBefore) }
+        if let disk = store.diskSpace { return ByteFormat.string(disk.available) }
+        return "—"
+    }
+
+    private var memoryValue: String {
+        guard let memory = store.memoryReport?.memory else {
+            return store.memoryPhase == .loading ? settings.t("busyMemory") : "—"
+        }
+        return "\(settings.pressureLabel(memory.pressure)) · \(memory.pressurePercent)%"
+    }
+
+    /// Interface and gateway in one cell, the full pair in the hover. Both are
+    /// addresses the engine read; a missing one is a dash, not a zero.
+    private var networkValue: String {
+        guard let report = net.report else {
+            return net.isLoading ? settings.t("busyNetwork") : "—"
+        }
+        return "\(report.iface ?? "—") · \(report.gateway ?? "—")"
+    }
+
+    private var networkHelp: String? {
+        guard let report = net.report else { return nil }
+        return "\(settings.t("networkInterface")): \(report.iface ?? "—") · "
+            + "\(settings.t("networkGateway")): \(report.gateway ?? "—")"
+    }
+
+    // MARK: - Actions
+
+    /// The two paths that matter. The same shape the Overview dashboard uses: the
+    /// scan while there is no report, and Review & Clean once there is — it opens
+    /// the confirmation sheet through the router and never deletes on its own.
+    private var actions: some View {
+        VStack(spacing: PanelStyle.Space.s) {
+            if store.report == nil {
+                Button {
+                    Task { await store.rescan() }
+                } label: {
+                    Text(settings.t("scanNow")).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(store.isBusy)
+                .help(settings.t("rescanHelp"))
+            } else {
+                Button(action: reviewAndClean) {
+                    Text(
+                        store.selectedFindings.isEmpty
+                            ? settings.t("selectedNone")
+                            : settings.t("overviewReview", [
+                                "n": "\(store.selectedFindings.count)",
+                                "size": ByteFormat.string(store.selectedBytes),
+                            ])
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!store.canClean)
+                .help(settings.t("reviewAndDeleteHelp"))
+
+                Button {
+                    Task { await store.rescan() }
+                } label: {
+                    Label(
+                        store.isBusy ? settings.t("scanningShort") : settings.t("rescan"),
+                        systemImage: "arrow.clockwise"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .controlSize(.large)
+                .disabled(store.isBusy)
+                .help(settings.t("rescanHelp"))
+            }
+        }
+    }
+
+    /// Cleanup, then the confirmation. `select` brings the window forward too, so
+    /// the sheet is raised over a window the user can see.
+    private func reviewAndClean() {
+        router.select(.cleanup)
+        store.showingConfirmation = true
+    }
+
+    // MARK: - Destinations
+
+    private var destinations: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Module.allCases) { module in
+                destinationRow(module)
+            }
+        }
+    }
+
+    private func destinationRow(_ module: Module) -> some View {
+        let title = settings.t(module.titleKey)
+        return Button {
+            router.select(module)
+        } label: {
+            HStack(spacing: PanelStyle.Space.s) {
+                Image(systemName: module.symbolName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text(title)
+                    .font(PanelFont.emphasis())
+                Spacer(minLength: PanelStyle.Space.s)
+                // Cleanup is the one destination with a number worth carrying: how
+                // many paths are ticked and waiting for its confirmation.
+                if module == .cleanup, !store.selectedFindings.isEmpty {
+                    Text(settings.t("itemMany", ["n": "\(store.selectedFindings.count)"]))
+                        .font(PanelFont.number())
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, PanelStyle.Space.xs)
+            .padding(.horizontal, PanelStyle.Space.s)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    // MARK: - AirDrop
+
+    /// The same AWDL control the Network module and Settings drive, in one row.
+    /// The first press installs the scoped sudo rule behind one admin prompt;
+    /// after that the flip is password-free.
+    private var airDrop: some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            HStack(spacing: PanelStyle.Space.s) {
+                Image(systemName: "airdrop")
+                    .font(.system(size: 12))
+                    .foregroundStyle(awdl.isOn ? Color.blue : Color.secondary)
+                    .frame(width: 18)
+                Text(airDropState)
+                    .font(PanelFont.emphasis())
+                    .lineLimit(1)
+                Spacer(minLength: PanelStyle.Space.s)
+                airDropButton
+            }
+            .help(airDropHelp)
+
+            // A failed install or a refused toggle must be visible right here, not
+            // only in Settings: otherwise the button silently does nothing.
+            if let error = awdl.error {
+                Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var airDropState: String {
+        switch awdl.state {
+        case .on: settings.t("awdlOnShort")
+        case .off: settings.t("awdlOffShort")
+        default: settings.t("awdlUnknown")
+        }
+    }
+
+    /// The full sentence, on the hover: the row only has room for the short form.
+    private var airDropHelp: String {
+        switch awdl.state {
+        case .on: settings.t("awdlOn")
+        case .off: settings.t("awdlOff")
+        default: settings.t("awdlUnknown")
+        }
+    }
+
+    @ViewBuilder
+    private var airDropButton: some View {
+        // An absent radio cannot be toggled; the engine would refuse it and the
+        // button would look broken. The state line above still says why.
+        if let state = awdl.state, state != .absent {
+            Button(awdl.isOn ? settings.t("awdlTurnOff") : settings.t("awdlTurnOn")) {
+                Task { await toggleAirDrop() }
+            }
+            .controlSize(.small)
+            .disabled(awdl.busy)
+            .help(airDropHelp)
+        }
+    }
+
+    private func toggleAirDrop() async {
+        if !awdl.privilegeInstalled {
+            guard await awdl.installPrivilege() else { return }
+        }
+        await awdl.setEnabled(!awdl.isOn)
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: PanelStyle.Space.s) {
+            Button(settings.t("openDustless"), action: onOpenWindow)
+                .controlSize(.small)
+
+            Spacer(minLength: PanelStyle.Space.s)
+
+            Button {
+                openSettings()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help(settings.t("settingsOpen"))
+            .accessibilityLabel(settings.t("settingsOpen"))
+
+            // ⌘Q is the system's own Quit and still works; this is the one-click
+            // copy. Unlike the old menu, this popover carries no key equivalents,
+            // so there is no bare "q" to swallow a keystroke.
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+            }
+            .buttonStyle(.borderless)
+            .help(settings.t("quitDustless"))
+            .accessibilityLabel(settings.t("quitDustless"))
+        }
+    }
+
+    // MARK: - Live reads
+
+    /// The cheap reads, not a rescan. A full disk walk is what the Scan button is
+    /// for, and merely opening the menu must not start one; the staleness windows
+    /// in the store keep a burst of opens from re-reading the same thing. The
+    /// network read carries the AirDrop state with it, so the row is live too.
+    private func refreshLive() async {
+        await store.ensureMemory()
+        await net.refreshIfStale()
+        await store.fetchStorage()
     }
 }

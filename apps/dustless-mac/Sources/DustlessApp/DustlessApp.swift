@@ -62,16 +62,18 @@ struct DustlessApp: App {
                 .environmentObject(settings)
         }
 
-        // Re-read from `AppSettings` on every render, so the items follow the
-        // language without a relaunch; its appearance comes from `NSApp`,
-        // since this popover is AppKit's menu rather than a SwiftUI scene.
+        // A popover, not a menu: `.window` lets the surface carry measurements
+        // rather than a list of commands. Its wording comes from `AppSettings` on
+        // every render, so it follows the language without a relaunch; its
+        // appearance comes from `NSApp`, since this popover is AppKit's window
+        // rather than a SwiftUI scene's.
         MenuBarExtra {
-            MenuBarContent(store: store, router: router, awdl: awdl, onOpenWindow: openMainWindow)
+            MenuBarContent(store: store, router: router, net: net, awdl: awdl, onOpenWindow: openMainWindow)
                 .environmentObject(settings)
         } label: {
             MenuBarLabel()
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }
 
