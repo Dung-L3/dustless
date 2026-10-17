@@ -55,7 +55,13 @@ final class AwdlControl: ObservableObject {
     func installPrivilege() async -> Bool {
         guard !busy else { return false }
         busy = true
-        defer { busy = false }
+        AutoCloseGate.shared.begin()
+        // `defer` so the hold is released on cancel and on throw too — an
+        // unreleased gate would leave every panel un-closable.
+        defer {
+            AutoCloseGate.shared.end()
+            busy = false
+        }
         do {
             let privilege = try await DustlessCLI.resolve().awdlPrivilege()
             let staging = FileManager.default.temporaryDirectory
@@ -82,7 +88,11 @@ final class AwdlControl: ObservableObject {
     func removePrivilege() async {
         guard !busy else { return }
         busy = true
-        defer { busy = false }
+        AutoCloseGate.shared.begin()
+        defer {
+            AutoCloseGate.shared.end()
+            busy = false
+        }
         do {
             try await runAdmin("\(Self.rmTool) -f \(sh(Self.privilegePath))")
             privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)

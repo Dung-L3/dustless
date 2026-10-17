@@ -130,6 +130,52 @@ struct WindowCapture: NSViewRepresentable {
     }
 }
 
+/// Holds the panel open while a system admin password prompt is up, and brings
+/// the app back once it is done.
+///
+/// Why this exists: the sheet/modal guard in `CloseOnResignKeyView` cannot see
+/// this case. The macOS authorization dialog is owned by another process
+/// (SecurityAgent, reached through osascript), so it makes our app inactive and
+/// takes key status from the panel without ever attaching a sheet to it. The
+/// panel then closed under the user's own prompt and the window was simply
+/// gone. Depth-counted so overlapping prompts cannot release each other's hold.
+@MainActor
+final class AutoCloseGate {
+    static let shared = AutoCloseGate()
+
+    private var depth = 0
+    /// The window that was frontmost when the first prompt went up — the one to
+    /// hand focus back to.
+    private weak var pendingWindow: NSWindow?
+
+    var isActive: Bool { depth > 0 }
+
+    func begin() {
+        if depth == 0 {
+            let front = NSApp.keyWindow ?? NSApp.mainWindow
+            pendingWindow = (front?.isVisible ?? false) ? front : nil
+        }
+        depth += 1
+    }
+
+    func end() {
+        guard depth > 0 else { return }
+        depth -= 1
+        guard depth == 0 else { return }
+        let window = pendingWindow
+        pendingWindow = nil
+        // The prompt belongs to us, so coming back to us is the expected
+        // outcome — without it the panel is on screen but unusable.
+        NSApp.activate(ignoringOtherApps: true)
+        // Only if that flow is still live: a panel the user closed while typing
+        // their password must not be resurrected.
+        if let window, window.isVisible {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+}
+
 /// Closes a window when it resigns key status, i.e. when the user clicks
 /// outside it (another window of this app, or another app).
 struct CloseOnResignKey: NSViewRepresentable {
@@ -166,6 +212,9 @@ final class CloseOnResignKeyView: NSView {
         // Only a genuine click-away — another app, the desktop, a sibling window
         // with no child dialog — may close the panel.
         guard window.attachedSheet == nil, NSApp.modalWindow == nil else { return }
+        // The system admin prompt belongs to another process, so neither check
+        // above sees it; it must not read as a click-away either.
+        guard !AutoCloseGate.shared.isActive else { return }
         window.close()
     }
 
