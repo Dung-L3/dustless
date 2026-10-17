@@ -36,30 +36,22 @@ struct NetView: View {
     @State private var filter: NetOpFilter = .all
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        PanelScaffold {
             header
-            Divider()
-            // A refresh that failed keeps the last numbers on screen; the banner
-            // is how the user learns they are stale.
-            if let error = net.loadError {
-                errorLabel(error)
-            }
-            connection
-            Divider()
-            airDrop
-            Divider()
+        } summary: {
+            summary
+        } filters: {
+            filterBar
+        } content: {
             operations
         }
-        .padding(20)
-        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
-        .background(.regularMaterial)
     }
 
     // MARK: - Header
 
     private var header: some View {
         PanelHeader(title: settings.t("networkTitle")) {
-            HStack(spacing: 8) {
+            HStack(spacing: PanelStyle.Space.s) {
                 // Worth saying out loud: this is why the engine refuses the
                 // interface operations unless the run is forced.
                 if net.report?.soloRoute == true {
@@ -72,19 +64,32 @@ struct NetView: View {
         }
     }
 
-    // MARK: - Connection
+    // MARK: - Summary
+
+    /// Connection numbers as one row of stats, plus the AirDrop block that shares
+    /// the band. The three tiles this replaced were three cards for three strings,
+    /// and a gateway address is not 40pt of information.
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            // A refresh that failed keeps the last numbers on screen; the banner
+            // is how the user learns they are stale.
+            if let error = net.loadError {
+                errorLabel(error)
+            }
+
+            connection
+            airDrop
+        }
+    }
 
     private var connection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(settings.t("networkState"))
-                .panelSectionHeader()
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                tile(settings.t("networkInterface"), net.report?.iface)
-                tile(settings.t("networkGateway"), net.report?.gateway)
-                tile(settings.t("networkDns"), dnsServers)
-            }
+        HStack(spacing: PanelStyle.Space.m) {
+            connectionStat(settings.t("networkInterface"), net.report?.iface)
+            connectionStat(settings.t("networkGateway"), net.report?.gateway)
+            connectionStat(settings.t("networkDns"), dnsServers)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(settings.t("networkState"))
     }
 
     /// The DNS list the engine resolved, or nothing when it found none.
@@ -93,14 +98,13 @@ struct NetView: View {
         return dns.joined(separator: ", ")
     }
 
-    /// One tile directly on the window background, like the Memory metric grid:
     /// `—` means the engine could not tell, which is a different fact from an
-    /// empty value.
-    private func tile(_ label: String, _ value: String?) -> some View {
-        MetricCard(label: label, value: value ?? "—")
-            .padding(10)
-            .panelCard()
-            .help(label)
+    /// empty value. Addresses are long, so the value truncates in the middle and
+    /// the full string stays in the tooltip.
+    private func connectionStat(_ label: String, _ value: String?) -> some View {
+        PanelStat(label: label, value: value ?? "—")
+            .truncationMode(.middle)
+            .help(value ?? label)
     }
 
     // MARK: - AirDrop
@@ -108,29 +112,29 @@ struct NetView: View {
     /// The same AWDL control the menu bar and Settings drive, so a permission
     /// installed here is not invisible to them and vice versa.
     private var airDrop: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             Text(settings.t("awdlTitle"))
                 .panelSectionHeader()
 
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: PanelStyle.Space.m) {
                 Image(systemName: "airdrop")
                     .font(.system(size: 16))
                     .foregroundStyle(net.awdl.isOn ? Color.blue : Color.secondary)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(awdlStateText)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(PanelFont.emphasis())
                     Text(settings.t("awdlNote"))
-                        .font(.system(size: 10.5))
+                        .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: PanelStyle.Space.s)
 
                 airDropControls
             }
-            .padding(12)
+            .padding(PanelStyle.Space.m)
             .panelCard()
 
             if let error = net.awdl.error {
@@ -152,10 +156,10 @@ struct NetView: View {
     /// it. Once installed it turns into the fact it now is.
     @ViewBuilder
     private var airDropControls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PanelStyle.Space.s) {
             if net.awdl.privilegeInstalled {
                 Label(settings.t("awdlInstalled"), systemImage: "checkmark.seal.fill")
-                    .font(.system(size: 11))
+                    .font(PanelFont.secondary)
                     .foregroundStyle(.secondary)
                     .help(settings.t("awdlInstalled"))
             } else {
@@ -183,31 +187,26 @@ struct NetView: View {
 
     // MARK: - Operations
 
-    private var operations: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(settings.t("networkOps"))
-                    .panelSectionHeader()
-
-                Spacer(minLength: 0)
-
-                Picker(settings.t("networkOps"), selection: $filter) {
-                    ForEach(NetOpFilter.allCases) { option in
-                        Text(settings.t(option.titleKey)).tag(option)
-                    }
+    /// Which operations, and how to find one: one row. It was the section heading
+    /// with a picker in it, then a search field of its own on the line below.
+    private var filterBar: some View {
+        PanelFilterBar(placeholder: settings.t("networkSearchPrompt"), text: $query) {
+            Picker(settings.t("networkOps"), selection: $filter) {
+                ForEach(NetOpFilter.allCases) { option in
+                    Text(settings.t(option.titleKey)).tag(option)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .accessibilityLabel(settings.t("networkOps"))
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .accessibilityLabel(settings.t("networkOps"))
+        } trailing: {
+            EmptyView()
+        }
+    }
 
-            // The field lives in the content, not in `.searchable`: this is a bare
-            // `Window` scene with no toolbar to host one, so `.searchable` drew
-            // nothing while still filtering — an invisible, working search.
-            SearchField(placeholder: settings.t("networkSearchPrompt"), text: $query)
-                .frame(maxWidth: 320)
-
+    private var operations: some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             if let error = net.runError {
                 errorLabel(error)
             }
@@ -219,7 +218,7 @@ struct NetView: View {
                 // The list takes whatever height is left, so the filter row above
                 // never pushes the window around.
                 ScrollView {
-                    LazyVStack(spacing: 6) {
+                    LazyVStack(spacing: PanelStyle.Space.s) {
                         ForEach(visibleOps) { opRow($0) }
                     }
                 }
@@ -227,7 +226,7 @@ struct NetView: View {
             }
 
             Text(settings.t("networkNote"))
-                .font(.system(size: 11))
+                .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -236,7 +235,7 @@ struct NetView: View {
     private func opRow(_ op: NetOp) -> some View {
         let outcome = net.outcome(for: op)
         return VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
+            HStack(spacing: PanelStyle.Space.s) {
                 Image(systemName: op.symbol)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
@@ -244,15 +243,15 @@ struct NetView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(settings.t(op.labelKey))
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(PanelFont.emphasis(.semibold))
                     Text(settings.t(op.helpKey))
-                        .font(.system(size: 10.5))
+                        .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
 
-                Spacer(minLength: 8)
+                Spacer(minLength: PanelStyle.Space.s)
 
                 if op.isAdvanced {
                     StatusChip(color: .orange, text: settings.t("networkNeedsAdmin"))
@@ -269,15 +268,15 @@ struct NetView: View {
                 // The engine's own sentence, verbatim: when it explains a refusal,
                 // its wording beats anything the UI could paraphrase it with.
                 Text(outcome.detail)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(PanelFont.mono(10.5))
                     .foregroundStyle(outcome.needsAttention ? Color.orange : Color.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 26)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, PanelStyle.Space.m)
+        .padding(.vertical, PanelStyle.Space.s)
         .panelCard(PanelStyle.rowFill)
         .accessibilityElement(children: .contain)
     }
@@ -344,7 +343,7 @@ struct NetView: View {
 
     private func errorLabel(_ error: L10nText) -> some View {
         Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
-            .font(.system(size: 11, design: .monospaced))
+            .font(PanelFont.mono(11))
             .foregroundStyle(.orange)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)

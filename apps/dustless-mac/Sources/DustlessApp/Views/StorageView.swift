@@ -77,44 +77,25 @@ struct StorageView: View {
     @State private var dataLoaded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // Filtered once here and threaded down: the body re-runs on every
+        // keystroke, and the list, the count and the "no matches" state all need
+        // the same answer. Trimming is free when the box is empty, so working out
+        // the tab that is not on screen costs nothing.
+        let appsVisible = filteredApps
+        let filesVisible = filteredFiles
+
+        PanelScaffold {
             header
-
-            Divider()
-
-            // Volumes stay put at the top; the list below scrolls in the space
-            // that is left. One long scroll made the volumes impossible to find
-            // on a Mac with a dozen applications installed.
-            volumesSection
-
-            if let reclaimable {
-                reclaimableSection(reclaimable)
-            }
-
-            Divider()
-
-            Picker(settings.t("storage"), selection: $section) {
-                Text(settings.t("appsTitle")).tag(StorageSection.apps)
-                Text(settings.t("largeFilesTitle")).tag(StorageSection.files)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel(settings.t("storage"))
-            .onChange(of: section) { _, next in
-                // Walking the home directory is slower than reading an app
-                // list, so it waits until the tab is actually opened.
-                if next == .files, !filesLoaded {
-                    filesLoaded = true
-                    Task { await loadLargeFiles() }
-                }
-            }
-
-            inventorySection
-                .frame(maxHeight: .infinity)
+        } summary: {
+            volumeStrip
+        } filters: {
+            filterBar(
+                shown: section == .apps ? appsVisible.count : filesVisible.count,
+                total: section == .apps ? apps.count : largeFiles.count
+            )
+        } content: {
+            inventory(apps: appsVisible, files: filesVisible)
         }
-        .padding(20)
-        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 680)
-        .background(.regularMaterial)
         .task {
             if !dataLoaded {
                 await loadVolumes()
@@ -158,73 +139,132 @@ struct StorageView: View {
         }
     }
 
-    @ViewBuilder
-    private var inventorySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Above the list, not over it: after the action the user should still
-            // be able to read what is left.
+    /// The scrolling half of the window: the inline result card, then whichever
+    /// inventory the picker names. Above the list, not over it — after the action
+    /// the user should still be able to read what is left.
+    private func inventory(apps: [InstalledApp], files: [LargeFile]) -> some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
             if let result {
                 StorageResultCard(
                     report: result.report,
                     title: settings.t(result.titleKey),
                     onClose: { self.result = nil }
                 )
-                .frame(maxHeight: 200)
+                // Capped: a report listing dozens of leftovers must never cost the
+                // list more than a peek at the outcome.
+                .frame(maxHeight: 160)
             }
 
             switch section {
-            case .apps: applicationsSection
-            case .files: largeFilesSection
+            case .apps: appsBody(apps)
+            case .files: largeFilesBody(files)
             }
         }
     }
 
+    /// Reclaimable is one number, so it rides in the header beside the title
+    /// instead of claiming a full-width row under the volumes. Its explanation
+    /// moved onto the chip itself, where the thing it explains is.
     private var header: some View {
         PanelHeader(
             title: settings.t("storage"),
             subtitle: space.volumeName?.isEmpty == false ? space.volumeName : nil
-        )
-    }
-
-    private var volumesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(settings.t("volumesTitle"))
-                .panelSectionHeader()
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(volumes) { volume in
-                    VolumeCard(volume: volume)
-                }
+        ) {
+            if let reclaimable {
+                reclaimableStat(reclaimable)
             }
         }
     }
 
-    private var applicationsSection: some View {
-        let visible = filteredApps
-        let filtering = !needle(appsQuery).isEmpty
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(settings.t("appsTitle"))
-                    .panelSectionHeader()
+    /// One row per volume. The two-column card grid this replaced spent ~140pt per
+    /// pair of disks on a percent line, a bar and three labelled tiles; a strip
+    /// row says the same thing in about 50pt, so a Mac with one disk spends one
+    /// short row rather than a screenful of chrome.
+    ///
+    /// No "Volumes" heading above it: every row names its own volume, and a label
+    /// over one row is a row of chrome for nothing. The name is still spoken, as
+    /// the strip's accessibility label.
+    private var volumeStrip: some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            ForEach(volumes) { volume in
+                VolumeRow(volume: volume)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(settings.t("volumesTitle"))
+    }
 
-                if !apps.isEmpty {
-                    countChip(visible.count, of: apps.count, filtered: filtering)
-                        .accessibilityLabel(countLabel(visible.count, of: apps.count, filtered: filtering, key: "appsCount"))
+    /// Apps or files, what it matches, and how to type a query: one row. It was a
+    /// divider, then a picker, then a search, then a heading with a count.
+    private func filterBar(shown: Int, total: Int) -> some View {
+        PanelFilterBar(placeholder: searchPlaceholder, text: searchBinding) {
+            Picker(settings.t("storage"), selection: $section) {
+                Text(settings.t("appsTitle")).tag(StorageSection.apps)
+                Text(settings.t("largeFilesTitle")).tag(StorageSection.files)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(settings.t("storage"))
+            .onChange(of: section) { _, next in
+                // Walking the home directory is slower than reading an app
+                // list, so it waits until the tab is actually opened.
+                if next == .files, !filesLoaded {
+                    filesLoaded = true
+                    Task { await loadLargeFiles() }
                 }
-
-                Spacer(minLength: 0)
-
-                if isLoadingApps {
+            }
+        } trailing: {
+            HStack(spacing: PanelStyle.Space.s) {
+                if isInventoryLoading {
                     ProgressView()
                         .controlSize(.small)
                 }
+                if total > 0 {
+                    countChip(shown, of: total, filtered: isInventoryFiltering)
+                        .accessibilityLabel(inventoryCountLabel(shown: shown, total: total))
+                }
             }
-
-            SearchField(placeholder: settings.t("searchApps"), text: $appsQuery)
-                .frame(maxWidth: 320)
-
-            appsBody(visible)
         }
+    }
+
+    /// Each tab keeps its own query: typing in Files must not silently reset
+    /// what Apps was showing.
+    private var searchBinding: Binding<String> {
+        switch section {
+        case .apps: $appsQuery
+        case .files: $filesQuery
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch section {
+        case .apps: settings.t("searchApps")
+        case .files: settings.t("searchFiles")
+        }
+    }
+
+    private var isInventoryLoading: Bool {
+        switch section {
+        case .apps: isLoadingApps
+        case .files: isLoadingFiles
+        }
+    }
+
+    private var isInventoryFiltering: Bool {
+        switch section {
+        case .apps: !needle(appsQuery).isEmpty
+        case .files: !needle(filesQuery).isEmpty
+        }
+    }
+
+    /// The same number, spoken with the current tab's own noun.
+    private func inventoryCountLabel(shown: Int, total: Int) -> String {
+        countLabel(
+            shown,
+            of: total,
+            filtered: isInventoryFiltering,
+            key: section == .apps ? "appsCount" : "largeFilesCount"
+        )
     }
 
     /// Four distinct states: still loading, failed with a retry, the list, or a
@@ -252,7 +292,7 @@ struct StorageView: View {
                 .frame(minHeight: 120)
         } else {
             ScrollView {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: PanelStyle.Space.s) {
                     ForEach(visible) { app in
                         AppRow(
                             app: app,
@@ -267,35 +307,6 @@ struct StorageView: View {
 
     /// The same three states as the application list: loading, failed with a
     /// retry, or the rows.
-    @ViewBuilder
-    private var largeFilesSection: some View {
-        let visible = filteredFiles
-        let filtering = !needle(filesQuery).isEmpty
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(settings.t("largeFilesTitle"))
-                    .panelSectionHeader()
-
-                if !largeFiles.isEmpty {
-                    countChip(visible.count, of: largeFiles.count, filtered: filtering)
-                        .accessibilityLabel(countLabel(visible.count, of: largeFiles.count, filtered: filtering, key: "largeFilesCount"))
-                }
-
-                Spacer(minLength: 0)
-
-                if isLoadingFiles {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
-
-            SearchField(placeholder: settings.t("searchFiles"), text: $filesQuery)
-                .frame(maxWidth: 320)
-
-            largeFilesBody(visible)
-        }
-    }
-
     @ViewBuilder
     private func largeFilesBody(_ visible: [LargeFile]) -> some View {
         if let error = filesError {
@@ -317,7 +328,7 @@ struct StorageView: View {
                 .frame(minHeight: 120)
         } else {
             ScrollView {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: PanelStyle.Space.s) {
                     ForEach(visible) { file in
                         LargeFileRow(
                             file: file,
@@ -355,7 +366,7 @@ struct StorageView: View {
         Text(filtered
             ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
             : settings.t("itemMany", ["n": "\(total)"]))
-            .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+            .font(PanelFont.number(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -369,29 +380,34 @@ struct StorageView: View {
             : settings.t(key, ["n": "\(total)"])
     }
 
-    /// One line, not a card: the volumes above are cards, and a fourth card here
-    /// competed with them instead of summarising them.
-    private func reclaimableSection(_ reclaimable: UInt64) -> some View {
-        HStack(spacing: 8) {
+    /// Reclaimable as a header chip. The explanation is on the chip's own info
+    /// glyph rather than on a row of its own, so the caveat is available exactly
+    /// where the number is read.
+    private func reclaimableStat(_ reclaimable: UInt64) -> some View {
+        HStack(spacing: PanelStyle.Space.xs) {
             Text(settings.t("reclaimableMetric"))
-                .font(.system(size: 11, weight: .medium))
+                .font(PanelFont.secondary)
                 .foregroundStyle(.secondary)
             Image(systemName: "info.circle")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .help(settings.t("reclaimableHelp"))
                 .accessibilityLabel(settings.t("reclaimableHelp"))
-
             Text(ByteFormat.string(reclaimable))
-                .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
-
-            Spacer(minLength: 8)
-
-            Text(settings.t("storageNote"))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .font(PanelFont.number(.semibold))
         }
+        .padding(.horizontal, PanelStyle.Space.s)
+        .padding(.vertical, PanelStyle.Space.xs)
+        .background(PanelStyle.rowFill, in: .capsule)
+        .help(notes)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(ByteFormat.string(reclaimable)). \(notes)")
+    }
+
+    /// Both sentences the old row carried: what the number means, and that the
+    /// engine measured it. They are one tooltip now because they are one fact.
+    private var notes: String {
+        "\(settings.t("reclaimableHelp")) \(settings.t("storageNote"))"
     }
 
     /// Reading volume metadata is synchronous disk I/O, and a network or
@@ -522,47 +538,44 @@ struct VolumeInfo: Identifiable, Sendable {
     }
 }
 
-struct VolumeCard: View {
+/// One volume as a strip row: name, used percent, a hairline bar, and one caption
+/// carrying all three numbers. The card this replaced needed three metric tiles to
+/// say the same, which is why one disk used to cost more than 140pt of a 620pt
+/// window.
+struct VolumeRow: View {
     let volume: VolumeInfo
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
+            HStack(spacing: PanelStyle.Space.s) {
                 Text(volume.name)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(PanelFont.emphasis(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer(minLength: 0)
+                Spacer(minLength: PanelStyle.Space.s)
                 Text(volume.usedPercent, format: .percent.precision(.fractionLength(0)))
-                    .font(.system(size: 11, weight: .medium, design: .rounded).monospacedDigit())
+                    .font(PanelFont.number())
                     .foregroundStyle(.secondary)
             }
 
             ProgressView(value: volume.usedPercent)
-                .frame(height: 6)
+                .frame(height: 3)
                 .help(settings.t("volumeUsageHelp", ["name": volume.name]))
 
-            HStack(spacing: 10) {
-                MetricCard(
-                    label: settings.t("volumeTotal"),
-                    value: ByteFormat.string(volume.total),
-                    compact: true
-                )
-                MetricCard(
-                    label: settings.t("volumeUsed"),
-                    value: ByteFormat.string(volume.used),
-                    compact: true
-                )
-                MetricCard(
-                    label: settings.t("volumeFree"),
-                    value: ByteFormat.string(volume.free),
-                    compact: true
-                )
-            }
+            Text(settings.t("volumeCaption", [
+                "used": ByteFormat.string(volume.used),
+                "free": ByteFormat.string(volume.free),
+                "total": ByteFormat.string(volume.total),
+            ]))
+            .font(PanelFont.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
-        .padding(12)
-        .panelCard()
+        .padding(.horizontal, PanelStyle.Space.m)
+        .padding(.vertical, PanelStyle.Space.xs)
+        .panelCard(PanelStyle.rowFill)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -576,27 +589,27 @@ struct AppRow: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: PanelStyle.Space.m) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(app.name)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(PanelFont.emphasis())
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(app.bundleId)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(PanelFont.mono(10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: PanelStyle.Space.s)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(ByteFormat.string(app.bytes))
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
+                    .font(PanelFont.number())
                     .foregroundStyle(.primary)
                 Text(settings.t("appsRelatedCount", ["n": "\(app.relatedPaths.count)"]))
-                    .font(.system(size: 10.5))
+                    .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -607,8 +620,8 @@ struct AppRow: View {
                 .help(settings.t("appsUninstallHelp", ["name": app.name]))
                 .accessibilityLabel(settings.t("appsUninstallNamed", ["name": app.name]))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, PanelStyle.Space.m)
+        .padding(.vertical, PanelStyle.Space.s)
         .panelCard(PanelStyle.rowFill)
         .pathContextMenu(app.path)
         .accessibilityElement(children: .contain)
@@ -626,27 +639,27 @@ struct LargeFileRow: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: PanelStyle.Space.m) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(file.name)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(PanelFont.emphasis())
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(file.path)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(PanelFont.mono(10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: PanelStyle.Space.s)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(ByteFormat.string(file.size))
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
+                    .font(PanelFont.number())
                     .foregroundStyle(.primary)
                 Text(file.modified, format: .dateTime.year().month(.abbreviated).day())
-                    .font(.system(size: 10.5))
+                    .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -657,8 +670,8 @@ struct LargeFileRow: View {
                 .help(settings.t("largeFilesTrashHelp", ["name": file.name]))
                 .accessibilityLabel(settings.t("largeFilesTrashHelp", ["name": file.name]))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, PanelStyle.Space.m)
+        .padding(.vertical, PanelStyle.Space.s)
         .panelCard(PanelStyle.rowFill)
         .pathContextMenu(file.path)
         .accessibilityElement(children: .contain)
@@ -676,24 +689,24 @@ struct LargeFileTrashSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+                HStack(spacing: PanelStyle.Space.s) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Text(settings.t("appsTrashTitle"))
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(PanelFont.emphasis(.semibold))
                 }
                 Text(file.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(PanelFont.emphasis())
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(settings.t("largeFilesTrashBody"))
-                    .font(.system(size: 11.5))
+                    .font(PanelFont.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(PanelStyle.Space.l)
 
             Divider()
 
@@ -701,7 +714,7 @@ struct LargeFileTrashSheet: View {
 
             Divider()
 
-            HStack(spacing: 10) {
+            HStack(spacing: PanelStyle.Space.m) {
                 Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
@@ -711,7 +724,7 @@ struct LargeFileTrashSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
-            .padding(16)
+            .padding(PanelStyle.Space.l)
             .background(.ultraThinMaterial)
         }
         .frame(minWidth: 520, idealWidth: 600, minHeight: 300)
@@ -738,7 +751,7 @@ struct UninstallConfirmationSheet: View {
                         bytes: app.bytes,
                         isApp: true
                     )
-                    Divider().opacity(0.4).padding(.horizontal, 14)
+                    Divider().opacity(0.4).padding(.horizontal, PanelStyle.Space.m)
 
                     // Related files
                     ForEach(app.relatedPaths, id: \.self) { related in
@@ -748,7 +761,7 @@ struct UninstallConfirmationSheet: View {
                             bytes: nil,
                             isApp: false
                         )
-                        Divider().opacity(0.4).padding(.horizontal, 14)
+                        Divider().opacity(0.4).padding(.horizontal, PanelStyle.Space.m)
                     }
                 }
             }
@@ -759,40 +772,40 @@ struct UninstallConfirmationSheet: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            HStack(spacing: PanelStyle.Space.s) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                 Text(settings.t("appsTrashTitle"))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(PanelFont.emphasis(.semibold))
             }
             Text(app.name)
-                .font(.system(size: 13, weight: .medium))
+                .font(PanelFont.emphasis())
                 .lineLimit(1)
                 .truncationMode(.middle)
             Text(settings.t("appsTrashBody", ["n": "\(app.relatedPaths.count)"]))
-                .font(.system(size: 11.5))
+                .font(PanelFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(PanelStyle.Space.l)
     }
 
     private var footer: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: PanelStyle.Space.m) {
             HStack {
                 Text(settings.t("totalLabel"))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(PanelFont.body)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(ByteFormat.string(totalBytes))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit())
+                    .font(PanelFont.number(.semibold))
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(settings.t("confirmTotal", ["amount": ByteFormat.string(totalBytes)]))
 
-            HStack(spacing: 10) {
+            HStack(spacing: PanelStyle.Space.m) {
                 Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
@@ -803,7 +816,7 @@ struct UninstallConfirmationSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(16)
+        .padding(PanelStyle.Space.l)
         .background(.ultraThinMaterial)
     }
 
@@ -822,7 +835,7 @@ struct AppUninstallRow: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: PanelStyle.Space.m) {
             Image(systemName: isApp ? "app.fill" : "doc")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(isApp ? .blue : .secondary)
@@ -833,7 +846,7 @@ struct AppUninstallRow: View {
                     .font(.system(size: 12, weight: isApp ? .medium : .regular))
                     .textSelection(.enabled)
                 Text(path)
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(PanelFont.mono(10.5))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -841,16 +854,16 @@ struct AppUninstallRow: View {
                     .accessibilityLabel(settings.t("pathA11y", ["path": path]))
             }
 
-            Spacer(minLength: 10)
+            Spacer(minLength: PanelStyle.Space.m)
 
             if let bytes {
                 Text(ByteFormat.string(bytes))
-                    .font(.system(size: 12, weight: .medium, design: .rounded).monospacedDigit())
+                    .font(PanelFont.number())
                     .frame(width: 70, alignment: .trailing)
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 14)
+        .padding(.vertical, PanelStyle.Space.s)
+        .padding(.horizontal, PanelStyle.Space.m)
         .pathContextMenu(path)
         .accessibilityElement(children: .combine)
     }
@@ -872,7 +885,7 @@ struct StorageResultCard: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             header
 
             // Bounded: one app can report dozens of leftover paths, and a report
@@ -885,21 +898,21 @@ struct StorageResultCard: View {
                 }
             }
         }
-        .padding(12)
+        .padding(PanelStyle.Space.m)
         .panelCard(PanelStyle.rowFill)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(PanelFont.emphasis(.semibold))
                 Text(settings.t("appsResultSummary", [
                     "freed": ByteFormat.string(report.summary.totalBytes),
                     "count": "\(report.outcomes.count)",
                 ]))
-                .font(.system(size: 11))
+                .font(PanelFont.secondary)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -919,7 +932,7 @@ struct StorageResultCard: View {
     private func outcomeRow(_ outcome: UninstallOutcome) -> some View {
         // One lookup, not one per line: the glyph and its spoken label must agree.
         let status = settings.t(statusKey(for: outcome.status))
-        return HStack(alignment: .top, spacing: 10) {
+        return HStack(alignment: .top, spacing: PanelStyle.Space.m) {
             Image(systemName: symbol(for: outcome.status))
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(tint(for: outcome.status))
@@ -928,25 +941,25 @@ struct StorageResultCard: View {
                 .accessibilityLabel(settings.t("outcomeStatus", ["status": status]))
             VStack(alignment: .leading, spacing: 3) {
                 Text(outcome.path)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(PanelFont.mono(11.5))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .multilineTextAlignment(.leading)
                 if !outcome.detail.isEmpty {
                     Text(outcome.detail)
-                        .font(.system(size: 10.5))
+                        .font(PanelFont.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(nil)
                 }
             }
-            Spacer(minLength: 10)
+            Spacer(minLength: PanelStyle.Space.m)
             Text(ByteFormat.string(outcome.bytes))
-                .font(.system(size: 11.5, design: .rounded).monospacedDigit())
+                .font(PanelFont.number())
                 .frame(width: 66, alignment: .trailing)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, PanelStyle.Space.s)
         .padding(.horizontal, 2)
         .pathContextMenu(outcome.path)
     }

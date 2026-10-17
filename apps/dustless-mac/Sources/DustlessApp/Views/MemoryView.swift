@@ -73,21 +73,43 @@ struct MemoryView: View {
         // the filter found rather than only how many fit under the cap.
         let matched = filteredGroups(report)
         let groups = Array(matched.prefix(Self.groupLimit))
-        VStack(alignment: .leading, spacing: 16) {
+        PanelScaffold {
             header(report)
-            Divider()
-            metrics(report?.memory)
-            Divider()
-            processes(report, groups, matched: matched)
+        } summary: {
+            PanelStatStrip(stats: metricStats(report?.memory))
+        } filters: {
+            filterBar
+        } content: {
+            processList(groups, summary: countSummary(groups: groups, matched: matched))
         }
-        .padding(20)
-        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
-        .background(.regularMaterial)
+    }
+
+    /// The cap and the filter are the two things a reader of this list can get
+    /// wrong, so the count is never silent — and when the filter matched more
+    /// than the cap draws, it says that instead of pretending the cap is the
+    /// whole answer. Nothing to say means nothing is drawn.
+    ///
+    /// It stays a caption above the list rather than a chip in the filter row: the
+    /// six-segment category picker leaves no room there for a sentence, and a
+    /// truncated "Showing the top…" is worse than no count at all.
+    private func countSummary(groups: [ProcessGroup], matched: [ProcessGroup]) -> String? {
+        let all = store.memoryReport?.processes ?? []
+        let shown = groups.reduce(0) { $0 + $1.count }
+        let matchedCount = matched.reduce(0) { $0 + $1.count }
+
+        if isFiltering {
+            return matched.count > groups.count
+                ? settings.t("memoryShowingTop", ["shown": "\(shown)", "total": "\(matchedCount)"])
+                : settings.t("filterShowing", ["shown": "\(shown)", "total": "\(all.count)"])
+        }
+        return shown < all.count
+            ? settings.t("memoryShowingTop", ["shown": "\(shown)", "total": "\(all.count)"])
+            : nil
     }
 
     private func header(_ report: MemoryReport?) -> some View {
         PanelHeader(title: settings.t("memory")) {
-            HStack(spacing: 8) {
+            HStack(spacing: PanelStyle.Space.s) {
                 if let report {
                     pressureChip(report)
                 }
@@ -95,6 +117,25 @@ struct MemoryView: View {
                     Task { await store.fetchMemory() }
                 }
             }
+        }
+    }
+
+    /// Category on the left, search on the right: one row. It was a search row and
+    /// then a separate category row, which is two bands of chrome for one
+    /// decision and left the list with the leftovers.
+    private var filterBar: some View {
+        PanelFilterBar(placeholder: settings.t("searchProcesses"), text: $query) {
+            Picker(settings.t("filterCategory"), selection: $category) {
+                ForEach(MemCategoryFilter.allCases) { option in
+                    Text(option.titleKey.flatMap { settings.t($0) } ?? settings.t("filterAll")).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .accessibilityLabel(settings.t("filterCategory"))
+        } trailing: {
+            EmptyView()
         }
     }
 
@@ -116,19 +157,10 @@ struct MemoryView: View {
         .help(settings.t("memoryPressureHelp"))
     }
 
-    /// Six tiles directly on the window background — no wrapping card, so the
-    /// tiles read as one group instead of as cards inside a card.
-    private func metrics(_ mem: MemoryInfo?) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-            ForEach(metricTiles(mem), id: \.label) { tile in
-                MetricCard(label: tile.label, value: tile.value)
-                    .padding(10)
-                    .panelCard()
-            }
-        }
-    }
-
-    private func metricTiles(_ mem: MemoryInfo?) -> [(label: String, value: String)] {
+    /// Six numbers in a strip rather than six tiles in a 3×2 grid: the grid cost
+    /// about 100pt of window before the first process row and said nothing the
+    /// strip does not.
+    private func metricStats(_ mem: MemoryInfo?) -> [(label: String, value: String)] {
         func value(_ bytes: UInt64?) -> String { bytes.map(ByteFormat.string) ?? "—" }
         return [
             (settings.t("memoryAvailable"), value(mem?.available)),
@@ -143,60 +175,24 @@ struct MemoryView: View {
     /// One row per application, biggest first, each one opening onto the
     /// processes it owns — twelve helpers eating 4 GB should read as one hog,
     /// not as twelve rows competing for the same attention.
-    private func processes(_ report: MemoryReport?, _ groups: [ProcessGroup], matched: [ProcessGroup]) -> some View {
-        let all = report?.processes ?? []
-        let shown = groups.reduce(0) { $0 + $1.count }
-        let matchedCount = matched.reduce(0) { $0 + $1.count }
-        let capped = matched.count > groups.count
-        let filtered = isFiltering
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(settings.t("memoryProcesses"))
-                    .panelSectionHeader()
-                if filtered {
-                    // Never let the count silently mean "3 of 340" — and when the
-                    // filter matched more than the cap draws, say that instead of
-                    // pretending the cap is the whole answer.
-                    Text(capped
-                        ? settings.t("memoryShowingTop", ["shown": "\(shown)", "total": "\(matchedCount)"])
-                        : settings.t("filterShowing", ["shown": "\(shown)", "total": "\(all.count)"]))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                } else if shown < all.count {
-                    Text(settings.t("memoryShowingTop", [
-                        "shown": "\(shown)",
-                        "total": "\(all.count)",
-                    ]))
-                    .font(.system(size: 11))
+    private func processList(_ groups: [ProcessGroup], summary: String?) -> some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            if let summary {
+                Text(summary)
+                    .font(PanelFont.caption)
                     .foregroundStyle(.tertiary)
-                }
-                Spacer(minLength: 0)
             }
-
-            SearchField(placeholder: settings.t("searchProcesses"), text: $query)
-                .frame(maxWidth: 320)
-
-            Picker(settings.t("filterCategory"), selection: $category) {
-                ForEach(MemCategoryFilter.allCases) { option in
-                    Text(option.titleKey.flatMap { settings.t($0) } ?? settings.t("filterAll")).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .accessibilityLabel(settings.t("filterCategory"))
 
             if groups.isEmpty {
-                Text(filtered ? settings.t("noMatches") : settings.t("memoryNoProcesses"))
-                    .font(.system(size: 12))
+                Text(isFiltering ? settings.t("noMatches") : settings.t("memoryNoProcesses"))
+                    .font(PanelFont.body)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 // The list takes whatever height the window has left, so opening a
                 // group never grows the window and many groups just scroll.
                 ScrollView {
-                    LazyVStack(spacing: 6) {
+                    LazyVStack(spacing: PanelStyle.Space.s) {
                         ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
                             groupRow(group, isLargest: index == 0, in: groups)
                         }
@@ -257,30 +253,30 @@ struct MemoryView: View {
         } label: {
             groupHeader(group, isLargest: isLargest, isOpen: isExpanded(group, in: groups))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, PanelStyle.Space.m)
+        .padding(.vertical, PanelStyle.Space.s)
         .panelCard(PanelStyle.rowFill)
     }
 
     private func groupHeader(_ group: ProcessGroup, isLargest: Bool, isOpen: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PanelStyle.Space.s) {
             groupIcon(group)
 
             Text(group.label)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(PanelFont.emphasis(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help(group.bundlePath ?? group.id)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: PanelStyle.Space.s)
 
             Text(settings.t("memoryProcessCount", ["n": "\(group.count)"]))
-                .font(.system(size: 11))
+                .font(PanelFont.secondary)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
             Text(ByteFormat.string(group.bytes))
-                .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(PanelFont.number(.semibold))
                 .frame(minWidth: 64, alignment: .trailing)
 
             if isLargest {
@@ -327,9 +323,9 @@ struct MemoryView: View {
     /// One process inside its group. The stop button and its force-stop context
     /// menu are the row actions the flat list always had.
     private func processRow(_ proc: MemProcess) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PanelStyle.Space.s) {
             Text(proc.name)
-                .font(.system(size: 12, design: .monospaced))
+                .font(PanelFont.mono(12))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help(proc.command)
@@ -343,12 +339,12 @@ struct MemoryView: View {
             Spacer(minLength: 6)
 
             Text("\(proc.pid)")
-                .font(.system(size: 12, design: .monospaced))
+                .font(PanelFont.mono(12))
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)
 
             Text(ByteFormat.string(proc.mem))
-                .font(.system(size: 12.5, weight: .medium, design: .rounded).monospacedDigit())
+                .font(PanelFont.number())
                 .frame(minWidth: 64, alignment: .trailing)
 
             stopButton(for: proc)
