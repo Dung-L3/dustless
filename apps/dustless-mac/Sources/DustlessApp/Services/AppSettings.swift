@@ -47,6 +47,7 @@ final class AppSettings: ObservableObject {
     private enum Key {
         static let language = "dustless.language"
         static let appearance = "dustless.appearance"
+        static let showInDock = "dustless.showInDock"
     }
 
     @Published var language: Lang {
@@ -60,16 +61,29 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Whether the app is a normal app — Dock icon, app menu bar, ⌘Tab — or the
+    /// menu-bar-only shape it used to ship as. On by default: it has a real window,
+    /// and a window that cannot be reached from the Dock or ⌘Tab is a window the
+    /// user cannot find again.
+    @Published var showInDock: Bool {
+        didSet {
+            UserDefaults.standard.set(showInDock, forKey: Key.showInDock)
+            applyActivationPolicy()
+        }
+    }
+
     init() {
         let stored = UserDefaults.standard.string(forKey: Key.language)
         language = stored.flatMap(Lang.init(rawValue:))
             ?? Lang.preferred(Locale.preferredLanguages.first ?? "en")
         let storedAppearance = UserDefaults.standard.string(forKey: Key.appearance)
         appearance = storedAppearance.flatMap(AppAppearance.init(rawValue:)) ?? .system
+        showInDock = UserDefaults.standard.object(forKey: Key.showInDock) as? Bool ?? true
         // Before any window exists, so a stored Dark does not open the app in the
         // system's appearance for a frame — and so it is not a promise Settings
         // makes that the app only keeps until the next launch.
         applyAppearance()
+        applyActivationPolicy()
     }
 
     /// Push the current appearance onto the app, for every scene at once.
@@ -79,6 +93,18 @@ final class AppSettings: ObservableObject {
     /// `AppSettings` instead of on whatever the last writer left behind.
     func applyAppearance() {
         NSApplication.shared.appearance = appearance.nsAppearance
+    }
+
+    /// Show or hide the Dock icon, the app menu bar and the ⌘Tab entry.
+    ///
+    /// `.regular` is a normal app and `.accessory` is the menu-bar-only shape. The
+    /// bundle no longer carries `LSUIElement`, so `.regular` is what the process
+    /// starts as and `.accessory` is applied at launch when the user asked for it.
+    /// That is the whole reason this is runtime code: a plist key cannot be changed
+    /// once the app has launched, and the user has to be able to switch back
+    /// without a reinstall.
+    func applyActivationPolicy() {
+        NSApplication.shared.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 
     func t(_ key: String, _ vars: [String: String] = [:]) -> String {

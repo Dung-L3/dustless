@@ -186,7 +186,7 @@ Every argument or validation error — an unknown command, a flag with no value,
 
 ## macOS app
 
-`apps/dustless-mac` is a native SwiftUI app that embeds the Dustless engine. It runs on macOS 14+ and is built as a menu-bar extra (`LSUIElement`) with a main window.
+`apps/dustless-mac` is a native SwiftUI app that embeds the Dustless engine. It runs on macOS 14+ as a normal app — Dock icon, app menu bar, ⌘Tab — with a main window and a menu-bar item. Settings → General → **Show in Dock** turns the Dock icon off for a menu-bar-only shape (`NSApp.setActivationPolicy`), applied at launch and live.
 
 **Window** — `NavigationSplitView` sidebar + detail (`DustlessApp.swift:125-140`). The sidebar (`SidebarView.swift`) shows free space, reclaimable bytes, and three tier tabs: **GREEN**, **YELLOW**, **LOCKED** (BLOCKED). Each tab shows count and bytes. The detail view (`DetailView.swift`) has a search/filter field, **All / None** buttons for GREEN and YELLOW, and a bottom action bar with selected bytes and **Review & Delete** (Cmd-Return). LOCKED items are listed but disabled and never deleted. A scan starts with an empty selection — nothing is pre-selected.
 
@@ -194,7 +194,7 @@ Every argument or validation error — an unknown command, a flag with no value,
 
 **Confirm sheet** (`ConfirmDeleteSheet.swift:14-70`) — lists every selected item with path, rule id, description, size, and a per-item provenance line (the `note` field: e.g. "rule requires ≥90 days, newest file is 0 days old" or "BLOCKED, pinned by /Users/x/repo"). Same context menu on each row.
 
-**Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Launch at login**. Language and theme apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
+**Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Show in Dock** (off = menu-bar-only: no Dock icon, no ⌘Tab), **Launch at login**. Language, theme and the Dock policy apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
 
 **Menu bar popover** (`MenuBarContent.swift`, presented by `DustlessApp.swift` with `.menuBarExtraStyle(.window)`) — the last scan's provenance (age, rules, duration), a live grid of free space, reclaimable bytes, memory pressure and network interface/gateway, a stale-scan warning when the last read failed, **Scan now** / **Review & Clean**, a row per module (Overview, Cleanup, Storage, Memory, Network), the AirDrop (AWDL) toggle, and **Open Dustless**, **Settings**, **Quit**. It re-reads the live numbers when it opens, through the store's staleness windows, and never starts a full scan on its own. No score and no ring: an unmeasured value shows `—`, and a failed scan says so rather than presenting old numbers as current.
 

@@ -24,12 +24,22 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .accessibilityLabel(settings.t("theme"))
                 .help(settings.t("themeHelp"))
+
+                Toggle(isOn: $settings.showInDock) {
+                    Text(settings.t("showInDock"))
+                }
+                .help(settings.t("showInDockNote"))
+                .accessibilityLabel(settings.t("showInDock"))
             } header: {
                 Text(settings.t("general"))
             } footer: {
-                Text(settings.t("themeNote"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(settings.t("themeNote"))
+                    Text(settings.t("showInDockNote"))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
