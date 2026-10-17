@@ -8,7 +8,6 @@ struct DetailView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var searchQuery = ""
     /// Findings-list opacity, animated once per new scan report and nothing else.
     @State private var listOpacity = 1.0
 
@@ -27,17 +26,56 @@ struct DetailView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            if let error = store.engineError {
-                EngineErrorView(message: settings.text(error)) { Task { await store.rescan() } }
-            } else if let report = store.report {
+            // A rescan that failed keeps the report it could not replace, so the
+            // error is a banner over the numbers rather than a pane that took
+            // them away. Without a report there is nothing to keep, and the
+            // error owns the pane — with the retry under it.
+            if let report = store.report {
+                if let error = store.engineError {
+                    staleBanner(settings.text(error))
+                }
                 tierContent(report)
+            } else if let error = store.engineError {
+                EngineErrorView(
+                    message: settings.text(error),
+                    isBusy: store.isBusy
+                ) {
+                    Task { await store.rescan() }
+                }
             } else {
-                EmptyStateView {
+                EmptyStateView(isBusy: store.isBusy) {
                     Task { await store.rescan() }
                 }
             }
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: store.busyMessage)
+    }
+
+    /// The engine's sentence, verbatim, with the × that puts it away. Same
+    /// affordance as the result cards: a banner nobody can clear is a permanent
+    /// one.
+    private func staleBanner(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+            Label(text, systemImage: "exclamationmark.triangle.fill")
+                .font(PanelFont.mono(11))
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .help(text)
+                .accessibilityLabel(text)
+            Button(action: { store.dismissEngineError() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(settings.t("close"))
+            .accessibilityLabel(settings.t("close"))
+        }
+        .padding(.horizontal, PanelStyle.Space.l)
+        .padding(.vertical, PanelStyle.Space.s)
     }
 
     private func tierContent(_ report: ScanReport) -> some View {
@@ -54,11 +92,23 @@ struct DetailView: View {
                     .padding(.top, PanelStyle.Space.m)
             }
 
+            // The same in-panel filter field every other module uses, rather
+            // than `.searchable`: that attaches to the window toolbar, so the
+            // field appeared beside the sidebar and a query was lost on every
+            // module switch. The query lives in the store, which outlives both.
+            PanelFilterBar(placeholder: settings.t("searchFindings"), text: $store.findingsQuery) {
+                EmptyView()
+            } trailing: {
+                EmptyView()
+            }
+            .padding(.horizontal, PanelStyle.Space.l)
+            .padding(.vertical, PanelStyle.Space.s)
+
             if allItems.isEmpty {
-                TierEmptyView(tab: store.tierTab) {
+                TierEmptyView(tab: store.tierTab, isBusy: store.isBusy) {
                     Task { await store.rescan() }
                 }
-            } else if filteredItems.isEmpty && !searchQuery.isEmpty {
+            } else if filteredItems.isEmpty && !store.findingsQuery.isEmpty {
                 NoMatchesView()
             } else {
                 List {
@@ -78,7 +128,6 @@ struct DetailView: View {
             Divider()
             actionBar
         }
-        .searchable(text: $searchQuery, prompt: settings.t("searchFindings"))
         .onChange(of: store.scannedAt) { _, _ in
             fadeInFindings()
         }
@@ -97,8 +146,8 @@ struct DetailView: View {
     }
 
     private func filteredFindings(_ items: [Finding]) -> [Finding] {
-        guard !searchQuery.isEmpty else { return items }
-        let query = searchQuery.lowercased()
+        guard !store.findingsQuery.isEmpty else { return items }
+        let query = store.findingsQuery.lowercased()
         return items.filter { finding in
             finding.ruleId.lowercased().contains(query) ||
             finding.path.lowercased().contains(query)
@@ -113,6 +162,11 @@ struct DetailView: View {
                     isSelected: store.selection.contains(finding.id),
                     onToggle: { store.toggle(finding) }
                 )
+                // Held for the whole run: the list under these rows is about to
+                // be replaced by a new report with its own selection, so a
+                // toggle made during the scan is a decision about a list that is
+                // no longer on screen.
+                .disabled(store.isBusy)
             }
         } header: {
             HStack {
@@ -121,7 +175,9 @@ struct DetailView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
+                    .disabled(store.isBusy)
                 Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
+                    .disabled(store.isBusy)
             }
             .font(PanelFont.caption)
         }
@@ -182,6 +238,7 @@ struct DetailView: View {
 
 struct TierEmptyView: View {
     let tab: TierTab
+    let isBusy: Bool
     let onScan: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -198,6 +255,7 @@ struct TierEmptyView: View {
                 .frame(maxWidth: 420)
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
+                .disabled(isBusy)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
@@ -224,6 +282,7 @@ struct NoMatchesView: View {
 }
 
 struct EmptyStateView: View {
+    let isBusy: Bool
     let onScan: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -240,6 +299,7 @@ struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
+                .disabled(isBusy)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -247,6 +307,7 @@ struct EmptyStateView: View {
 
 struct EngineErrorView: View {
     let message: String
+    let isBusy: Bool
     let onRetry: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -267,6 +328,7 @@ struct EngineErrorView: View {
                 .frame(maxWidth: 520)
             Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
+                .disabled(isBusy)
             Text(settings.t("nothingDeleted"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.tertiary)

@@ -19,7 +19,7 @@ struct MenuBarContent: View {
                 Button(store.phase == .scanning ? settings.t("scanningShort") : settings.t("rescan")) {
                     Task { await store.rescan() }
                 }
-                .disabled(store.phase == .scanning || store.phase == .resolvingEngine)
+                .disabled(store.isBusy)
 
                 Button(settings.t("cleanItemsMenu", ["n": "\(store.selectedFindings.count)"])) {
                     router.select(.cleanup)
@@ -37,7 +37,10 @@ struct MenuBarContent: View {
                 } else {
                     Text(settings.t("nothingScanned"))
                     Button(settings.t("rescan")) { Task { await store.rescan() } }
-                        .disabled(store.phase == .scanning)
+                        // Both busy phases, like every other rescan control: while
+                        // the engine is still being located this one used to sit
+                        // live and silently do nothing.
+                        .disabled(store.isBusy)
                 }
             }
 
@@ -61,8 +64,10 @@ struct MenuBarContent: View {
             awdlRow
 
             Divider()
+            // No bare "q": this menu is open over the whole screen, so any `q`
+            // typed anywhere — a search field, a path — terminated the app. ⌘Q
+            // is the system's own Quit and needs no second copy.
             Button(settings.t("quitDustless")) { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
         }
         .task { await awdl.refresh() }
     }

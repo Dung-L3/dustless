@@ -54,7 +54,10 @@ struct StorageView: View {
     @State private var section: StorageSection = .apps
     @State private var apps: [InstalledApp] = []
     @State private var isLoadingApps = false
-    @State private var appsError: String?
+    /// Held as a key, never as rendered text: `ScanStore.describe` maps the
+    /// engine's own error onto the app's wording, so a message that outlives a
+    /// language switch re-renders in the language that is on screen now.
+    @State private var appsError: L10nText?
     @State private var appsQuery = ""
     @State private var sheet: StorageSheet?
     /// What the last uninstall or trash removed, drawn inline above the list.
@@ -63,20 +66,21 @@ struct StorageView: View {
     @State private var result: StorageResult?
     /// The alert to show once the current sheet is fully gone. An alert cannot
     /// present on top of a sheet, so an error waits for the dismissal instead of
-    /// racing it. The title is a key, like `StorageResult.titleKey`: an alert can
-    /// sit on screen across a language switch, and text rendered when the failure
-    /// happened is the one string that would keep speaking the old language.
-    @State private var nextAlert: (titleKey: String, message: String)?
+    /// racing it. The whole alert is stored as a key, like `StorageResult.titleKey`:
+    /// an alert can sit on screen across a language switch, and text rendered when
+    /// the failure happened is the one string that would keep speaking the old
+    /// language.
+    @State private var nextAlert: (titleKey: String, message: L10nText)?
     @State private var isUninstalling = false
     @State private var largeFiles: [LargeFile] = []
     @State private var isLoadingFiles = false
-    @State private var filesError: String?
+    @State private var filesError: L10nText?
     @State private var filesLoaded = false
     @State private var filesQuery = ""
     @State private var isTrashingFile = false
     /// Resolved at render, never stored rendered — see `nextAlert`.
     @State private var actionErrorTitleKey = ""
-    @State private var actionError: String?
+    @State private var actionError: L10nText?
     @State private var dataLoaded = false
 
     var body: some View {
@@ -115,13 +119,23 @@ struct StorageView: View {
         }
         .alert(
             settings.t(actionErrorTitleKey),
-            isPresented: .constant(actionError != nil),
+            isPresented: actionErrorPresented,
             presenting: actionError
         ) { _ in
             Button(settings.t("done")) { actionError = nil }
         } message: { error in
-            Text(error)
+            Text(settings.text(error))
         }
+    }
+
+    /// A real binding, not `.constant(actionError != nil)`: a constant cannot be
+    /// written back, so the alert's own dismissal never reached the state and
+    /// the alert could re-present over the next sheet with nothing to report.
+    private var actionErrorPresented: Binding<Bool> {
+        Binding(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )
     }
 
     @ViewBuilder
@@ -290,7 +304,7 @@ struct StorageView: View {
         if let error = appsError {
             PanelStateView(
                 kind: .error,
-                message: error,
+                message: settings.text(error),
                 title: settings.t("appsTitle"),
                 actionTitle: settings.t("retry"),
                 action: { Task { await loadApps() } }
@@ -328,7 +342,7 @@ struct StorageView: View {
         if let error = filesError {
             PanelStateView(
                 kind: .error,
-                message: error,
+                message: settings.text(error),
                 title: settings.t("largeFilesTitle"),
                 actionTitle: settings.t("retry"),
                 action: { Task { await loadLargeFiles() } }
@@ -463,7 +477,7 @@ struct StorageView: View {
             let fetchedApps = try await cli.apps()
             apps = fetchedApps.sorted { $0.bytes > $1.bytes }
         } catch {
-            appsError = error.localizedDescription
+            appsError = ScanStore.describe(error)
         }
         isLoadingApps = false
     }
@@ -491,7 +505,7 @@ struct StorageView: View {
             let cli = try DustlessCLI.resolve()
             largeFiles = try await cli.largefiles()
         } catch {
-            filesError = error.localizedDescription
+            filesError = ScanStore.describe(error)
         }
         isLoadingFiles = false
     }
@@ -513,7 +527,9 @@ struct StorageView: View {
     }
 
     private func fail(_ error: Error, titleKey: String) {
-        let message = error.localizedDescription
+        // The same mapping every other panel uses — `localizedDescription` here
+        // would print the engine layer's English whatever the app is set to.
+        let message = ScanStore.describe(error)
         // An alert cannot present on top of a sheet. Dismiss the sheet first and
         // let `presentNext` raise the alert once it is gone; with no sheet open
         // there is nothing to wait for.

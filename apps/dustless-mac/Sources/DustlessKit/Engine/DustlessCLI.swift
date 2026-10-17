@@ -60,8 +60,35 @@ public struct DustlessCLI: Sendable {
         try await decode(ScanReport.self, from: run(["scan", "--json"]))
     }
 
-    public func apply() async throws -> ApplyReport {
-        try await decode(ApplyReport.self, from: run(["apply", "--json", "--yes"]))
+    /// Deletes exactly the paths the user picked, and nothing else.
+    ///
+    /// The engine re-scans on its own (`src/cli.ts` `runApply()`), so a bare
+    /// `apply` would act on whatever that fresh scan happened to find. The
+    /// selection is passed as a JSON array of absolute paths in a temp file, and
+    /// the engine skips any finding outside it (`--only-file`), which is what
+    /// keeps ticking one row from deleting every green/yellow finding. It never
+    /// widens the set: blocked and red findings stay refused either way.
+    ///
+    /// Callers must pass a non-empty list — an empty selection is a no-op the
+    /// caller decides, not an engine run that deletes nothing.
+    public func apply(only paths: [String]) async throws -> ApplyReport {
+        let selection = try writeSelection(paths)
+        // The file is a list of the user's own paths, so it must not outlive the
+        // run: one `defer` covers the throw, the timeout and the cancelled task.
+        defer { try? FileManager.default.removeItem(at: selection) }
+        return try await decode(
+            ApplyReport.self,
+            from: run(["apply", "--json", "--yes", "--only-file", selection.path])
+        )
+    }
+
+    /// Writes the selection where the engine can read it before it scans, so a
+    /// path that cannot be written is an error and nothing is deleted.
+    private func writeSelection(_ paths: [String]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dustless-only-\(UUID().uuidString).json")
+        try JSONEncoder().encode(paths).write(to: url, options: .atomic)
+        return url
     }
 
     public func ram() async throws -> MemoryReport {
@@ -189,8 +216,28 @@ public struct DustlessCLI: Sendable {
             if result.stderr.localizedCaseInsensitiveContains("not found") {
                 throw BinaryLocationError.notFound([executable])
             }
+            // With `--json` the engine reports an argument or validation error as
+            // `{"error":"…"}` on stdout and exits 1 without saying it on stderr
+            // (`fail()` in `src/cli.ts`), so the reason sits in the very bytes
+            // that failed to decode. Fall back to the exit status when it is not
+            // that shape.
+            if let message = Self.engineMessage(in: result.data) {
+                throw DustlessError.exited(status: result.status, stderr: message)
+            }
             throw DustlessError.exited(status: result.status, stderr: result.stderr)
         }
+    }
+
+    /// `{"error": "…"}`, the one shape the engine gives a machine caller when it
+    /// refuses a run. `nil` for every other payload, including a valid report.
+    private struct EngineRefusal: Decodable {
+        let error: String
+    }
+
+    private static func engineMessage(in data: Data) -> String? {
+        guard let refusal = try? JSONDecoder().decode(EngineRefusal.self, from: data) else { return nil }
+        let message = refusal.error.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? nil : message
     }
 
     private struct RunResult: Sendable {

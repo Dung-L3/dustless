@@ -598,6 +598,105 @@ struct EngineProcessContractTests {
             #expect(seconds == 1)
         }
     }
+
+    /// A fake engine that records what it was asked for — argv and the contents
+    /// of the file `--only-file` pointed at — into `capture`, then prints
+    /// `report` and exits with `status`.
+    private func recordingEngine(capture: URL, report: String = "{}", status: Int = 0) throws -> URL {
+        try script(
+            """
+            d='\(capture.path)'
+            printf '%s\\n' "$@" > "$d/argv"
+            prev=''
+            for a in "$@"; do
+              if [ "$prev" = '--only-file' ]; then cat "$a" > "$d/selection.json"; fi
+              prev="$a"
+            done
+            cat <<'DUSTLESS_EOF'
+            \(report)
+            DUSTLESS_EOF
+            exit \(status)
+            """
+        )
+    }
+
+    private func captured(_ capture: URL, _ name: String) throws -> String {
+        try String(contentsOf: capture.appendingPathComponent(name), encoding: .utf8)
+    }
+
+    private let applyReport = #"{"outcomes":[],"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
+
+    /// The whole point of `--only-file`: the engine re-scans on its own, so the
+    /// ticked paths have to travel with the command or a clean turns into "delete
+    /// every green/yellow finding".
+    @Test func theCleanCarriesExactlyTheSelectedPaths() async throws {
+        let capture = try captureDir()
+        let cli = DustlessCLI(
+            executable: try recordingEngine(capture: capture, report: applyReport),
+            timeout: 5
+        )
+        _ = try await cli.apply(only: ["/Users/me/.gradle/caches", "/Users/me/.npm/_cacache"])
+
+        let argv = try captured(capture, "argv").split(separator: "\n").map(String.init)
+        #expect(Array(argv.prefix(4)) == ["apply", "--json", "--yes", "--only-file"])
+        #expect(argv.count == 5, "the flag takes one file argument, got \(argv)")
+        let selection = argv[4]
+        #expect(selection.hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path), "\(selection)")
+        #expect(try JSONDecoder().decode([String].self, from: Data(try captured(capture, "selection.json").utf8))
+            == ["/Users/me/.gradle/caches", "/Users/me/.npm/_cacache"])
+        // The file names the user's own paths, so the run must not leave it.
+        #expect(!FileManager.default.fileExists(atPath: selection))
+    }
+
+    @Test func theSelectionFileIsRemovedWhenTheRunFails() async throws {
+        let capture = try captureDir()
+        let cli = DustlessCLI(
+            executable: try recordingEngine(capture: capture, report: "boom", status: 3),
+            timeout: 5
+        )
+        do {
+            _ = try await cli.apply(only: ["/Users/me/.bun/install/cache"])
+            Issue.record("expected the non-zero exit with no report to throw")
+        } catch let error as DustlessError {
+            guard case .exited(let status, _) = error else {
+                Issue.record("expected .exited, got \(error)")
+                return
+            }
+            #expect(status == 3)
+        }
+        let argv = try captured(capture, "argv").split(separator: "\n").map(String.init)
+        #expect(argv.count == 5, "got \(argv)")
+        let selection = argv[4]
+        #expect(!FileManager.default.fileExists(atPath: selection))
+    }
+
+    /// With `--json` the engine's argument/validation error is `{"error":"…"}` on
+    /// stdout and nothing on stderr, so decoding must surface it instead of the
+    /// bare exit status.
+    @Test func theEngineErrorPayloadBecomesTheMessage() async throws {
+        let cli = DustlessCLI(
+            executable: try script("echo '{\"error\":\"cần một giá trị cho --only-file\"}'\nexit 1"),
+            timeout: 5
+        )
+        do {
+            _ = try await cli.apply(only: ["/a"])
+            Issue.record("expected the refusal to throw")
+        } catch let error as DustlessError {
+            guard case .exited(let status, let detail) = error else {
+                Issue.record("expected .exited, got \(error)")
+                return
+            }
+            #expect(status == 1)
+            #expect(detail.contains("--only-file"), "the engine's own reason, got \(detail)")
+        }
+    }
+
+    private func captureDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dustless-capture-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 }
 
 /// The network panel decodes what `src/core/net/index.ts` prints. The status

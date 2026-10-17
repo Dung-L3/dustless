@@ -39,9 +39,13 @@ struct DustlessApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(after: .newItem) {
+                // ⌘R lives here and nowhere else. `SummaryHeader` used to
+                // register the same shortcut with a different disable rule, so
+                // which of the two answered the key depended on which module was
+                // open — and in Cleanup the two rules disagreed.
                 Button(settings.t("rescan")) { Task { await store.rescan() } }
                     .keyboardShortcut("r", modifiers: .command)
-                    .disabled(store.phase == .scanning)
+                    .disabled(store.isBusy)
             }
             // The Go menu used to switch safety tiers. Those are a selection
             // inside Cleanup now, so the menu goes to the modules instead.
@@ -240,5 +244,5 @@ struct RootView: View {
         }
     }
 
-    private var isScanning: Bool { store.phase == .scanning || store.phase == .resolvingEngine }
+    private var isScanning: Bool { store.isBusy }
 }
