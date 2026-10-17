@@ -182,9 +182,19 @@ struct MemoryView: View {
     private func processList(_ groups: [ProcessGroup], summary: String?) -> some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             if let summary {
+                // Pinned above the list, so it is capped like every other band
+                // here: the list is the one flexible child in this column and an
+                // uncapped sentence takes its height. One line is measured to be
+                // enough — the longest of the three languages is 201pt of a
+                // 608pt pane — so this caps the *band*, not the words, and the
+                // sentence below is never truncated in practice.
                 Text(summary)
                     .font(PanelFont.caption)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(summary)
+                    .accessibilityLabel(summary)
             }
 
             if groups.isEmpty {

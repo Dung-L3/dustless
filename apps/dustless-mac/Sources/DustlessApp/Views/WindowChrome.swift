@@ -106,6 +106,11 @@ struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>:
             header()
             summary()
             filters()
+            // `maxHeight: .infinity` is the whole clause. Do not add
+            // `.layoutPriority` here: it buys the content its leftover height by
+            // compressing the bands above, and a line-limited paragraph in a band
+            // loses a line when that happens — measured, the AirDrop note capped
+            // at two lines rendered one. Bound the paragraph instead.
             content()
                 .frame(maxHeight: .infinity)
         }
@@ -381,14 +386,30 @@ struct PanelStateView: View {
     }
 
     /// An engine error is worth copying, so it is selectable and monospaced.
+    ///
+    /// Bounded at six lines. This view sits in the content band of a panel that
+    /// does not scroll, centred top to bottom: the messages it carries embed the
+    /// engine's own stderr, and a Rust panic backtrace is 344 characters — nine
+    /// lines at this width, 126pt of a pane that had less to spare. The cap costs
+    /// the eye nothing that matters, because the whole sentence is still on the
+    /// hover and still selectable.
+    ///
+    /// Note the order: `lineLimit` *after* `fixedSize(vertical:)`, because
+    /// `fixedSize` hands the text an unbounded height proposal and would
+    /// otherwise win. Measured at 440pt with this chain, one line is 14pt, two
+    /// are 28 and six are 84 — the cap binds.
     private var messageLabel: some View {
         Text(message)
             .font(kind == .error ? PanelFont.mono(11) : PanelFont.body)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(6)
+            .truncationMode(.tail)
             .frame(maxWidth: 440)
             .modifier(OptionalTextSelection(isEnabled: kind == .error))
+            .help(message)
+            .accessibilityLabel(message)
     }
 }
 

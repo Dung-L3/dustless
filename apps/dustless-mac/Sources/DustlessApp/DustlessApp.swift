@@ -15,12 +15,20 @@ struct DustlessApp: App {
         // One window. Memory, Storage and Network used to be three more
         // `Window` scenes, which meant two navigation systems and three
         // click-away panels; they are destinations in this window now.
+        //
+        // No `.preferredColorScheme` in this file: light/dark is applied once,
+        // app-wide, by `AppSettings.applyAppearance()` writing `NSApp.appearance`.
+        //
+        // The scene modifier was not broken — it does follow a live switch, and it
+        // does release when handed `nil` back — but it pins the choice on that
+        // scene's window, and the menu-bar popover is AppKit's surface rather than a
+        // SwiftUI scene's, so it never got it. `NSApp.appearance` is the one value
+        // every window, sheet and AppKit-drawn control reads. See `AppSettings`.
         WindowGroup("Dustless") {
             RootView(store: store, router: router, net: net)
                 .environmentObject(store)
                 .environmentObject(net)
                 .environmentObject(settings)
-                .preferredColorScheme(settings.appearance.colorScheme)
                 .frame(minWidth: 940, minHeight: 560)
                 .background(WindowCapture())
                 .task {
@@ -48,9 +56,11 @@ struct DustlessApp: App {
         Settings {
             SettingsView(settings: settings, login: login, awdl: awdl)
                 .environmentObject(settings)
-                .preferredColorScheme(settings.appearance.colorScheme)
         }
 
+        // Re-read from `AppSettings` on every render, so the items follow the
+        // language without a relaunch; its appearance comes from `NSApp`,
+        // since this popover is AppKit's menu rather than a SwiftUI scene.
         MenuBarExtra {
             MenuBarContent(store: store, router: router, awdl: awdl, onOpenWindow: openMainWindow)
                 .environmentObject(settings)
