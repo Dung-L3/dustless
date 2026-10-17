@@ -109,15 +109,20 @@ export async function setAwdl(on: boolean, opts: AwdlOptions = {}): Promise<Awdl
     };
   }
 
-  const needsPassword = !root() && /password is required|a terminal is required/i.test(res.err);
+  // `sudo -n` refusing with "a password is required" means there is no rule at
+  // all; "not allowed to execute" means the installed rule no longer matches
+  // (different interface, renamed service). Both are the same situation for the
+  // user — the scoped rule has to be installed — so both are `refused`, with
+  // the fix named rather than sudo's own sentence.
+  const needsConsent = !root() && /password is required|a terminal is required|not allowed to execute/i.test(res.err);
   return {
     platform: p,
     interface: AWDL_INTERFACE,
     state,
     changed: false,
     outcome: {
-      status: needsPassword ? "refused" : "failed",
-      detail: needsPassword ? ROOT_HINT : res.err.trim() || `${IFCONFIG} ${AWDL_INTERFACE} ${verb} failed`,
+      status: needsConsent ? "refused" : "failed",
+      detail: needsConsent ? ROOT_HINT : res.err.trim() || `${IFCONFIG} ${AWDL_INTERFACE} ${verb} failed`,
     },
   };
 }

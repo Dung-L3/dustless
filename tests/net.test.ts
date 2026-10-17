@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { MAC_COMMANDS, netPrivilegeSteps } from "../src/core/net/commands.ts";
-import { net, netPrivilege, NET_PRIVILEGE_PATH, selectOps, type NetOpId } from "../src/core/net/index.ts";
+import { inspect } from "../src/core/net/inspect.ts";
+import { net, netExitCode, netPrivilege, NET_PRIVILEGE_PATH, selectOps, type NetOpId } from "../src/core/net/index.ts";
 import type { Runner, RunResult } from "../src/core/net/run.ts";
 import type { Platform } from "../src/types.ts";
 
@@ -270,6 +271,37 @@ describe("safety", () => {
     expect(report.outcomes[0]?.detail).toBe("boom");
   });
 
+  test("a stale rule — 'not allowed to execute' — is a refusal, not a failure", async () => {
+    // sudo says this when a rule exists but does not match: a different
+    // interface, a renamed service, a path that moved. Same fix as no rule at
+    // all, so it must be `refused` with the honest hint rather than `failed`
+    // with sudo's own sentence.
+    const { run, calls } = stub("mac", {
+      [`sudo -n ${MAC_COMMANDS.networksetup} -setdnsservers Wi-Fi Empty`]: {
+        ok: false,
+        err: "sudo: sorry, user mac is not allowed to execute '/usr/sbin/networksetup -setdnsservers Wi-Fi Empty' as root on host",
+      },
+    });
+    const report = await net({ ops: ["reset-dns"], platform: "mac", run, isRootUser: () => false, force: true });
+    const outcome = report.outcomes[0];
+    expect(outcome?.status).toBe("refused");
+    expect(outcome?.detail).toContain("sudo");
+    expect(outcome?.detail).not.toContain("not allowed to execute");
+    expect(calls.filter((c) => c.cmd === "sudo")).toHaveLength(1);
+  });
+
+  test("every advanced op classifies a stale sudoers rule the same way", async () => {
+    const base = stub("mac");
+    const denying: Runner = async (cmd, args) =>
+      cmd === "sudo"
+        ? { ok: false, code: 1, out: "", err: `sudo: sorry, user mac is not allowed to execute '${args.join(" ")}' as root` }
+        : base.run(cmd, args);
+    for (const id of ["reset-dns", "renew-dhcp", "clear-arp", "reset-mtu"] as const) {
+      const report = await net({ ops: [id], platform: "mac", run: denying, isRootUser: () => false, force: true });
+      expect({ id, status: report.outcomes[0]?.status }).toEqual({ id, status: "refused" });
+    }
+  });
+
   test("the solo-route guard refuses before any escalation is attempted", async () => {
     const solo = stub("mac");
     const refused = await net({ ops: ["reset-dns"], platform: "mac", run: solo.run, isRootUser: () => false });
@@ -322,6 +354,87 @@ describe("dry-run", () => {
     const report = await net({ platform: "mac", dryRun: true, run });
     expect(report.outcomes[0]?.status).toBe("skipped");
     expect(calls.filter((c) => c.cmd === "dscacheutil" || c.cmd === "killall")).toEqual([]);
+  });
+});
+
+describe("resolving the network service", () => {
+  // `-listallhardwareports` is not the whole list of services: it omits VPN,
+  // bridge and some USB entries. When the device is missing from it, the raw
+  // device name used to be handed back as if it were a service name — and
+  // `networksetup` answers "not a recognized network service", so the sudoers
+  // rule built from it named a command that could only ever fail.
+  const ORDER = "An asterisk (*) denotes that a network service is disabled.\n"
+    + "(1) Wi-Fi\n(Hardware Port: Wi-Fi, Device: en0)\n\n"
+    + "(2) Thunderbolt Bridge\n(Hardware Port: Thunderbolt Bridge, Device: bridge0)\n\n"
+    + "(3) USB 10/100/1000 LAN (*)\n(Hardware Port: USB 10/100/1000 LAN, Device: en7)\n";
+
+  test("falls back to -listnetworkserviceorder for a device the hardware list omits", async () => {
+    const { run } = stub("mac", {
+      "route -n get default": { out: "gateway: 192.168.1.1\ninterface: en7\n" },
+      "networksetup -listallhardwareports": { out: "Hardware Port: Wi-Fi\nDevice: en0\n" },
+      "networksetup -listnetworkserviceorder": { out: ORDER },
+    });
+    const info = await inspect("mac", run);
+    // The service name, not the device: that is the name `networksetup` takes.
+    expect(info.iface).toBe("en7");
+    expect(info.service).toBe("USB 10/100/1000 LAN");
+    const privilege = netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, iface: info.iface, service: info.service }));
+    expect(privilege.allowed[0]).toBe(`${MAC_COMMANDS.networksetup} -setdnsservers "USB 10/100/1000 LAN" Empty`);
+  });
+
+  test("a disabled service still resolves, without the trailing asterisk", async () => {
+    const { run } = stub("mac", {
+      "route -n get default": { out: "gateway: 192.168.1.1\ninterface: en7\n" },
+      "networksetup -listallhardwareports": { out: "" },
+      "networksetup -listnetworkserviceorder": { out: ORDER },
+    });
+    expect((await inspect("mac", run)).service).toBe("USB 10/100/1000 LAN");
+  });
+
+  test("a device in neither list yields no service, so no rule can be built", async () => {
+    const { run, calls } = stub("mac", {
+      "route -n get default": { out: "gateway: 192.168.1.1\ninterface: en9\n" },
+      "networksetup -listallhardwareports": { out: "Hardware Port: Wi-Fi\nDevice: en0\n" },
+      "networksetup -listnetworkserviceorder": { out: ORDER },
+    });
+    const info = await inspect("mac", run);
+    // Never the raw interface name: that is what made `--print-privilege`
+    // emit a rule whose commands `networksetup` rejects.
+    expect(info.service).toBe("");
+    expect(() => netPrivilege("mac", netPrivilegeSteps(info))).toThrow();
+    expect(calls.some((c) => c.args.includes("-listnetworkserviceorder"))).toBe(true);
+  });
+
+  test("the hardware-port list is preferred, so no second lookup is needed", async () => {
+    const { run, calls } = stub("mac", {
+      "networksetup -listallhardwareports": { out: "Hardware Port: My Wi-Fi\nDevice: en0\n" },
+      "networksetup -listnetworkserviceorder": { out: ORDER },
+    });
+    expect((await inspect("mac", run)).service).toBe("My Wi-Fi");
+    expect(calls.filter((c) => c.args.includes("-listnetworkserviceorder"))).toEqual([]);
+  });
+});
+
+describe("exit status", () => {
+  // "Did nothing" has to be distinguishable from "did the thing", and only the
+  // process exit status carries that for a script.
+  const report = (...statuses: ("ran" | "refused" | "failed" | "skipped" | "not-applicable")[]) =>
+    ({ outcomes: statuses.map((status) => ({ op: "reset-dns" as const, status, detail: "" })) });
+
+  test("every outcome refused is a non-zero exit", () => {
+    expect(netExitCode(report("refused", "refused"))).toBe(1);
+  });
+
+  test("a failure is a non-zero exit", () => {
+    expect(netExitCode(report("ran", "failed"))).toBe(1);
+  });
+
+  test("ran, skipped and not-applicable are a clean exit", () => {
+    expect(netExitCode(report("ran", "skipped", "not-applicable"))).toBe(0);
+  });
+
+  test("a run with no outcomes at all did nothing and says so cleanly", () => {
+    expect(netExitCode(report())).toBe(0);
   });
 });
 
@@ -427,6 +540,18 @@ describe("netPrivilege", () => {
     for (const service of ['Wi"Fi', "Wi-Fi # x", "Wi-Fi\nALL=(root) ALL", ""]) {
       expect(() => netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service }))).toThrow();
     }
+  });
+
+  test("a service name holding a sudoers wildcard is refused", () => {
+    // sudoers reads `* ? [ ] \` as wildcards, so a rule containing one no
+    // longer pins one command — it matches a family of them, which is exactly
+    // what the scoped rule exists to prevent. Escaping does not help: sudoers
+    // does not define a shell-style escape for these.
+    for (const service of ["Wi*Fi", "Wi?Fi", "Wi-Fi[0-9]", "Wi\\Fi"]) {
+      expect(() => netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service }))).toThrow();
+    }
+    // And the rule that does get built still has no wildcard in it.
+    expect(netPrivilege("mac", netPrivilegeSteps(MAC_INFO)).rule).not.toMatch(/[*?[\]\\]/);
   });
 
   test("an account name that could inject a second rule is refused", () => {

@@ -102,7 +102,19 @@ async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name
   }
 }
 
+/**
+ * A bundle id is a reverse-DNS identifier, never a path. `join()` collapses
+ * `..`, so a crafted `CFBundleIdentifier` of `../../../victim` turned every
+ * leftover template into a path outside HOME — and `--purge` made that a
+ * permanent `rm -rf` of whatever it pointed at. A separator or a `..` is not a
+ * bundle id at all; refuse to build paths from one.
+ */
+function isSafeBundleId(bundleId: string): boolean {
+  return bundleId.length > 0 && !bundleId.includes("/") && !bundleId.includes("\\") && !bundleId.includes("..");
+}
+
 function deriveRelatedPaths(home: string, bundleId: string): string[] {
+  if (!isSafeBundleId(bundleId)) return [];
   const out: string[] = [];
   for (const template of RELATIVE_LEFTOVER_PATHS) {
     const path = expandHome(join(home, template.replace(/{id}/g, bundleId)), home);
@@ -297,13 +309,35 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
+  // A bundle id that is not a bundle id cannot be expanded into leftovers, and
+  // the whole point of refusing it is that we do not know where it would point.
+  // Refuse the uninstall rather than remove the bundle and leave the user
+  // guessing which of its directories was left behind.
+  if (!isSafeBundleId(bundleInfo.bundleId)) {
+    return {
+      outcomes: [
+        { path: appPath, status: "failed", bytes: 0, detail: `bundle id "${bundleInfo.bundleId}" is not a valid identifier` },
+      ],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+
   const expectedRelatedPaths = new Set(deriveRelatedPaths(home, bundleInfo.bundleId).map((p) => resolve(p)));
 
   const resolvedRelatedPaths = relatedPaths.map((p) => resolve(p));
-  const allowedPaths = new Set([resolvedAppPath, ...resolvedRelatedPaths]);
 
-  // Validate that each relatedPath is a legitimate leftover for this bundle ID
+  // Validate that each relatedPath is a legitimate leftover for this bundle ID.
+  // Two independent properties, both required: it resolves strictly inside HOME,
+  // and it is exactly one of this bundle id's own template expansions. Either
+  // one alone would be enough to stop the `..` escape — the HOME check catches a
+  // bundle id that climbs out, the template check catches anything else.
   for (const p of resolvedRelatedPaths) {
+    if (!isUnder(p, home) || resolve(p) === resolve(home)) {
+      return {
+        outcomes: [{ path: p, status: "failed", bytes: 0, detail: "leftover path escapes HOME" }],
+        summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+      };
+    }
     if (!expectedRelatedPaths.has(p)) {
       return {
         outcomes: [{ path: p, status: "failed", bytes: 0, detail: "not a valid leftover path for this app" }],
@@ -317,15 +351,6 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   const outcomes: UninstallOutcome[] = [];
 
   for (const p of allPaths) {
-    if (!allowedPaths.has(p)) {
-      outcomes.push({ path: p, status: "skipped", bytes: 0, detail: "not in allowed list" });
-      continue;
-    }
-    // Allow deny-listed paths if they are explicitly in relatedPaths (or appPath)
-    if (p !== resolvedAppPath && !resolvedRelatedPaths.includes(p) && isDenied(p, home)) {
-      outcomes.push({ path: p, status: "failed", bytes: 0, detail: "denied path" });
-      continue;
-    }
     if (!(await exists(p))) {
       outcomes.push({ path: p, status: "skipped", bytes: 0, detail: "does not exist" });
       continue;

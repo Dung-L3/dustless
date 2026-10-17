@@ -69,7 +69,11 @@ mac ALL=(root) NOPASSWD: /usr/sbin/networksetup -setdnsservers Wi-Fi Empty, /usr
 Every path is absolute and every argument is exact — no wildcards, no shell, no argument
 passthrough. A service name containing spaces (`USB 10/100/1000 LAN`) is double-quoted in the rule
 so sudoers matches the single argument the engine actually passes; a service name containing `"`
-or `#` is refused rather than escaped. Anything outside those four commands is still refused, and
+or `#` is refused rather than escaped, and so is one containing a sudoers wildcard (`* ? [ ] \`),
+because a rule with a wildcard in it no longer pins one command. The service name is resolved from
+`-listallhardwareports`, then from `-listnetworkserviceorder` for a device the first list omits; if
+neither list knows it, `--print-privilege` prints an error and exits `1` rather than a rule whose
+commands `networksetup` rejects every time. Anything outside those four commands is still refused, and
 the file is validated with `visudo -cf` on a staged copy before it is moved into place, so a
 malformed rule can never land in `/etc/sudoers.d/`.
 
@@ -83,6 +87,13 @@ the advanced operations then ask for the password again, exactly as before.
 
 `dustless net --reset-dns --dry-run` prints what *would* change (the current DNS servers and the
 target: DHCP-provided values) and changes nothing. `--dry-run` never issues a write command.
+
+### Exit status
+
+`0` means every selected operation actually ran. `1` means at least one outcome was `refused` or
+`failed` — including a run where every single operation was refused, which used to exit `0` and so
+was indistinguishable from a run that did the work. The JSON report is unchanged and is the place
+that says *why*: check `outcomes[].status` and `outcomes[].detail`, not the exit code alone.
 
 ## Honest positioning: what actually helps, and what is placebo
 

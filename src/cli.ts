@@ -1,18 +1,19 @@
 #!/usr/bin/env bun
-import { appendFile, mkdir, readdir } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import pkg from "../package.json" with { type: "json" };
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
-import { sep } from "node:path";
+import { resolve, sep } from "node:path";
 import type { ApplyReport, Finding, ScanReport, Tier, TierChoice } from "./types.ts";
 import type { UninstallReport } from "./core/apps/types.ts";
+import { args as readArgs } from "./core/args.ts";
 import { HOME, exists, platform } from "./core/paths.ts";
 import { inspectSystem } from "./system/index.ts";
 import { configDir, loadRules, userRulesPath } from "./core/rules.ts";
 import { scan } from "./core/scan.ts";
 import { apply } from "./core/apply.ts";
 import { diskUsage, freeSpace } from "./core/space.ts";
-import { net, netPrivilege, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
+import { net, netExitCode, netPrivilege, selectOps, type NetFlags, type NetReport } from "./core/net/index.ts";
 import { netPrivilegeSteps } from "./core/net/commands.ts";
 import { inspect } from "./core/net/inspect.ts";
 import { systemRun } from "./core/net/run.ts";
@@ -37,6 +38,7 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
 
   dustless scan                 quét chéo, in ra những gì có thể dọn
   dustless apply                xóa GREEN, hỏi từng mục YELLOW
+  dustless apply --only-file <selection.json>  chỉ xóa đúng các path trong mảng JSON này
   dustless rule list|show|add|validate
   dustless mcp                 chạy MCP server trên stdio (cho AI agent)
   dustless doctor               chẩn đoán môi trường
@@ -47,18 +49,16 @@ const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa mù
   dustless apps [--json]        liệt kê ứng dụng .app
   dustless apps --uninstall <path> --confirm [--purge] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
   dustless largefiles [--json] [--min-size 200mb] [--limit 50]  liệt kê tệp lớn nhất trong thư mục home
-  dustless largefiles --delete <path> --confirm [--json]  chuyển một tệp sang Thùng rác (không xóa vĩnh viễn)
+  dustless largefiles --delete <path> --confirm [--json]  chuyển một tệp sang Thùng rác (không xóa vĩnh viễn; từ chối danh sách đỏ)
   dustless version | help
 
-Cờ chung: --json (máy đọc) --quiet (ít chữ) --yes (không hỏi)`;
+Cờ chung: --json (máy đọc) --quiet (ít chữ, không giấu lỗi) --yes (không hỏi)`;
 
 const argv = process.argv.slice(2);
-const args = argv.filter((arg) => !arg.startsWith("--"));
-const flag = (name: string): boolean => argv.includes(`--${name}`);
-const opt = (name: string): string | undefined => {
-  const at = argv.indexOf(`--${name}`);
-  return at >= 0 ? argv[at + 1] : undefined;
-};
+const args = readArgs(argv);
+const flag = args.flag;
+const opt = args.opt;
+
 const color = process.stdout.isTTY === true && !process.env["NO_COLOR"];
 const paint = (hue: string, text: string): string => (color ? `\x1b[${hue}m${text}\x1b[0m` : text);
 const bold = (text: string): string => paint("1", text);
@@ -81,6 +81,34 @@ function tierBadge(tier: Tier): string {
 
 function say(line = ""): void {
   if (!flag("quiet")) console.log(line);
+}
+
+/**
+ * Errors always go to stderr and `--quiet` never suppresses them: a quiet run
+ * that exits 1 with no message is the worst outcome there is. `say()` is for
+ * results, this is for the reason there is no result.
+ */
+function errorOut(line: string): void {
+  console.error(paint("31", line));
+}
+
+/**
+ * The one shape a machine caller gets for an argument or validation error: a
+ * single JSON object on stdout, so `--json` output stays parseable, and exit 1.
+ * A human run gets the same sentence on stderr.
+ */
+async function fail(message: string): Promise<number> {
+  if (flag("json")) await writeOut(`${JSON.stringify({ error: message })}\n`);
+  else errorOut(`✖ ${message}`);
+  return 1;
+}
+
+/** `opt()` reports a value it could not find as undefined; this turns a
+ *  missing value into a usage error instead of a silent default. */
+function required(name: string, usage: string): string {
+  const value = opt(name);
+  if (value === undefined) throw new Error(`cần một giá trị cho --${name} — ${usage}`);
+  return value;
 }
 
 async function printScan(report: ScanReport): Promise<void> {
@@ -131,7 +159,29 @@ async function runScan(): Promise<number> {
   return 0;
 }
 
+/**
+ * The caller's own selection: the exact resolved paths from the report it showed
+ * the user. Anything not in the set is skipped, so a per-row choice survives the
+ * round trip instead of being widened to every green/yellow finding the fresh
+ * scan happened to find. Read before the scan, so a bad file deletes nothing.
+ */
+async function readSelection(): Promise<Set<string> | undefined> {
+  if (!flag("only-file")) return undefined;
+  const file = required("only-file", "dustless apply --only-file <selection.json>");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(file, "utf8"));
+  } catch (err) {
+    throw new Error(`--only-file: không đọc được danh sách path từ "${file}": ${(err as Error).message}`);
+  }
+  if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== "string")) {
+    throw new Error(`--only-file: "${file}" phải là một mảng JSON các path tuyệt đối`);
+  }
+  return new Set((parsed as string[]).map((path) => resolve(path)));
+}
+
 async function runApply(): Promise<number> {
+  const only = await readSelection();
   const report = await scan();
   if (!flag("json")) await printScan(report);
   const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
@@ -140,12 +190,15 @@ async function runApply(): Promise<number> {
     if (!flag("json")) say("Không có mục nào đủ điều kiện xóa.");
     return 0;
   }
-  if (!flag("yes") && !(await confirmSummary(deletable, report.totals.blocked.count))) {
+  // The confirmation counts what will actually be touched, so a selection never
+  // has to be told apart from the rest of the report to know what is on it.
+  const selected = only ? deletable.filter((f) => only.has(resolve(f.path))) : deletable;
+  if (!flag("yes") && !(await confirmSummary(selected, report.totals.blocked.count))) {
     await printApply(idleApply());
     if (!flag("json")) say("Đã hủy. Không có gì bị xóa.");
     return 0;
   }
-  const result = await apply(report, { tiers: tierChoicesFor(report), assumeYes: flag("yes"), onPrompt: askYellow });
+  const result = await apply(report, { tiers: tierChoicesFor(report), assumeYes: flag("yes"), onPrompt: askYellow, only });
   await printApply(result);
   return result.outcomes.some((o) => o.status === "failed") ? 1 : 0;
 }
@@ -220,7 +273,12 @@ async function runRule(sub: string, rest: string[]): Promise<number> {
     return 0;
   }
   if (sub === "validate") {
-    say(`OK — ${(await loadRules(rest[0])).length} rule hợp lệ`);
+    const count = (await loadRules(rest[0])).length;
+    if (flag("json")) {
+      await writeOut(`${JSON.stringify({ ok: true, rules: count })}\n`);
+      return 0;
+    }
+    say(`OK — ${count} rule hợp lệ`);
     return 0;
   }
   throw new Error(`rule: lệnh con không hợp lệ "${sub}"`);
@@ -261,11 +319,13 @@ async function runDoctor(): Promise<number> {
   say(bold("\n  đọc được các path"));
   for (const [path, state] of Object.entries(report.paths)) say(`  ${dim(path.padEnd(26))} ${state}`);
   const mail = report.paths["~/Library/Mail"] ?? "";
-  say(
-    mail.includes("EPERM") || mail.includes("EACCES")
-      ? `\n${paint("31", "✖ thiếu Full Disk Access")} — cấp trong System Settings › Privacy & Security › Full Disk Access`
-      : "\n" + paint("32", "✔ không thấy dấu hiệu thiếu Full Disk Access"),
-  );
+  // This line is the reason the run exits 1, so it is an error: stderr, and
+  // never taken away by --quiet.
+  if (mail.includes("EPERM") || mail.includes("EACCES")) {
+    errorOut(`✖ thiếu Full Disk Access — cấp trong System Settings › Privacy & Security › Full Disk Access`);
+  } else {
+    say(paint("32", "✔ không thấy dấu hiệu thiếu Full Disk Access"));
+  }
   const stale = hygiene.items.filter((item) => item.severity === "warn");
   say(bold(`\n  vệ sinh hệ thống  ${hygiene.startupCount} khởi động · ${hygiene.toolchainCount} toolchain`));
   for (const item of stale.slice(0, 8)) {
@@ -289,7 +349,7 @@ async function runNet(): Promise<number> {
   };
   const report = await net({ ops: selectOps(flags), dryRun: flag("dry-run"), force: flag("force") });
   await printNet(report);
-  return report.outcomes.some((o) => o.status === "failed") ? 1 : 0;
+  return netExitCode(report);
 }
 
 /**
@@ -299,16 +359,23 @@ async function runNet(): Promise<number> {
  */
 async function printNetPrivilege(): Promise<number> {
   if (platform !== "mac") {
-    say("✖ quy tắc sudoers cho net chỉ áp dụng trên macOS");
-    return 1;
+    return await fail("quy tắc sudoers cho net chỉ áp dụng trên macOS");
   }
   const user = process.env["USER"] ?? "";
   if (!validSudoersUser(user)) {
-    say(`✖ không dùng được "${user}" cho quy tắc sudoers`);
-    return 1;
+    return await fail(`không dùng được "${user}" cho quy tắc sudoers`);
   }
   try {
-    const privilege = netPrivilege(user, netPrivilegeSteps(await inspect(platform, systemRun)));
+    const info = await inspect(platform, systemRun);
+    // `networksetup` takes a *service name* ("Wi-Fi"), never a device ("en0").
+    // A rule built on an unresolved one names a command the OS rejects every
+    // time, so print the honest error instead of a rule that cannot work.
+    if (!info.iface || !info.service) {
+      return await fail(
+        `không phân giải được dịch vụ mạng hiện tại (interface: ${info.iface ?? "?"}, service: ${info.service || "?"}) — không in được quy tắc sudo chính xác`,
+      );
+    }
+    const privilege = netPrivilege(user, netPrivilegeSteps(info));
     if (flag("json")) {
       await writeOut(`${JSON.stringify(privilege)}\n`);
       return 0;
@@ -316,8 +383,7 @@ async function printNetPrivilege(): Promise<number> {
     await writeOut(privilege.rule);
     return 0;
   } catch (error) {
-    say(`✖ ${error instanceof Error ? error.message : String(error)}`);
-    return 1;
+    return await fail(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -349,8 +415,7 @@ async function runAwdl(): Promise<number> {
   if (flag("print-privilege")) {
     const user = process.env["USER"] ?? "";
     if (!validSudoersUser(user)) {
-      say(`✖ không dùng được "${user}" cho quy tắc sudoers`);
-      return 1;
+      return await fail(`không dùng được "${user}" cho quy tắc sudoers`);
     }
     const privilege = awdlPrivilege(user);
     if (flag("json")) {
@@ -363,8 +428,7 @@ async function runAwdl(): Promise<number> {
   const on = flag("on");
   const off = flag("off");
   if (on && off) {
-    say("✖ chọn một trong hai: --on hoặc --off");
-    return 1;
+    return await fail("chọn một trong hai: --on hoặc --off");
   }
   const report = on || off ? await setAwdl(on) : await awdlStatus();
   await printAwdl(report);
@@ -415,21 +479,20 @@ async function printUninstall(report: UninstallReport): Promise<number> {
 }
 
 async function runApps(_rest: string[]): Promise<number> {
-  const { resolve } = await import("node:path");
   const home = homedir();
-  const uninstallPath = opt("uninstall");
   const confirm = flag("confirm");
   const purge = flag("purge");
   const trashDir = opt("trash-dir");
 
-  if (uninstallPath) {
+  if (flag("uninstall")) {
+    const uninstallPath = required("uninstall", "dustless apps --uninstall <đường dẫn .app> --confirm");
     const apps = await listApps({ home });
     const target = apps.find((a) => a.path === uninstallPath || resolve(a.path) === resolve(uninstallPath));
     if (!target) {
       if (flag("json")) {
         await writeOut(`${JSON.stringify({ error: "app not found in inventory", path: uninstallPath })}\n`);
       } else {
-        say(`✖ ứng dụng không có trong danh sách: ${uninstallPath}`);
+        errorOut(`✖ ứng dụng không có trong danh sách: ${uninstallPath}`);
       }
       return 1;
     }
@@ -464,9 +527,8 @@ async function runApps(_rest: string[]): Promise<number> {
   return 0;
 }
 
-/** `--min-size 200mb` / `200MiB` / a plain byte count. NaN when unparseable. */
-function sizeOpt(name: string): number | undefined {
-  const raw = opt(name);
+/** `200mb` / `200MiB` / a plain byte count. NaN when unparseable. */
+function sizeOpt(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
   const match = /^(\d+(?:\.\d+)?)\s*([bkmgt])?(?:i?b)?$/i.exec(raw.trim());
   const units: Record<string, number> = { "": 1, b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3, t: 1024 ** 4 };
@@ -475,20 +537,21 @@ function sizeOpt(name: string): number | undefined {
 }
 
 async function runLargeFiles(): Promise<number> {
-  const minSize = sizeOpt("min-size");
+  const rawMinSize = flag("min-size") ? required("min-size", "dùng 200mb, 1gb hoặc số byte") : undefined;
+  const minSize = sizeOpt(rawMinSize);
   if (minSize !== undefined && !Number.isFinite(minSize)) {
-    const value = opt("min-size") ?? "";
     if (flag("json")) {
-      await writeOut(`${JSON.stringify({ error: "invalid --min-size", value })}\n`);
+      await writeOut(`${JSON.stringify({ error: "invalid --min-size", value: rawMinSize })}\n`);
     } else {
-      say(`✖ --min-size không hợp lệ: "${value}" (dùng 200mb, 1gb hoặc số byte)`);
+      errorOut(`✖ --min-size không hợp lệ: "${rawMinSize}" (dùng 200mb, 1gb hoặc số byte)`);
     }
     return 1;
   }
-  const limit = Number(opt("limit"));
-  const deletePath = opt("delete");
+  const limitValue = flag("limit") ? required("limit", "số lớn nhất cần in") : undefined;
+  const limit = Number(limitValue);
 
-  if (deletePath) {
+  if (flag("delete")) {
+    const deletePath = required("delete", "dustless largefiles --delete <đường dẫn> --confirm");
     return await printUninstall(await deleteLargeFile({ path: deletePath, confirm: flag("confirm"), trashDir: opt("trash-dir") }));
   }
 
@@ -520,7 +583,7 @@ async function main(): Promise<number> {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;
   }
-  const [command = "help", ...rest] = args;
+  const [command = "help", ...rest] = args.positional;
   if (command === "scan") return await runScan();
   if (command === "apply") return await runApply();
   if (command === "rule") return await runRule(rest[0] ?? "", rest.slice(1));
@@ -555,7 +618,7 @@ function flushStdout(): Promise<void> {
 }
 
 process.on("unhandledRejection", (reason) => {
-  console.error(paint("31", String(reason)));
+  errorOut(String(reason));
   void flushStdout().finally(() => process.exit(1));
 });
 
@@ -564,8 +627,10 @@ main().then(
     await flushStdout();
     process.exitCode = code;
   },
+  // Every argument or validation error lands here and has one shape: a JSON
+  // object on stdout under `--json`, the sentence on stderr otherwise, exit 1.
   async (err: Error) => {
-    console.error(paint("31", `✖ ${err.message}`));
+    await fail(err.message);
     await flushStdout();
     process.exitCode = 1;
   },

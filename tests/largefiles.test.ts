@@ -181,11 +181,57 @@ describe("largefiles --delete", () => {
   });
 
   test("refuses a directory, never deleting a tree", async () => {
-    const dir = join(box.home, "Documents");
+    const dir = join(box.home, "Downloads");
     const run = await box.run(["largefiles", "--delete", dir, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
     expect(report.outcomes[0]?.detail).toBe("not a regular file");
-    expect(await exists(join(dir, "notes.bin"))).toBe(true);
+    expect(await exists(dir)).toBe(true);
+    expect(await exists(join(dir, "backup.tar"))).toBe(true);
+  });
+
+  // The red list (`src/core/paths.ts`) is the same one `scan` uses: these paths
+  // are never offered as findings, so `--delete` must refuse them by name too.
+  test("refuses a red-listed path and leaves it in place", async () => {
+    const doc = join(box.home, "Documents", "notes.bin");
+    const run = await box.run(["largefiles", "--delete", doc, "--confirm", "--json"]);
+    const report = JSON.parse(run.stdout) as Report;
+    expect(run.code).toBe(1);
+    expect(report.outcomes[0]?.status).toBe("failed");
+    expect(report.outcomes[0]?.detail).toMatch(/red list/);
+    expect(await exists(doc)).toBe(true);
+    expect((await lstat(doc)).size).toBe(NOTES);
+  });
+
+  test("refuses a .git path even though the walker never enters one", async () => {
+    // The walk skips `.git` on its own, so this path can only be reached by
+    // naming it directly — which is exactly the case the guard is for.
+    const pack = join(box.home, "project", ".git", "objects", "pack-0001");
+    const run = await box.run(["largefiles", "--delete", pack, "--confirm", "--json"]);
+    const report = JSON.parse(run.stdout) as Report;
+    expect(run.code).toBe(1);
+    expect(report.outcomes[0]?.detail).toMatch(/red list/);
+    expect(await exists(pack)).toBe(true);
+  });
+
+  test("a path that is not there is skipped, not failed", async () => {
+    const ghost = join(box.home, "Downloads", "never-existed.mov");
+    const run = await box.run(["largefiles", "--delete", ghost, "--confirm", "--json"]);
+    const report = JSON.parse(run.stdout) as Report;
+    expect(report.outcomes[0]?.status).toBe("skipped");
+    expect(report.outcomes[0]?.detail).toBe("does not exist");
+    expect(report.summary).toMatchObject({ skipped: 1, failed: 0 });
+  });
+
+  test("a flag with no value is a usage error, not a path named after the next flag", async () => {
+    // `--delete --json` used to resolve the literal string "--json" against the
+    // cwd, so the flag after it silently became the file to trash.
+    const before = await readdir(box.home);
+    for (const args of [["largefiles", "--delete", "--json"], ["largefiles", "--delete", "--confirm", "--json"]]) {
+      const run = await box.run(args);
+      expect(run.code).toBe(1);
+      expect((JSON.parse(run.stdout) as { error: string }).error).toMatch(/--delete/);
+    }
+    expect(await readdir(box.home)).toEqual(before);
   });
 });

@@ -150,7 +150,7 @@ Every command below is implemented in `src/cli.ts`.
 | Command | Behaviour |
 | --- | --- |
 | `dustless scan` | Cross-scan every rule, print findings sorted by size, plus per-tier totals and reclaimable bytes. Read-only. |
-| `dustless apply` | Scan, print the summary, ask `Xóa? [y/N]`, then delete GREEN and ask per YELLOW item. Exit code `1` if anything failed. |
+| `dustless apply` | Scan, print the summary, ask `Xóa? [y/N]`, then delete GREEN and ask per YELLOW item. Exit code `1` if anything failed. With `--only-file <selection.json>` it deletes only the exact paths in that array. |
 | `dustless rule list` | Print the rule database with tiers and descriptions, and name the source it loaded from. |
 | `dustless rule show <id>` | Print one rule as JSON. |
 | `dustless rule add <id> <green\|yellow> <desc> <path> [path…]` | Append a new rule to `~/.config/dustless/rules.yaml` with `paths.all`. |
@@ -166,11 +166,23 @@ Every command below is implemented in `src/cli.ts`.
 | `--json` | One JSON object on stdout for `scan`, `apply`, `rule list`, `doctor`, `version`. For `apply` it also cancels: with no `--yes` there is no prompt, so nothing is deleted (`src/cli.ts:148`). |
 | `--quiet` | Suppress the human-readable lines. |
 | `--yes` | Skip the confirmation. Skips the summary question **and** the per-item YELLOW questions. It does not skip verification, and it does not unblock BLOCKED or RED. |
+| `--only-file <selection.json>` | Apply only the exact paths in this JSON array of absolute paths; every other finding is `skipped` as not selected. Omit it and `apply` keeps its behaviour of offering every green/yellow finding. An unreadable file, or one that is not an array of strings, exits `1` and deletes nothing. |
 | `--help` | Usage, only when it is the argument on its own — `dustless --help`. After another command word the command wins: `dustless scan --help` runs a scan. |
 
 ### `apply --json`
 
-`apply --json` prints exactly one JSON object on stdout, on every path that reaches it — deleted, nothing deletable, cancelled — with the keys `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` is `max(0, freeAfter - freeBefore)`: a delta of free space on the volume, not a sum of the deleted items, so it can read `0` after a real deletion if something else filled the disk in between (`src/core/apply.ts:33`). A hard error — a malformed `~/.config/dustless/rules.yaml`, say — still exits `1` with the message on stderr and nothing on stdout (`src/cli.ts:300`).
+`apply --json` prints exactly one JSON object on stdout, on every path that reaches it — deleted, nothing deletable, cancelled — with the keys `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` is `max(0, freeAfter - freeBefore)`: a delta of free space on the volume, not a sum of the deleted items, so it can read `0` after a real deletion if something else filled the disk in between (`src/core/apply.ts:33`).
+
+### Errors
+
+Every argument or validation error — an unknown command, a flag with no value, a rules file that does not parse, an unusable `--only-file` — has one shape and one exit status:
+
+| | stdout | stderr | exit |
+| --- | --- | --- | --- |
+| with `--json` | one JSON object, `{"error":"…"}` | empty | `1` |
+| without `--json` | empty | `✖ …` | `1` |
+
+`--quiet` never suppresses an error: it reduces the human-readable result lines, not the reason a command exited non-zero. A value that is missing is missing, never the next flag: `dustless apps --uninstall --confirm` is a usage error about `--uninstall`, not a request to uninstall an app named `--confirm`.
 
 ## macOS app
 

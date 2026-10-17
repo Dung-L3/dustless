@@ -2,7 +2,7 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src and tests
-bun test              # everything: 201 tests, about 7s on a laptop
+bun test              # everything: 253 tests, about 7s on a laptop
 ```
 
 No build step is needed. `tests/e2e` runs the compiled binary in

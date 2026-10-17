@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
 import { HOME, isRed } from "../src/core/paths.ts";
 import { loadRules, userRulesPath } from "../src/core/rules.ts";
@@ -280,5 +280,65 @@ describe("verification block", () => {
     expect(result.outcomes[0]?.status).toBe("skipped");
     expect(result.outcomes[0]?.detail).toContain("KIỆM SOÁT CHẶN");
     expect(await exists(victim)).toBe(true);
+  });
+});
+
+describe("an explicit selection", () => {
+  test("only the paths in the set are deleted; the rest is skipped", async () => {
+    const picked = join(sandbox, "picked");
+    const left = join(sandbox, "left-alone");
+    for (const dir of [picked, left]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "blob.bin"), Buffer.alloc(64 * 1024, 3));
+    }
+    const result = await apply(report([finding(picked), finding(left)]), {
+      assumeYes: true,
+      tiers: { "test.cache": "green" },
+      only: new Set([resolve(picked)]),
+    });
+    expect(result.outcomes.map((o) => o.status)).toEqual(["deleted", "skipped"]);
+    expect(result.outcomes[1]?.detail).toMatch(/chọn/);
+    expect(await exists(picked)).toBe(false);
+    expect(await exists(left)).toBe(true);
+  });
+
+  test("an empty selection deletes nothing at all", async () => {
+    const victim = join(sandbox, "never-selected");
+    await mkdir(victim, { recursive: true });
+    const result = await apply(report([finding(victim)]), {
+      assumeYes: true,
+      tiers: { "test.cache": "green" },
+      only: new Set(),
+    });
+    expect(result.outcomes[0]?.status).toBe("skipped");
+    expect(await exists(victim)).toBe(true);
+  });
+
+  test("an undefined selection keeps the old behaviour", async () => {
+    const victim = join(sandbox, "unselected-option");
+    await mkdir(victim, { recursive: true });
+    const result = await apply(report([finding(victim)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(await exists(victim)).toBe(false);
+  });
+
+  test("a selection never widens past the safety guards", async () => {
+    // The selection is a filter on what may be deleted, never a licence: a red
+    // path inside the set, and a blocked finding inside the set, both stay.
+    const red = join(sandbox, "Documents", "notes");
+    const blocked = join(sandbox, "blocked-in-selection");
+    await mkdir(red, { recursive: true });
+    await mkdir(blocked, { recursive: true });
+    const result = await apply(
+      report([
+        finding(red),
+        { ...finding(blocked), tier: "yellow", blocked: true, verified: false, note: "KHÔNG XÓA: in use" },
+      ]),
+      { assumeYes: true, tiers: { "test.cache": "green", "test.yellow": "yellow" }, only: new Set([resolve(red), resolve(blocked)]) },
+    );
+    expect(result.outcomes.map((o) => o.status)).toEqual(["failed", "skipped"]);
+    expect(result.outcomes[1]?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(await exists(red)).toBe(true);
+    expect(await exists(blocked)).toBe(true);
   });
 });

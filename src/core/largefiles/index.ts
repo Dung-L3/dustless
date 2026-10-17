@@ -1,6 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { isRed } from "../paths.ts";
 import { moveToTrash } from "../apps/index.ts";
 import type { UninstallOutcome, UninstallReport } from "../apps/types.ts";
 
@@ -107,9 +108,15 @@ export async function findLargeFiles(opts: FindLargeFilesOptions = {}): Promise<
 
 /**
  * Moves one listed file to the Trash. There is no hard delete: the path has to
- * be a plain file inside a scanned root, and the same `moveToTrash` the app
- * uninstaller uses, so the result is an ordinary `.Trash` entry the user can
- * put back.
+ * be a plain file inside a scanned root, not on the red list, and it goes
+ * through the same `moveToTrash` the app uninstaller uses, so the result is an
+ * ordinary `.Trash` entry the user can put back.
+ *
+ * The red list is the point of the extra check: `findLargeFiles` deliberately
+ * walks `Documents`, `Library/Mail` and everything else, so a user can point
+ * `--delete` at any of it. Listing a file is harmless. Deleting the user's mail
+ * or a repository's objects is not, so those paths are refused by name here,
+ * exactly as `scan` refuses to emit them as findings.
  */
 export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<UninstallReport> {
   const target = resolve(opts.path);
@@ -122,9 +129,19 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
   if (!roots.some((root) => target === root || target.startsWith(root + sep))) {
     return refuse("outside the scanned roots");
   }
+  if (isRed(target)) {
+    return refuse(`on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`);
+  }
   if (!opts.confirm) return refuse("confirm required");
   const meta = await lstat(target).catch(() => null);
-  if (!meta) return refuse("does not exist");
+  // A path that is not there is nothing to move, not an error: `apps
+  // --uninstall` reports the same way for a leftover that has already gone.
+  if (!meta) {
+    return {
+      outcomes: [{ path: opts.path, status: "skipped", bytes: 0, detail: "does not exist" }],
+      summary: { trashed: 0, purged: 0, skipped: 1, failed: 0, totalBytes: 0 },
+    };
+  }
   if (meta.isSymbolicLink()) return refuse("refusing symlink");
   if (!meta.isFile()) return refuse("not a regular file");
 

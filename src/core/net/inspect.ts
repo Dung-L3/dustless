@@ -25,7 +25,15 @@ async function inspectMac(run: Runner): Promise<NetInfo> {
   // not a list of query scopes, so collapse the duplicates and keep the order.
   const dns = [...new Set(allMatches(dnsRes.out, /^\s*nameserver\[\d+\]\s*:\s*(\S+)/gm))];
   const ports = await run("networksetup", ["-listallhardwareports"]);
-  const service = serviceFor(ports.out, iface);
+  let service = serviceFor(ports.out, iface);
+  // The hardware-port list is not the whole truth: it omits services that are
+  // not "hardware" in its sense (VPN, Thunderbolt Bridge, some USB), and then
+  // the device is simply not in the map. `-listnetworkserviceorder` is the
+  // other device → service mapping and knows them.
+  if (iface && !service) {
+    const order = await run("networksetup", ["-listnetworkserviceorder"]);
+    service = serviceForOrder(order.out, iface);
+  }
   const routes = await run("netstat", ["-rn", "-f", "inet"]);
   const defaultCount = countMatches(routes.out, /^default\s/gm);
   return { iface, gateway, dns, service, soloRoute: defaultCount <= 1 };
@@ -66,6 +74,16 @@ function countMatches(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0;
 }
 
+/**
+ * The hardware-port name for a device ("en0" → "Wi-Fi"), or "" when the device
+ * is not listed.
+ *
+ * Empty rather than the raw interface name: `networksetup` is addressed by
+ * *service* name and rejects a device name ("en7" is not a recognized network
+ * service"), so handing one back would build a command that can only fail —
+ * and a sudoers rule naming it would be permanently broken. An unresolved
+ * service is a reason to refuse, not to guess.
+ */
 function serviceFor(text: string, iface: string | null): string {
   if (!iface) return "";
   const devices = new Map<string, string>();
@@ -76,5 +94,33 @@ function serviceFor(text: string, iface: string | null): string {
     const device = /^Device:\s*(\S+)$/.exec(raw.trim());
     if (device?.[1] && current) devices.set(device[1], current);
   }
-  return devices.get(iface) ?? iface;
+  return devices.get(iface) ?? "";
+}
+
+/**
+ * `networksetup -listnetworkserviceorder` prints numbered services with the
+ * hardware they run on in the parenthetical under each name:
+ *
+ *   (1) Wi-Fi
+ *   (Hardware Port: Wi-Fi, Device: en0)
+ *
+ *   (2) Thunderbolt Bridge
+ *   (Hardware Port: Thunderbolt Bridge, Device: bridge0)
+ *
+ * A disabled service is marked with a trailing `(*)` on its name line.
+ */
+function serviceForOrder(text: string, iface: string): string {
+  let current = "";
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    const named = /^\(\d+\)\s*(.+)$/.exec(line);
+    if (named) {
+      current = (named[1] ?? "").replace(/\s*\(\*\)\s*$/, "").trim();
+      continue;
+    }
+    // The whole line is one parenthetical, so the device ends at the `)`.
+    const device = /\bDevice:\s*([^)\s]+)/.exec(line);
+    if (device?.[1] === iface && current) return current;
+  }
+  return "";
 }
