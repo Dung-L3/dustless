@@ -46,6 +46,10 @@ enum MemCategoryFilter: String, CaseIterable, Identifiable {
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
+    /// The kill status pops in with a scale. With Reduce Motion on, the fade
+    /// stays — it is the signal that the row changed — and only the growth is
+    /// dropped, because a scaling element is exactly what that setting is about.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var killResults: [Int: KillStatus] = [:]
     /// A kill is in flight; stop buttons are held until the engine answers.
@@ -418,7 +422,7 @@ struct MemoryView: View {
             .foregroundStyle(tint)
             .help(label)
             .accessibilityLabel(label)
-            .transition(.opacity.combined(with: .scale))
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     withAnimation { killResults[status.pid] = nil }

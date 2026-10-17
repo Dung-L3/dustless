@@ -2,9 +2,9 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-/// One visual language for the app's management windows. Memory, Storage and
+/// One visual language for the app's management modules. Memory, Storage and
 /// Network each used to spell their own tokens, headers, cards and row helpers,
-/// so three windows built from the same ideas drifted apart; the tokens and
+/// so three modules built from the same ideas drifted apart; the tokens and
 /// everything shared now live here.
 
 // MARK: - Tokens
@@ -29,14 +29,29 @@ enum PanelStyle {
     /// One corner radius for strips, rows and fields, so nothing reads as a card
     /// from one window and a block from another.
     static let radius: CGFloat = 8
+    /// Floor for a list row. Two-line rows grow past it, single-line rows do not
+    /// shrink below it — which is what gives every list in the app the same
+    /// vertical rhythm instead of each row declaring its own padding.
+    static let rowMinHeight: CGFloat = 34
+    /// Trailing column for a byte count. Sized once so the digits line up down a
+    /// list: a column that sizes to its widest row makes the numbers beside it
+    /// jump sideways every time a value changes width.
+    static let byteColumnWidth: CGFloat = 68
 }
 
-/// The five sizes the panels are allowed to set. They were 12.5 / 11.5 / 13.5 and
+/// The sizes the panels are allowed to set. They were 12.5 / 11.5 / 13.5 and
 /// whatever a view felt like at the time; a type scale only works when the
 /// off-scale sizes are gone.
 enum PanelFont {
     /// Panel title.
     static let title = Font.system(size: 22, weight: .semibold)
+    /// 16pt: the title of a sheet or a standalone card. One step below a panel
+    /// title because nothing inside a panel is as important as the panel.
+    static let heading = Font.system(size: 16, weight: .semibold)
+    /// The one number a pane is about, stated the same way wherever it appears —
+    /// the Cleanup summary and the Overview hero are the same figure and used
+    /// to be drawn at 19 and 40pt in two different windows.
+    static let hero = Font.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit()
     /// 13pt: a row title, a number, a sheet heading — anything the eye lands on.
     static func emphasis(_ weight: Font.Weight = .medium) -> Font {
         .system(size: 13, weight: weight)
@@ -69,13 +84,17 @@ extension View {
 
 // MARK: - Panel skeleton
 
-/// The frame the three management windows share: header, summary strip, filter
-/// bar, then content that takes whatever height is left.
+/// The frame the management modules share: header, summary strip, filter bar,
+/// then content that takes whatever height is left.
 ///
 /// Every panel used to invent its own vertical rhythm — a divider here, a picker
 /// on its own row there — and the result was chrome eating the list. The order
 /// and the gaps live here instead, so "the list gets the rest" is true of all
 /// three and a panel can only fill in the four bands.
+///
+/// It sets no window frame and no background: the modules are destinations in
+/// one window now, and the window owns its size and its chrome. A module only
+/// fills the pane it is given.
 struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>: View {
     @ViewBuilder let header: () -> Header
     @ViewBuilder let summary: () -> Summary
@@ -91,8 +110,7 @@ struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>:
                 .frame(maxHeight: .infinity)
         }
         .padding(PanelStyle.Space.l)
-        .frame(minWidth: 640, idealWidth: 700, minHeight: 560, idealHeight: 660)
-        .background(.regularMaterial)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -196,8 +214,7 @@ struct StatusChip: View {
 
 /// The title row every panel shares: a title, an optional secondary line, then
 /// the panel's controls. There is deliberately no close button here — these are
-/// `Window` scenes with the standard traffic lights, and clicking away closes
-/// them (`CloseOnResignKey`).
+/// destinations in one window, which owns its own traffic lights.
 struct PanelHeader<Accessory: View>: View {
     let title: String
     var subtitle: String?
@@ -241,10 +258,10 @@ extension PanelHeader where Accessory == EmptyView {
 
 /// The filter field the panels share.
 ///
-/// `.searchable` is not an option here: it only renders where a toolbar can host
-/// the field (a `NavigationStack`, `NavigationSplitView` or `List`), and these
-/// panels are plain `VStack`s inside bare `Window` scenes — there it silently
-/// draws nothing while the view still filters, so the search looked broken.
+/// `.searchable` is not an option here: it attaches to the *window* toolbar, so
+/// from inside a panel's plain `VStack` the field would appear next to the
+/// sidebar and filter a module it does not belong to. Each panel owns its own
+/// query instead, and keeps it next to the list it filters.
 struct SearchField: View {
     let placeholder: String
     @Binding var text: String
