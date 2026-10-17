@@ -35,22 +35,23 @@ struct FindingRow: View {
                 HStack(spacing: 8) {
                     TierBadge(tier: finding.effectiveTier, compact: true)
                     Text(finding.ruleId)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(PanelFont.emphasis(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 8)
                     Text(ByteFormat.string(finding.bytes))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(PanelFont.number(.semibold))
                         .foregroundStyle(deletable ? .primary : .secondary)
+                        .frame(width: PanelStyle.byteColumnWidth, alignment: .trailing)
                     Text(settings.age(finding.ageDays))
-                        .font(.system(size: 11))
+                        .font(PanelFont.caption)
                         .foregroundStyle(.tertiary)
                         .frame(width: 58, alignment: .trailing)
                 }
 
                 Text(finding.path)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(PanelFont.mono(11))
                     .foregroundStyle(deletable ? .secondary : .tertiary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -59,7 +60,7 @@ struct FindingRow: View {
                     .accessibilityLabel(settings.t("pathA11y", ["path": finding.path]))
 
                 Text(finding.desc)
-                    .font(.system(size: 11))
+                    .font(PanelFont.secondary)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
@@ -72,20 +73,21 @@ struct FindingRow: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .lineLimit(nil)
                     }
-                    .font(.system(size: 10.5))
+                    .font(PanelFont.caption)
                     .foregroundStyle(finding.effectiveTier == .blocked ? Color.red : Color.secondary)
                 }
             }
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 12)
+        .padding(.vertical, PanelStyle.Space.s)
+        .padding(.horizontal, PanelStyle.Space.m)
+        .frame(minHeight: PanelStyle.rowMinHeight)
         .background(rowBackground)
         .contentShape(.rect)
         .pathContextMenu(finding.path)
     }
 
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: PanelStyle.radius)
             .fill(isSelected && deletable ? Color.accentColor.opacity(0.07) : Color.clear)
             .overlay(alignment: .leading) {
                 if deletable {

@@ -9,7 +9,7 @@ struct SummaryHeader: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        HStack(alignment: .center, spacing: 20) {
+        HStack(alignment: .center, spacing: PanelStyle.Space.l) {
             metric(
                 title: settings.t("reclaimableMetric"),
                 value: ByteFormat.string(report?.reclaimable ?? 0),
@@ -35,7 +35,7 @@ struct SummaryHeader: View {
                 )
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: PanelStyle.Space.m)
 
             Button(action: onRescan) {
                 HStack(spacing: 6) {
@@ -54,8 +54,8 @@ struct SummaryHeader: View {
             .keyboardShortcut("r", modifiers: .command)
             .help(settings.t("rescanHelp"))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, PanelStyle.Space.l)
+        .padding(.vertical, PanelStyle.Space.m)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider() }
     }
@@ -67,12 +67,12 @@ struct SummaryHeader: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(tint)
                 Text(title.uppercased())
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .font(PanelFont.caption)
                     .tracking(0.8)
                     .foregroundStyle(.secondary)
             }
             Text(value)
-                .font(.system(size: 19, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(PanelFont.hero)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

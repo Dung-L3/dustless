@@ -3,12 +3,12 @@ import SwiftUI
 
 struct MenuBarContent: View {
     @ObservedObject var store: ScanStore
+    @ObservedObject var router: AppRouter
     @ObservedObject var awdl: AwdlControl
     let onOpenWindow: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -22,7 +22,7 @@ struct MenuBarContent: View {
                 .disabled(store.phase == .scanning || store.phase == .resolvingEngine)
 
                 Button(settings.t("cleanItemsMenu", ["n": "\(store.selectedFindings.count)"])) {
-                    onOpenWindow()
+                    router.select(.cleanup)
                     store.showingConfirmation = true
                 }
                 .disabled(!store.canClean)
@@ -43,14 +43,16 @@ struct MenuBarContent: View {
 
             Divider()
             Button(settings.t("openDustless"), action: onOpenWindow)
+            // These used to open three separate `Window` scenes; they navigate
+            // the one window now.
             Button(settings.t("memory")) {
-                openWindow(id: "memory")
+                router.select(.memory)
             }
             Button(settings.t("storage")) {
-                openWindow(id: "storage")
+                router.select(.storage)
             }
             Button(settings.t("networkTitle")) {
-                openWindow(id: "network")
+                router.select(.network)
             }
             Button(settings.t("settingsOpen")) { openSettings() }
 

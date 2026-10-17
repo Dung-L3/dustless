@@ -20,13 +20,21 @@ final class ScanStore: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
+    /// When the report on screen was produced. `ScanReport` carries no
+    /// timestamp of its own, so the Overview provenance line has to be told the
+    /// moment a report landed rather than guess it from a file's mtime.
+    @Published private(set) var scannedAt: Date?
     @Published private(set) var lastApply: ApplyReport?
     @Published private(set) var memoryReport: MemoryReport?
     @Published private(set) var diskSpace: DiskSpace?
     @Published private(set) var engineError: L10nText?
     @Published private(set) var busyMessage: L10nText?
     @Published var showingConfirmation = false
-    @Published var showingApplyResult = false
+    /// Whether the inline cleanup result card is on screen. The card has no
+    /// modal behind it any more — only the confirmation takes the window over,
+    /// because only the confirmation asks for a decision — but it is dismissed
+    /// deliberately, so it still needs its own flag.
+    @Published var showingCleanupResult = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
 
@@ -69,6 +77,7 @@ final class ScanStore: ObservableObject {
             busyMessage = L10nText("busyScanning")
             let report = try await cli.scan()
             self.report = report
+            self.scannedAt = Date()
             selection = report.initialSelection
             lastApply = nil
             busyMessage = nil
@@ -76,6 +85,7 @@ final class ScanStore: ObservableObject {
         } catch {
             cli = nil
             report = nil
+            scannedAt = nil
             engineError = Self.describe(error)
             busyMessage = nil
             phase = .idle
@@ -90,9 +100,10 @@ final class ScanStore: ObservableObject {
         do {
             let result = try await cli.apply()
             lastApply = result
-            showingApplyResult = true
+            showingCleanupResult = true
             let fresh = try await cli.scan()
             report = fresh
+            scannedAt = Date()
             selection = fresh.initialSelection
             busyMessage = nil
             phase = .ready

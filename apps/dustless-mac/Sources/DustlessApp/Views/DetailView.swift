@@ -9,18 +9,20 @@ struct DetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var searchQuery = ""
+    /// Findings-list opacity, animated once per new scan report and nothing else.
+    @State private var listOpacity = 1.0
 
     var body: some View {
         VStack(spacing: 0) {
             if let message = store.busyMessage {
-                HStack(spacing: 8) {
+                HStack(spacing: PanelStyle.Space.s) {
                     ProgressView().controlSize(.small).scaleEffect(0.7)
                     Text(settings.text(message))
-                        .font(.system(size: 11.5))
+                        .font(PanelFont.body)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
+                .padding(.vertical, PanelStyle.Space.s)
                 .background(.ultraThinMaterial)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -42,6 +44,16 @@ struct DetailView: View {
         let allItems = store.tierTab.findings(in: report)
         let filteredItems = filteredFindings(allItems)
         return VStack(spacing: 0) {
+            // What the last clean did, above the list it changed rather than
+            // over it: after the deletion the user should still be able to read
+            // what is left. Stays on screen through the post-clean rescan, which
+            // is what leaves the fresh list visible under it.
+            if let apply = store.lastApply, store.showingCleanupResult {
+                CleanupResultCard(report: apply) { store.showingCleanupResult = false }
+                    .padding(.horizontal, PanelStyle.Space.l)
+                    .padding(.top, PanelStyle.Space.m)
+            }
+
             if allItems.isEmpty {
                 TierEmptyView(tab: store.tierTab) {
                     Task { await store.rescan() }
@@ -57,12 +69,31 @@ struct DetailView: View {
                     }
                 }
                 .listStyle(.inset)
+                // A new report replaced the findings under the cursor, so a short
+                // fade says "these are new numbers" without moving anything —
+                // a slide would imply the rows scrolled away on their own.
+                .opacity(listOpacity)
             }
 
             Divider()
             actionBar
         }
         .searchable(text: $searchQuery, prompt: settings.t("searchFindings"))
+        .onChange(of: store.scannedAt) { _, _ in
+            fadeInFindings()
+        }
+    }
+
+    /// Opacity only, and under 200ms: enough for a changed list to register as
+    /// changed, short enough that a ⌘R does not feel like a page turn. Nothing
+    /// happens at all when the user asked for less motion.
+    private func fadeInFindings() {
+        guard !reduceMotion else {
+            listOpacity = 1
+            return
+        }
+        listOpacity = 0
+        withAnimation(.easeOut(duration: 0.18)) { listOpacity = 1 }
     }
 
     private func filteredFindings(_ items: [Finding]) -> [Finding] {
@@ -92,7 +123,7 @@ struct DetailView: View {
                 Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
                 Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
             }
-            .font(.system(size: 10.5))
+            .font(PanelFont.caption)
         }
     }
 
@@ -112,14 +143,14 @@ struct DetailView: View {
                 Spacer()
                 Text("\(items.count)")
             }
-            .font(.system(size: 10.5))
+            .font(PanelFont.caption)
         } footer: {
             Text(settings.t("lockedSectionFooter"))
         }
     }
 
     private var actionBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: PanelStyle.Space.m) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.selectedBytes > 0
                      ? settings.t("selectedLine", [
@@ -127,10 +158,10 @@ struct DetailView: View {
                          "size": ByteFormat.string(store.selectedBytes),
                      ])
                      : settings.t("selectedNone"))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(PanelFont.emphasis())
                 if store.selectedLockedCount > 0 {
                     Text(settings.t("lockedExcluded", ["n": "\(store.selectedLockedCount)"]))
-                        .font(.system(size: 10.5))
+                        .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -142,8 +173,8 @@ struct DetailView: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .help(settings.t("reviewAndDeleteHelp"))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, PanelStyle.Space.l)
+        .padding(.vertical, PanelStyle.Space.m)
         .background(.ultraThinMaterial)
         .accessibilityElement(children: .contain)
     }
@@ -161,7 +192,7 @@ struct TierEmptyView: View {
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(settings.tabEmpty(tab))
-                .font(.system(size: 13))
+                .font(PanelFont.emphasis())
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -182,7 +213,7 @@ struct NoMatchesView: View {
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(settings.t("noMatches"))
-                .font(.system(size: 13))
+                .font(PanelFont.emphasis())
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -203,9 +234,9 @@ struct EmptyStateView: View {
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(settings.t("nothingScanned"))
-                .font(.system(size: 15, weight: .medium))
+                .font(PanelFont.emphasis(.semibold))
             Text(settings.t("emptyStateBody"))
-                .font(.system(size: 12))
+                .font(PanelFont.body)
                 .foregroundStyle(.secondary)
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
@@ -226,9 +257,9 @@ struct EngineErrorView: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(.orange)
             Text(settings.t("engineUnavailable"))
-                .font(.system(size: 15, weight: .semibold))
+                .font(PanelFont.emphasis(.semibold))
             Text(message)
-                .font(.system(size: 11.5, design: .monospaced))
+                .font(PanelFont.mono(11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
@@ -237,7 +268,7 @@ struct EngineErrorView: View {
             Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
             Text(settings.t("nothingDeleted"))
-                .font(.system(size: 10.5))
+                .font(PanelFont.caption)
                 .foregroundStyle(.tertiary)
         }
         .padding(30)
