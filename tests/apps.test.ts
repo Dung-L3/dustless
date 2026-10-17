@@ -341,3 +341,87 @@ describe("uninstall", () => {
     expect(failed?.detail).toBe("not a valid leftover path for this app");
   });
 });
+
+describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", () => {
+  // `join(home, "Library/Caches/{id}")` collapses `..`, so a bundle id of
+  // `../../../victim` resolves to <root>/victim — outside the home the
+  // uninstall is supposed to stay inside — and `--purge` made that a permanent
+  // `rm -rf`. The whole point of this block is that the victim survives.
+  const TRAVERSAL = "../../../victim";
+  let root: string;
+  let box: { home: string; victim: string; appPath: string };
+  const survives = async (): Promise<boolean> => await stat(join(box.victim, "precious.txt")).then(() => true, () => false);
+
+  beforeAll(async () => {
+    root = assertTempRoot(await mkdtemp(join(TMP, "dustless-apps-traversal-")));
+    const home = join(root, "home");
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "precious.txt"), "not yours to delete");
+    const appPath = await createTestApp(TRAVERSAL, "Evil", join(home, "Applications"));
+    box = { home, victim, appPath };
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test("no leftover path is derived from an id that contains a traversal", async () => {
+    // The collapse that made the bug possible, stated exactly: this is the path
+    // `join()` produced for the template, and it is the victim, outside HOME.
+    expect(join(box.home, "Library", "Caches", TRAVERSAL)).toBe(box.victim);
+    expect(box.victim.startsWith(box.home + "/")).toBe(false);
+
+    const apps = await listApps({ home: box.home, appDirs: [join(box.home, "Applications")] });
+    const evil = apps.find((a) => a.bundleId === TRAVERSAL);
+    expect(evil).toBeDefined();
+    expect(evil!.relatedPaths).toEqual([]);
+  });
+
+  test("--purge refuses the whole uninstall and the victim survives", async () => {
+    const report = await uninstall({
+      home: box.home,
+      appPath: box.appPath,
+      // A caller that passed traversal-resolved paths anyway must still be
+      // refused: the id is rejected before any path is derived from it.
+      relatedPaths: [box.victim, join(box.home, "Library", "Caches", TRAVERSAL)],
+      confirm: true,
+      purge: true,
+    });
+    expect(report.summary.purged).toBe(0);
+    expect(report.summary.trashed).toBe(0);
+    expect(report.summary.failed).toBe(1);
+    expect(report.outcomes[0]!.detail).toMatch(/bundle id/);
+    expect(await survives()).toBe(true);
+    expect(await stat(box.appPath).then(() => true, () => false)).toBe(true);
+  });
+
+  test("a traversal id is refused when trashing too, and nothing is moved", async () => {
+    const report = await uninstall({ home: box.home, appPath: box.appPath, relatedPaths: [], confirm: true });
+    expect(report.summary.trashed).toBe(0);
+    expect(report.summary.purged).toBe(0);
+    expect(await survives()).toBe(true);
+  });
+
+  test("a bundle id with a path separator or a traversal token is refused", async () => {
+    for (const id of ["com/example", "com\\example", "..", "a/../../b"]) {
+      const appPath = await createTestApp(id, "Slashy", join(box.home, "Applications"));
+      const report = await uninstall({ home: box.home, appPath, relatedPaths: [], confirm: true, purge: true });
+      expect({ id, purged: report.summary.purged, trashed: report.summary.trashed }).toEqual({ id, purged: 0, trashed: 0 });
+      expect(await stat(appPath).then(() => true, () => false)).toBe(true);
+    }
+    expect(await survives()).toBe(true);
+  });
+
+  test("a leftover that resolves outside HOME is refused on its own", async () => {
+    // Belt to the braces of the bundle-id check: even for a well-formed id, a
+    // relatedPath that does not resolve strictly inside HOME is never moved.
+    const good = await createTestApp("com.example.good", "Good", join(box.home, "Applications"));
+    const report = await uninstall({ home: box.home, appPath: good, relatedPaths: [box.victim], confirm: true });
+    expect(report.summary.trashed).toBe(0);
+    expect(report.summary.failed).toBe(1);
+    expect(report.outcomes[0]!.detail).toMatch(/escapes HOME/);
+    expect(await survives()).toBe(true);
+    expect(await stat(good).then(() => true, () => false)).toBe(true);
+  });
+});

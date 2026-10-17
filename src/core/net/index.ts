@@ -79,6 +79,16 @@ export async function net(opts: NetOptions = {}): Promise<NetReport> {
   };
 }
 
+/**
+ * The process exit status for one run. A refused or failed outcome means the
+ * operation did not happen, so a script has to be able to tell "did nothing"
+ * from "did the thing": both are a non-zero exit, and the report (unchanged) is
+ * what says why.
+ */
+export function netExitCode(report: Pick<NetReport, "outcomes">): 0 | 1 {
+  return report.outcomes.some((o) => o.status === "refused" || o.status === "failed") ? 1 : 0;
+}
+
 async function runOp(
   id: NetOpId,
   opts: NetOptions,
@@ -175,10 +185,13 @@ async function execute(
     if (!res.ok && !failure) failure = res.err.trim() || `${step.cmd} failed (exit ${res.code})`;
   }
   if (failure) {
-    // A missing sudoers rule is not a broken command, it is a consent the user
-    // has not given yet — name the fix instead of showing sudo's own sentence.
-    const needsPassword = escalate && /password is required|a terminal is required/i.test(failure);
-    return { op: id, status: needsPassword ? "refused" : "failed", detail: needsPassword ? PRIVILEGE_HINT : failure, before };
+    // A missing or stale sudoers rule is not a broken command, it is a consent
+    // the user has not given yet — name the fix instead of showing sudo's own
+    // sentence. `not allowed to execute` is what sudo says when a rule exists
+    // but does not match (a different interface, a service renamed), and that
+    // is the same situation: it needs the rule installed, not a debugging pass.
+    const needsConsent = escalate && /password is required|a terminal is required|not allowed to execute/i.test(failure);
+    return { op: id, status: needsConsent ? "refused" : "failed", detail: needsConsent ? PRIVILEGE_HINT : failure, before };
   }
   return { op: id, status: "ran", detail: ranDetail(id), before, after: afterValue(id) };
 }

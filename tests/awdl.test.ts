@@ -121,6 +121,23 @@ describe("setAwdl", () => {
     expect(report.outcome?.detail).toBe("operation not permitted");
   });
 
+  test("a stale sudoers rule — 'not allowed to execute' — is a refusal, not a failure", async () => {
+    // sudo says this when a rule exists but does not match the command. The
+    // user's situation is the same as having no rule at all, so it is refused
+    // with the honest hint instead of reported as a broken command.
+    const { run } = stub({
+      "sudo -n /sbin/ifconfig awdl0 down": {
+        ok: false,
+        err: "sudo: sorry, user mac is not allowed to execute '/sbin/ifconfig awdl0 down' as root on host",
+      },
+    });
+    const report = await setAwdl(false, { run, platform: "mac", isRootUser: USER });
+    expect(report.outcome?.status).toBe("refused");
+    expect(report.outcome?.detail).toContain("root");
+    expect(report.outcome?.detail).not.toContain("not allowed to execute");
+    expect(report.changed).toBe(false);
+  });
+
   test("is not available away from macOS", async () => {
     const { run, calls } = stub();
     const report = await setAwdl(false, { run, platform: "linux", isRootUser: ROOT });

@@ -17,6 +17,14 @@ type Options = {
   tiers?: TierChoice;
   assumeYes?: boolean;
   onPrompt?: (finding: Finding) => Promise<boolean>;
+  /**
+   * The caller's explicit selection: the exact resolved paths it wants gone. A
+   * finding outside the set is skipped and nothing is removed for it, so a
+   * per-row choice survives instead of being widened to everything this scan
+   * found. Leaving it undefined keeps the historical behaviour — every green
+   * and yellow finding, subject to the tiers below.
+   */
+  only?: ReadonlySet<string>;
 };
 
 export async function apply(report: ScanReport, opts: Options = {}): Promise<ApplyReport> {
@@ -59,6 +67,10 @@ async function run(
   }
   if (finding.blocked) {
     outcome.detail = `KIỆM SOÁT CHẶN: ${finding.note || "kiểm chứng thất bại"}`;
+    return outcome;
+  }
+  if (opts.only && !opts.only.has(resolve(finding.path))) {
+    outcome.detail = "không được chọn: ngoài danh sách --only-file";
     return outcome;
   }
   const rule = rules.get(finding.ruleId);

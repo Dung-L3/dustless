@@ -1,4 +1,5 @@
 import { writeOut } from "../output.ts";
+import { args } from "../args.ts";
 import { exec as spaceExec } from "../space.ts";
 import type { KillOptions, KillResult, MemoryInfo, ProcessCategory, ProcessInfo, RamDeps } from "./types.ts";
 
@@ -97,22 +98,24 @@ export function createRam(deps: RamDeps = {}) {
   }
 
   async function run(argv: string[] = process.argv.slice(2)): Promise<number> {
-    const flag = (name: string): boolean => argv.includes(`--${name}`);
-    const opt = (name: string): string | undefined => {
-      const at = argv.indexOf(`--${name}`);
-      return at >= 0 ? argv[at + 1] : undefined;
-    };
+    const { flag, opt } = args(argv);
     const quiet = flag("quiet");
     const json = flag("json");
     const say = (line = ""): void => {
       if (!quiet && !json) console.log(line);
     };
+    // An argument error is not a result: `--quiet` must not swallow it and
+    // `--json` must still get one parseable object on stdout.
+    const fail = async (message: string): Promise<number> => {
+      if (json) await writeOut(`${JSON.stringify({ error: message })}\n`);
+      else console.error(`✖ ${message}`);
+      return 1;
+    };
 
     if (flag("kill")) {
       const pid = Number(opt("kill"));
       if (!Number.isFinite(pid) || pid <= 0) {
-        say("error: --kill requires a positive PID");
-        return 1;
+        return await fail("--kill requires a positive PID");
       }
       const result = await killProcess(pid, { confirm: flag("confirm"), force: flag("force"), sigkill: flag("sigkill") });
       if (json) {
@@ -123,7 +126,9 @@ export function createRam(deps: RamDeps = {}) {
           say(`Estimated reclaimable: ${bytesOf(result.reclaimable ?? 0)}`);
           say(`Measured change: ${bytesOf(result.reclaimed ?? 0)}`);
         } else {
-          say(`Refused: ${result.reason}`);
+          // The reason a run exited non-zero is an error, not a result: it goes
+          // to stderr and `--quiet` does not take it away.
+          console.error(`✖ Refused: ${result.reason}`);
           if (result.reclaimable !== undefined) say(`Estimated reclaimable: ${bytesOf(result.reclaimable)}`);
         }
       }
