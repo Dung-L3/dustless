@@ -48,6 +48,13 @@ struct MenuBarContent: View {
         // Wide enough for two stat columns and the button labels, narrow enough to
         // stay a popover rather than a window.
         .frame(width: 320)
+        // The Go menu's ⌘1–⌘5 move `router.module` without a click in here, and a
+        // `.window` popover only closes on a real click outside — so the keyboard
+        // has the same floating-over-the-module-it-just-opened defect `leave`
+        // fixes for row clicks, and gets the same cure. Dismissing a popover that
+        // is not presented is a no-op, which is what keeps the window's own ⌘1–⌘5
+        // (and the second dismiss that follows `leave`) harmless.
+        .onChange(of: router.module) { _, _ in dismiss() }
         .task { await refreshLive() }
         // `.task` above fires once: a `.window` popover keeps its content view
         // alive across open/close, so appearing is not an "opened" event and a
@@ -220,11 +227,27 @@ struct MenuBarContent: View {
         action()
     }
 
-    /// The two paths that matter. The same shape the Overview dashboard uses: the
-    /// scan while there is no report, and Review & Clean once there is — it opens
-    /// the confirmation sheet through the router and never deletes on its own.
+    /// The paths that matter, one per state: the scan while there is no report,
+    /// and the way into Cleanup once there is. With nothing ticked that way is an
+    /// enabled invitation to go pick items — the prominent slot used to hold a
+    /// disabled "Nothing selected" button, a control that looked tappable and did
+    /// nothing, and a dead end reads as a broken app. With a selection it is
+    /// Review & Clean, which opens the confirmation sheet through the router and
+    /// never deletes on its own. Rescan sits under either.
     private var actions: some View {
         VStack(spacing: PanelStyle.Space.s) {
+            // What the primary button is about to act on, stated above it — but
+            // only when there is something to state: "0 selected · 0 B" is noise.
+            if !store.selectedFindings.isEmpty {
+                Text(settings.t("selectedLine", [
+                    "n": "\(store.selectedFindings.count)",
+                    "size": ByteFormat.string(store.selectedBytes),
+                ]))
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if store.report == nil {
                 Button {
                     Task { await store.rescan() }
@@ -236,21 +259,30 @@ struct MenuBarContent: View {
                 .disabled(store.isBusy)
                 .help(settings.t("rescanHelp"))
             } else {
-                Button(action: reviewAndClean) {
-                    Text(
-                        store.selectedFindings.isEmpty
-                            ? settings.t("selectedNone")
-                            : settings.t("overviewReview", [
-                                "n": "\(store.selectedFindings.count)",
-                                "size": ByteFormat.string(store.selectedBytes),
-                            ])
-                    )
-                    .frame(maxWidth: .infinity)
+                if store.selectedFindings.isEmpty {
+                    // The way in, not the confirmation: with nothing ticked there
+                    // is nothing to confirm, and the sheet must stay down.
+                    Button {
+                        leave { router.select(.cleanup) }
+                    } label: {
+                        Text(settings.t("menuPickToClean")).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .help(settings.t("menuPickToClean"))
+                } else {
+                    Button(action: reviewAndClean) {
+                        Text(settings.t("overviewReview", [
+                            "n": "\(store.selectedFindings.count)",
+                            "size": ByteFormat.string(store.selectedBytes),
+                        ]))
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!store.canClean)
+                    .help(settings.t("reviewAndDeleteHelp"))
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!store.canClean)
-                .help(settings.t("reviewAndDeleteHelp"))
 
                 Button {
                     Task { await store.rescan() }
@@ -307,9 +339,15 @@ struct MenuBarContent: View {
                         .font(PanelFont.number())
                         .foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                // Real menus right-align the key equivalent and carry no chevron,
+                // and the Go menu's ⌘1–⌘5 do fire while this popover is open — so
+                // the row advertises the key the menu answers. Drawn from
+                // `Module.shortcut` itself, never a parallel map: a hardcoded
+                // 1…5 here is exactly the kind of copy that drifts from the
+                // registration it describes.
+                Text(keyEquivalent(module))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.vertical, PanelStyle.Space.xs)
             .padding(.horizontal, PanelStyle.Space.s)
@@ -318,6 +356,22 @@ struct MenuBarContent: View {
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel(title)
+    }
+
+    /// The Go-menu shortcut spelled the way macOS spells shortcuts: modifiers in
+    /// the system's own order (⌃⌥⇧⌘), then the key. Built from the same
+    /// `KeyboardShortcut` value the menu registers, so this text and that menu
+    /// cannot disagree.
+    private func keyEquivalent(_ module: Module) -> String {
+        let mods = module.shortcut.modifiers
+        var glyphs = ""
+        if mods.contains(.control) { glyphs += "\u{2303}" }
+        if mods.contains(.option) { glyphs += "\u{2325}" }
+        if mods.contains(.shift) { glyphs += "\u{21E7}" }
+        if mods.contains(.command) { glyphs += "\u{2318}" }
+        // Menus draw letter equivalents uppercase (⌘R, not ⌘r); `character`
+        // keeps the case it was registered with. Digits are unaffected.
+        return glyphs + String(module.shortcut.key.character).uppercased()
     }
 
     // MARK: - AirDrop
@@ -412,8 +466,9 @@ struct MenuBarContent: View {
             .accessibilityLabel(settings.t("settingsOpen"))
 
             // ⌘Q is the system's own Quit and still works; this is the one-click
-            // copy. Unlike the old menu, this popover carries no key equivalents,
-            // so there is no bare "q" to swallow a keystroke.
+            // copy. Unlike the old menu, this popover binds no key equivalents of
+            // its own — the ⌘1–⌘5 the rows display belong to the window's Go
+            // menu — so there is no bare "q" to swallow a keystroke.
             Button {
                 NSApp.terminate(nil)
             } label: {
