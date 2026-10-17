@@ -426,7 +426,7 @@ struct MemoryView: View {
         let tint = status.ok ? Color.green : Color.red
         let label = status.ok
             ? settings.t("memoryStoppedNamed", ["name": proc.name])
-            : (status.reason ?? settings.t("memoryStopError"))
+            : (status.reason.map { reasonText($0) } ?? settings.t("memoryStopError"))
         Image(systemName: status.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(tint)
@@ -438,6 +438,13 @@ struct MemoryView: View {
                     withAnimation { killResults[status.pid] = nil }
                 }
             }
+    }
+
+    private func reasonText(_ reason: KillReason) -> String {
+        switch reason {
+        case .engine(let sentence): sentence
+        case .translated(let text): settings.text(text)
+        }
     }
 
     private func categoryKey(_ category: MemCategory) -> String {
@@ -461,21 +468,29 @@ struct MemoryView: View {
     }
 
     private func killProcess(pid: Int, force: Bool, sigkill: Bool) {
+        // Set on the main actor, HERE, not inside the task body: a second click
+        // in the same run loop would otherwise still see `isStopping == false`,
+        // so a double-click on the stop button starts two kills of the same pid
+        // and the engine answers the second one with "no such process".
+        guard !isStopping else { return }
+        isStopping = true
         Task {
-            isStopping = true
             defer { isStopping = false }
             do {
                 let cli = try DustlessCLI.resolve()
                 let result = try await cli.kill(pid: pid, force: force, sigkill: sigkill)
                 await MainActor.run {
-                    killResults[pid] = KillStatus(pid: pid, ok: result.ok, reason: result.reason)
+                    killResults[pid] = KillStatus(pid: pid, ok: result.ok, reason: result.reason.map(KillReason.engine))
                 }
                 if result.ok {
                     await store.fetchMemory()
                 }
             } catch {
+                // The engine's own English is not the app's wording: the same
+                // mapping the other panels use.
+                let reason = ScanStore.describe(error)
                 await MainActor.run {
-                    killResults[pid] = KillStatus(pid: pid, ok: false, reason: error.localizedDescription)
+                    killResults[pid] = KillStatus(pid: pid, ok: false, reason: .translated(reason))
                 }
             }
         }
@@ -486,5 +501,14 @@ private struct KillStatus: Identifiable {
     let id = UUID()
     let pid: Int
     let ok: Bool
-    let reason: String?
+    /// A key, not rendered text: the engine's `reason` string is kept verbatim
+    /// because it explains the refusal in its own words, while a thrown error
+    /// arrives here already mapped onto the app's translations.
+    let reason: KillReason?
+}
+
+/// Either side of a failed kill, resolved at render time.
+private enum KillReason {
+    case engine(String)
+    case translated(L10nText)
 }

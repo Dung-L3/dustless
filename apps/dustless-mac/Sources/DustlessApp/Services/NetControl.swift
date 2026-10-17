@@ -73,7 +73,7 @@ final class NetControl: ObservableObject {
         guard !isLoading else { return }
         // Read the installed fact first: an install or remove that just finished
         // has to be on screen before the first row draws, not after a reopen.
-        privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
+        privilegeInstalled = Self.readPrivilegeInstalled()
         isLoading = true
         loadError = nil
         do {
@@ -94,12 +94,18 @@ final class NetControl: ObservableObject {
         guard !isBusy else { return }
         running.insert(op.id)
         runError = nil
+        // Read the rule off disk here rather than trusting the published copy:
+        // it was last written by a `refresh()` or an install, and deciding on a
+        // stale value is how two SecurityAgent prompts stack up — one for the
+        // operation, one for a permission that is already installed.
+        let installed = Self.readPrivilegeInstalled()
+        privilegeInstalled = installed
         // Only a run that actually reaches the system admin prompt needs the
         // gate: that is an advanced operation with no rule installed. A safe
         // operation, and an advanced one the rule already covers, never leave
         // the app, so gating them would only cost the panel its outside-click
         // close.
-        let gated = op.isAdvanced && !privilegeInstalled
+        let gated = op.isAdvanced && !installed
         if gated { AutoCloseGate.shared.begin() }
         defer {
             if gated { AutoCloseGate.shared.end() }
@@ -117,14 +123,16 @@ final class NetControl: ObservableObject {
             let result = try await DustlessCLI.resolve().runNetOp(
                 op.id,
                 force: true,
-                privilegeInstalled: privilegeInstalled
+                privilegeInstalled: installed
             )
             outcomes[op.id] = result.outcome(for: op.id)
             // A refusal that names the missing permission is not a crash: it is
-            // the panel's cue to offer the one-time install step.
-            if result.outcome(for: op.id)?.status == .refused, !privilegeInstalled {
-                privilegeError = L10nText("netNeedsPermission")
-            }
+            // the panel's cue to offer the one-time install step. Every other
+            // outcome clears the banner, so a resolved problem stops being
+            // reported on every later run.
+            privilegeError = (result.outcome(for: op.id)?.status == .refused && !installed)
+                ? L10nText("netNeedsPermission")
+                : nil
             await refresh()
         } catch {
             outcomes[op.id] = nil
@@ -148,7 +156,7 @@ final class NetControl: ObservableObject {
         // unreleased gate would leave every panel un-closable.
         defer {
             AutoCloseGate.shared.end()
-            privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
+            privilegeInstalled = Self.readPrivilegeInstalled()
             privilegeBusy = false
         }
         do {
@@ -166,6 +174,12 @@ final class NetControl: ObservableObject {
                 "\(Self.visudoTool) -cf \(sh(staging.path))"
                     + " && \(Self.installTool) -m 0440 -o root -g wheel \(sh(staging.path)) \(sh(privilege.path))"
             )
+            // Re-read HERE, before the result is decided: the refresh below
+            // belongs to the `defer`, and reading the published property from
+            // inside the `do` would still see the value from before the install
+            // — so a perfectly good install would report itself a failure and
+            // return false. Same order as `AwdlControl.installPrivilege`.
+            privilegeInstalled = Self.readPrivilegeInstalled()
             privilegeError = privilegeInstalled ? nil : L10nText("netRememberFailed")
             return privilegeInstalled
         } catch {
@@ -181,14 +195,29 @@ final class NetControl: ObservableObject {
         AutoCloseGate.shared.begin()
         defer {
             AutoCloseGate.shared.end()
-            privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
+            privilegeInstalled = Self.readPrivilegeInstalled()
             privilegeBusy = false
         }
         do {
             try await runAdmin("\(Self.rmTool) -f \(sh(Self.privilegePath))")
+            // The rule is gone: the banner that said why it could not be
+            // installed is no longer a fact about anything.
+            privilegeError = nil
         } catch {
             privilegeError = Self.describe(error)
         }
+    }
+
+    /// Takes down a banner the user has read. The panel draws them pinned, so
+    /// without this an answered question stays on screen until the next run.
+    func dismissRunError() { runError = nil }
+    func dismissPrivilegeError() { privilegeError = nil }
+
+    /// The installed fact, straight off disk. Every decision about the rule —
+    /// install, remove, and whether a run may prompt — reads it here rather
+    /// than from the published copy, which is only ever a snapshot of it.
+    private static func readPrivilegeInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: privilegePath)
     }
 
     /// Flips AirDrop, installing the scoped toggle permission first if the user

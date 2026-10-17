@@ -42,14 +42,9 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var shortcut: KeyboardShortcut {
-        switch self {
-        case .safe: KeyboardShortcut("1", modifiers: .command)
-        case .review: KeyboardShortcut("2", modifiers: .command)
-        case .locked: KeyboardShortcut("3", modifiers: .command)
-        }
-    }
-
+    /// Deliberately no keyboard shortcut. These used to be ⌘1/⌘2/⌘3, and nothing
+    /// referenced them — the Go menu owns those keys for the modules, so the tier
+    /// switch had two live answers to one keypress.
     func findings(in report: ScanReport) -> [Finding] {
         report.findings.filter { finding in
             switch self {

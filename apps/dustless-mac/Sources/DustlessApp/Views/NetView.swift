@@ -276,15 +276,17 @@ struct NetView: View {
     /// The two failures a run can report that are not about a single
     /// row: the operation never started, or the permission it needed was missing.
     /// Pinned above the list and capped with everything else — an error that
-    /// scrolls out of sight is not reported.
+    /// scrolls out of sight is not reported. Both are dismissible: these bands
+    /// cost the list a row each, and the control that produced them is right
+    /// underneath.
     @ViewBuilder
     private var runErrors: some View {
         if let error = net.runError {
-            errorLabel(error)
+            errorLabel(error) { net.dismissRunError() }
         }
 
         if let error = net.privilegeError {
-            errorLabel(error)
+            errorLabel(error) { net.dismissPrivilegeError() }
         }
     }
 
@@ -396,7 +398,10 @@ struct NetView: View {
             }
         }
         .controlSize(.small)
-        .disabled(running || net.isBusy)
+        // `privilegeBusy` too: that flag is the install or remove admin prompt,
+        // which no operation is waiting on but which the user cannot answer
+        // while a second SecurityAgent dialog is stacked on top of it.
+        .disabled(running || net.isBusy || net.privilegeBusy)
         .help(settings.t(op.helpKey))
         .accessibilityLabel(settings.t("networkRunNamed", ["name": settings.t(op.labelKey)]))
     }
@@ -447,9 +452,14 @@ struct NetView: View {
     /// sentence goes to the hover and to VoiceOver either way, so the cap costs
     /// no information; `.help` alone would not, because a truncated `Text`
     /// labels itself with the truncated string.
-    private func errorLabel(_ error: L10nText) -> some View {
+    ///
+    /// `onDismiss` draws the card's corner × — the same affordance the result
+    /// cards use — so a banner that has been answered can be taken down without
+    /// running anything else. It is omitted for the two callers that own a
+    /// control which clears the message itself.
+    private func errorLabel(_ error: L10nText, onDismiss: (() -> Void)? = nil) -> some View {
         let text = settings.text(error)
-        return Label(text, systemImage: "exclamationmark.triangle.fill")
+        let label = Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(PanelFont.mono(11))
             .foregroundStyle(.orange)
             .textSelection(.enabled)
@@ -458,5 +468,18 @@ struct NetView: View {
             .truncationMode(.tail)
             .help(text)
             .accessibilityLabel(text)
+        return HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+            label
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(settings.t("close"))
+                .accessibilityLabel(settings.t("close"))
+            }
+        }
     }
 }

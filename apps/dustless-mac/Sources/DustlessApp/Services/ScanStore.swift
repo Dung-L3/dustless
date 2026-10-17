@@ -37,6 +37,10 @@ final class ScanStore: ObservableObject {
     @Published var showingCleanupResult = false
     @Published var selection: Set<String> = []
     @Published var tierTab: TierTab = .safe
+    /// The findings list's own filter, held here rather than in the view: the
+    /// detail pane is rebuilt on every module switch, so `@State` would drop the
+    /// query the user typed the moment they looked at Memory.
+    @Published var findingsQuery = ""
 
     // Independent loading state for Memory/Storage windows — does NOT touch main phase/cli
     @Published private(set) var memoryPhase: LoadPhase = .idle
@@ -50,6 +54,12 @@ final class ScanStore: ObservableObject {
         guard report != nil, phase == .ready else { return false }
         return !selectedFindings.isEmpty
     }
+
+    /// While the engine is being located or is walking the disk. Every control
+    /// that would start a second run, or that acts on a list about to be
+    /// replaced, is held for this long — not merely ignored by a guard inside
+    /// `rescan()`, which looks live and does nothing.
+    var isBusy: Bool { phase == .scanning || phase == .resolvingEngine }
 
     var selectedFindings: [Finding] {
         guard let report else { return [] }
@@ -79,26 +89,39 @@ final class ScanStore: ObservableObject {
             self.report = report
             self.scannedAt = Date()
             selection = report.initialSelection
+            // Both, together: a card with no report behind it and an Overview
+            // "freed" stat that disagrees with the list under it are the two
+            // ways the same rescan can leave the window telling two stories.
             lastApply = nil
+            showingCleanupResult = false
             busyMessage = nil
             phase = .ready
         } catch {
-            cli = nil
-            report = nil
-            scannedAt = nil
+            // A failed rescan keeps the last good report, its age and its
+            // selection on screen: stale numbers beat a blank panel, and the
+            // error banner is how the user learns they are stale. With a report
+            // to stand on the engine handle is still live, so it stays too —
+            // otherwise the list would be readable and unactionable.
+            if report == nil { cli = nil }
             engineError = Self.describe(error)
             busyMessage = nil
-            phase = .idle
+            phase = report == nil ? .idle : .ready
         }
     }
 
+    /// Clears the stale-report banner without touching the report itself.
+    func dismissEngineError() { engineError = nil }
+
     func clean() async {
-        guard let cli, !selectedFindings.isEmpty else { return }
+        // Snapshot once: the engine is handed this list and nothing else, so the
+        // paths counted in the busy message are the paths that get deleted.
+        let selected = selectedFindings
+        guard let cli, !selected.isEmpty else { return }
         showingConfirmation = false
         phase = .scanning
-        busyMessage = L10nText("busyDeleting", ["n": "\(selectedFindings.count)"])
+        busyMessage = L10nText("busyDeleting", ["n": "\(selected.count)"])
         do {
-            let result = try await cli.apply()
+            let result = try await cli.apply(only: selected.map(\.path))
             lastApply = result
             showingCleanupResult = true
             let fresh = try await cli.scan()

@@ -96,11 +96,14 @@ struct OverviewView: View {
                     .tracking(0.8)
                     .foregroundStyle(.secondary)
             }
-            Text(ByteFormat.string(UInt64(shownReclaimable)))
+            Text(store.report == nil ? "—" : ByteFormat.string(UInt64(shownReclaimable)))
                 .font(PanelFont.hero)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(settings.t("reclaimableHelp"))
+            // With no report the definition would be a definition of a number
+            // that was never measured, so the line under it says what is true
+            // instead: there is nothing here yet.
+            Text(store.report == nil ? settings.t("overviewNoScan") : settings.t("reclaimableHelp"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -109,7 +112,7 @@ struct OverviewView: View {
         .accessibilityElement(children: .combine)
         // The target, not the value mid-count: a screen reader should not
         // announce a number that is still climbing.
-        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(ByteFormat.string(reclaimable))")
+        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
     }
 
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
@@ -358,5 +361,5 @@ struct OverviewView: View {
         }
     }
 
-    private var isScanning: Bool { store.phase == .scanning || store.phase == .resolvingEngine }
+    private var isScanning: Bool { store.isBusy }
 }

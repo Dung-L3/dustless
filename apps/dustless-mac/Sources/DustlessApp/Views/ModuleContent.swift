@@ -35,7 +35,7 @@ struct ModuleContent: View {
             VStack(spacing: 0) {
                 SummaryHeader(
                     report: store.report,
-                    isScanning: store.phase == .scanning || store.phase == .resolvingEngine
+                    isScanning: store.isBusy
                 ) {
                     Task { await store.rescan() }
                 }
