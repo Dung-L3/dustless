@@ -59,27 +59,8 @@ struct OverviewView: View {
     /// Where the numbers came from, in one line. The rule count is derived from
     /// the report's own findings rather than from a hard-coded list: a rule that
     /// found nothing never reaches the user as a claim.
-    private var provenance: String? {
-        guard let report = store.report else {
-            return settings.t("overviewNoScan")
-        }
-        return settings.t("overviewProvenance", [
-            "age": scannedAge,
-            "rules": "\(Set(report.findings.map(\.ruleId)).count)",
-            "ms": Duration.milliseconds(report.scannedMs),
-        ])
-    }
-
-    /// Relative to the moment the report landed. It does not tick on its own —
-    /// a label that silently grows stale would be a lie in the other direction,
-    /// and the next scan redraws it anyway.
-    private var scannedAge: String {
-        guard let date = store.scannedAt else { return settings.t("overviewAgeNow") }
-        let seconds = Date().timeIntervalSince(date)
-        if seconds < 60 { return settings.t("overviewAgeNow") }
-        if seconds < 3600 { return settings.t("overviewAgeMinutes", ["n": "\(Int(seconds / 60))"]) }
-        if seconds < 86400 { return settings.t("overviewAgeHours", ["n": "\(Int(seconds / 3600))"]) }
-        return settings.t("overviewAgeDays", ["n": "\(Int(seconds / 86400))"])
+    private var provenance: String {
+        settings.provenance(store.report, scannedAt: store.scannedAt)
     }
 
     // MARK: - Hero
@@ -294,11 +275,7 @@ struct OverviewView: View {
         guard let memory = store.memoryReport?.memory else {
             return store.memoryPhase == .loading ? settings.t("busyMemory") : "—"
         }
-        let label: String = switch memory.pressure {
-        case .normal: settings.t("pressureNormal")
-        case .warn: settings.t("pressureWarn")
-        case .critical: settings.t("pressureCritical")
-        }
+        let label = settings.pressureLabel(memory.pressure)
         return "\(settings.t("memoryPressure")): \(label) (\(memory.pressurePercent)%)"
     }
 

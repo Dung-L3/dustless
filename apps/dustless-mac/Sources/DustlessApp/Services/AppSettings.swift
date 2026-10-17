@@ -105,6 +105,44 @@ final class AppSettings: ObservableObject {
         L10n.render(language, tab.emptyKey)
     }
 
+    /// "just now" / "5 min ago" / "2 h ago" / "3 d ago", from the moment a report
+    /// landed. Shared by the dashboard's provenance line and the menu-bar popover
+    /// so the two surfaces cannot age the same report differently.
+    ///
+    /// It does not tick on its own: a label that silently grows stale is a lie in
+    /// the other direction, and the next scan redraws it anyway.
+    func relativeAge(since date: Date?) -> String {
+        guard let date else { return t("overviewAgeNow") }
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 60 { return t("overviewAgeNow") }
+        if seconds < 3600 { return t("overviewAgeMinutes", ["n": "\(Int(seconds / 60))"]) }
+        if seconds < 86400 { return t("overviewAgeHours", ["n": "\(Int(seconds / 3600))"]) }
+        return t("overviewAgeDays", ["n": "\(Int(seconds / 86400))"])
+    }
+
+    /// Where the numbers on screen came from, in one line: how long ago the scan
+    /// ran, how many rules produced findings, how long it took. The rule count is
+    /// derived from the report rather than a hard-coded list, so a rule that found
+    /// nothing never reaches the user as a claim.
+    func provenance(_ report: ScanReport?, scannedAt: Date?) -> String {
+        guard let report else { return t("overviewNoScan") }
+        return t("overviewProvenance", [
+            "age": relativeAge(since: scannedAt),
+            "rules": "\(Set(report.findings.map(\.ruleId)).count)",
+            "ms": Duration.milliseconds(report.scannedMs),
+        ])
+    }
+
+    /// The memory pressure word the engine reported. Both the dashboard and the
+    /// menu-bar popover print it, so the mapping lives once.
+    func pressureLabel(_ pressure: Pressure) -> String {
+        switch pressure {
+        case .normal: t("pressureNormal")
+        case .warn: t("pressureWarn")
+        case .critical: t("pressureCritical")
+        }
+    }
+
     /// "today" or "12d old", from the age in days, in the current language.
     func age(_ days: Double) -> String {
         days < 1 ? t("today") : t("ageDays", ["n": "\(Int(days.rounded()))"])

@@ -196,7 +196,7 @@ Every argument or validation error — an unknown command, a flag with no value,
 
 **Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Launch at login**. Language and theme apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
 
-**Menu bar extra** (`DustlessApp.swift:44-50`) — shows free space and reclaimable bytes; actions: **Rescan**, **Open Window**, **Settings**, **Quit**.
+**Menu bar popover** (`MenuBarContent.swift`, presented by `DustlessApp.swift` with `.menuBarExtraStyle(.window)`) — the last scan's provenance (age, rules, duration), a live grid of free space, reclaimable bytes, memory pressure and network interface/gateway, a stale-scan warning when the last read failed, **Scan now** / **Review & Clean**, a row per module (Overview, Cleanup, Storage, Memory, Network), the AirDrop (AWDL) toggle, and **Open Dustless**, **Settings**, **Quit**. It re-reads the live numbers when it opens, through the store's staleness windows, and never starts a full scan on its own. No score and no ring: an unmeasured value shows `—`, and a failed scan says so rather than presenting old numbers as current.
 
 **Keyboard shortcuts** (`DustlessApp.swift:25-35`, `DetailView.swift:142`) — Cmd-R: rescan; Cmd-1/2/3: GREEN/YELLOW/LOCKED tabs; Cmd-,: Settings; Cmd-Return: Review & Delete.
 
