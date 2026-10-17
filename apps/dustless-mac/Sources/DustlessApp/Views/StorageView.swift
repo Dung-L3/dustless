@@ -487,12 +487,19 @@ struct StorageView: View {
         defer { isUninstalling = false }
         do {
             let cli = try DustlessCLI.resolve()
-            let report = try await cli.uninstallApp(path: app.path)
+            let report = try await cli.uninstallApp(path: app.path, purge: true)
             // A state write, not a presentation: the report appears in the window
             // without waiting for the confirmation to finish dismissing.
             result = StorageResult(report: report, titleKey: "appsUninstalled")
             sheet = nil
+            // The app is gone now, so it leaves the list on this run rather than
+            // when the next read finishes: a slow or failed refresh must not leave
+            // a deleted bundle sitting in the inventory.
+            apps.removeAll { $0.path == app.path }
             await loadApps()
+            // Purging frees real space on the disk it lived on, so the volume
+            // strip has to re-read free space, not just the app list.
+            await loadVolumes()
         } catch {
             fail(error, titleKey: "appsUninstall")
         }
@@ -840,19 +847,22 @@ struct UninstallConfirmationSheet: View {
         .frame(minWidth: 580, idealWidth: 680, minHeight: 380, idealHeight: 520)
     }
 
+    /// This uninstall is a purge, not a move to the Trash, so every sentence
+    /// here says so. Wording it like a recoverable action would be a lie the
+    /// button then contradicts.
     private var header: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             HStack(spacing: PanelStyle.Space.s) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                Text(settings.t("appsTrashTitle"))
+                Text(settings.t("appsPurgeTitle"))
                     .font(PanelFont.emphasis(.semibold))
             }
             Text(app.name)
                 .font(PanelFont.emphasis())
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text(settings.t("appsTrashBody", ["n": "\(app.relatedPaths.count)"]))
+            Text(settings.t("appsPurgeBody", ["n": "\(app.relatedPaths.count)"]))
                 .font(PanelFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -879,7 +889,7 @@ struct UninstallConfirmationSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(role: .destructive, action: onConfirm) {
-                    Text(settings.t("appsMoveToTrash"))
+                    Text(settings.t("appsPurgeAction"))
                         .frame(minWidth: 160)
                 }
                 .keyboardShortcut(.defaultAction)
