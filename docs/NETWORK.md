@@ -43,10 +43,41 @@ that interface is the **only route to the network**, unless you pass `--force`. 
 
 ### Root
 
-The advanced operations need root (they change system state). On a non-root user Dustless refuses
-with a one-line message (`cần quyền root — chạy lại bằng sudo`) instead of dumping a permission
-error. The default DNS flush is the exception: `dscacheutil -flushcache` runs unprivileged, and
-the `killall -HUP mDNSResponder` half is reported as "skipped: needs root" when it fails.
+The advanced operations need root (they change system state). As root they run directly. Otherwise
+they run once through `sudo -n`, which fails fast instead of blocking on a password prompt, and a
+refusal is reported as `refused` with the hint below — never as a raw error, and never as a silent
+unprivileged retry (a network change that half-applied is worse than a clean no). The default DNS
+flush is the exception: `dscacheutil -flushcache` runs unprivileged, and the `killall -HUP
+mDNSResponder` half is reported as "skipped: needs root" when it fails.
+
+### `dustless net --print-privilege` — remember the authorization once
+
+Asking for the admin password on every advanced operation is tedious, so `dustless net
+--print-privilege` prints the sudoers rule the macOS app installs for the "remember this
+authorization" button in the Network panel. It needs no root: it only reads the current interface
+and service. `--print-privilege --json` returns the same rule as JSON (`user`, `path`, `allowed`,
+`rule`), which is what the app decodes — the app keeps no copy of the rule text.
+
+**This is not a saved password.** Nothing here stores, sees, or re-sends your password. What gets
+installed is one file, `/etc/sudoers.d/dustless-net`, granting your account exactly these four
+commands for this machine's current interface and service:
+
+```
+mac ALL=(root) NOPASSWD: /usr/sbin/networksetup -setdnsservers Wi-Fi Empty, /usr/sbin/ipconfig set en0 DHCP, /usr/sbin/arp -d -a, /usr/sbin/networksetup -setMTU Wi-Fi 1500
+```
+
+Every path is absolute and every argument is exact — no wildcards, no shell, no argument
+passthrough. A service name containing spaces (`USB 10/100/1000 LAN`) is double-quoted in the rule
+so sudoers matches the single argument the engine actually passes; a service name containing `"`
+or `#` is refused rather than escaped. Anything outside those four commands is still refused, and
+the file is validated with `visudo -cf` on a staged copy before it is moved into place, so a
+malformed rule can never land in `/etc/sudoers.d/`.
+
+Because the rule names the interface and service resolved at install time, switching to a different
+network means the rule no longer covers it — re-run the install step from the Network panel.
+
+Remove it any time with `sudo rm /etc/sudoers.d/dustless-net`, or from the panel's "remove" action;
+the advanced operations then ask for the password again, exactly as before.
 
 ### Dry run
 

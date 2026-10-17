@@ -6,11 +6,22 @@ import Foundation
 /// a time, and hands the AirDrop block the same control the menu bar and
 /// Settings use.
 ///
+/// It also owns the panel's one-time "remember this authorization" step: the
+/// advanced operations normally escalate through an admin prompt per run, and
+/// with the scoped sudo rule in place the engine escalates through `sudo -n`
+/// on its own and never prompts. No password is stored anywhere — the rule
+/// permits four exact commands and the panel can remove it again.
+///
 /// Every engine call is async and spawns its process off the main actor (the
 /// CLI's own dispatch queue, and `Task.detached` behind the admin prompt), so a
 /// password dialog the user leaves open never freezes the app.
 @MainActor
 final class NetControl: ObservableObject {
+    /// Mirrors `NET_PRIVILEGE_PATH` in `src/core/net/privilege.ts`. Held here
+    /// only so the panel can show installed/not-installed without spawning the
+    /// engine. The rule text itself is never kept here — the engine prints it.
+    static let privilegePath = "/etc/sudoers.d/dustless-net"
+
     @Published private(set) var report: NetReport?
     @Published private(set) var isLoading = false
     /// Why the last state read failed. A refresh that fails keeps the report on
@@ -24,6 +35,14 @@ final class NetControl: ObservableObject {
     /// A run that produced no report at all: a cancelled admin prompt, a missing
     /// engine. The per-operation detail cannot carry this.
     @Published private(set) var runError: L10nText?
+    /// Whether the scoped sudo rule for the advanced operations is installed.
+    @Published private(set) var privilegeInstalled = false
+    /// An install or remove is in flight. Its own flag rather than `running`:
+    /// this holds an admin prompt, which no operation is waiting on.
+    @Published private(set) var privilegeBusy = false
+    /// Why the install/remove step failed, or why an operation was refused for
+    /// want of the rule.
+    @Published private(set) var privilegeError: L10nText?
 
     let awdl = AwdlControl.shared
 
@@ -52,6 +71,9 @@ final class NetControl: ObservableObject {
 
     func refresh() async {
         guard !isLoading else { return }
+        // Read the installed fact first: an install or remove that just finished
+        // has to be on screen before the first row draws, not after a reopen.
+        privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
         isLoading = true
         loadError = nil
         do {
@@ -72,10 +94,12 @@ final class NetControl: ObservableObject {
         guard !isBusy else { return }
         running.insert(op.id)
         runError = nil
-        // Only advanced operations reach the system admin prompt (the engine
-        // runs them through osascript); a safe one never leaves the app, so
-        // gating it would only cost the panel its outside-click close.
-        let gated = op.isAdvanced
+        // Only a run that actually reaches the system admin prompt needs the
+        // gate: that is an advanced operation with no rule installed. A safe
+        // operation, and an advanced one the rule already covers, never leave
+        // the app, so gating them would only cost the panel its outside-click
+        // close.
+        let gated = op.isAdvanced && !privilegeInstalled
         if gated { AutoCloseGate.shared.begin() }
         defer {
             if gated { AutoCloseGate.shared.end() }
@@ -85,12 +109,85 @@ final class NetControl: ObservableObject {
             // --force: the engine refuses the interface-touching operations while
             // this Mac is on its only route, which is exactly the situation the
             // user opened this panel to fix. The admin prompt is the consent.
-            let result = try await DustlessCLI.resolve().runNetOp(op.id, force: true)
+            //
+            // With the rule installed the engine runs the step through `sudo -n`
+            // and must not be handed a prompt at all, so it is called directly;
+            // without it, one osascript-as-root prompt is the only way to root
+            // and the operation still has to work.
+            let result = try await DustlessCLI.resolve().runNetOp(
+                op.id,
+                force: true,
+                privilegeInstalled: privilegeInstalled
+            )
             outcomes[op.id] = result.outcome(for: op.id)
+            // A refusal that names the missing permission is not a crash: it is
+            // the panel's cue to offer the one-time install step.
+            if result.outcome(for: op.id)?.status == .refused, !privilegeInstalled {
+                privilegeError = L10nText("netNeedsPermission")
+            }
             await refresh()
         } catch {
             outcomes[op.id] = nil
             runError = Self.describe(error)
+        }
+    }
+
+    /// Installs the scoped sudo rule with one admin prompt. Returns true once it
+    /// is in place.
+    ///
+    /// This is not a password being saved. It is a sudoers file permitting four
+    /// exact commands for this account, validated by `visudo` before it lands,
+    /// and removable again at any time.
+    @discardableResult
+    func installPrivilege() async -> Bool {
+        guard !privilegeBusy else { return false }
+        privilegeBusy = true
+        privilegeError = nil
+        AutoCloseGate.shared.begin()
+        // `defer` so the hold is released on cancel and on throw too — an
+        // unreleased gate would leave every panel un-closable.
+        defer {
+            AutoCloseGate.shared.end()
+            privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
+            privilegeBusy = false
+        }
+        do {
+            let privilege = try await DustlessCLI.resolve().netPrivilege()
+            let staging = FileManager.default.temporaryDirectory
+                .appendingPathComponent("dustless-net-\(UUID().uuidString)")
+            try privilege.rule.write(to: staging, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: staging) }
+
+            // visudo validates the staged copy BEFORE it can count. Installing
+            // first and validating second would leave a malformed file in
+            // /etc/sudoers.d/, which sudo reads, and could wedge sudo
+            // machine-wide.
+            try await runAdmin(
+                "\(Self.visudoTool) -cf \(sh(staging.path))"
+                    + " && \(Self.installTool) -m 0440 -o root -g wheel \(sh(staging.path)) \(sh(privilege.path))"
+            )
+            privilegeError = privilegeInstalled ? nil : L10nText("netRememberFailed")
+            return privilegeInstalled
+        } catch {
+            privilegeError = Self.describe(error)
+            return false
+        }
+    }
+
+    func removePrivilege() async {
+        guard !privilegeBusy else { return }
+        privilegeBusy = true
+        privilegeError = nil
+        AutoCloseGate.shared.begin()
+        defer {
+            AutoCloseGate.shared.end()
+            privilegeInstalled = FileManager.default.fileExists(atPath: Self.privilegePath)
+            privilegeBusy = false
+        }
+        do {
+            try await runAdmin("\(Self.rmTool) -f \(sh(Self.privilegePath))")
+        } catch {
+            privilegeError = Self.describe(error)
         }
     }
 
@@ -101,6 +198,38 @@ final class NetControl: ObservableObject {
             guard await awdl.installPrivilege() else { return }
         }
         await awdl.setEnabled(on)
+    }
+
+    // MARK: - admin
+
+    private static let installTool = "/usr/bin/install"
+    private static let visudoTool = "/usr/sbin/visudo"
+    private static let rmTool = "/bin/rm"
+
+    /// One shell line as root through the standard macOS admin prompt. The wait
+    /// runs off the main actor: the dialog can stay up as long as the user
+    /// takes, and blocking the main actor behind it would freeze the whole app.
+    private func runAdmin(_ shell: String) async throws {
+        let literal = shell
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let status = try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", "do shell script \"\(literal)\" with administrator privileges"]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus
+        }.value
+        guard status == 0 else { throw DustlessError.exited(status: status, stderr: "") }
+    }
+
+    /// Single-quote a path for /bin/sh. Paths here are constants or a path we
+    /// just created, never user input.
+    private func sh(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private static func describe(_ error: Error) -> L10nText { ScanStore.describe(error) }

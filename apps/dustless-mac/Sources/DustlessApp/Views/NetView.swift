@@ -211,6 +211,14 @@ struct NetView: View {
                 errorLabel(error)
             }
 
+            if let error = net.privilegeError {
+                errorLabel(error)
+            }
+
+            // One quiet line, not a card: this is a permission the advanced rows
+            // below depend on, and the user is the only one who can grant it.
+            rememberRow
+
             if visibleOps.isEmpty {
                 NoMatchesView()
                     .frame(maxHeight: .infinity)
@@ -230,6 +238,46 @@ struct NetView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// The one-time authorization step, as a single line: a button while it is
+    /// missing, a muted fact with a way back once it is in place. No card — this
+    /// is a footnote to the operation list, and it says plainly that no password
+    /// is being kept.
+    @ViewBuilder
+    private var rememberRow: some View {
+        HStack(spacing: PanelStyle.Space.s) {
+            if net.privilegeInstalled {
+                Label(settings.t("netRemembered"), systemImage: "checkmark.seal")
+                    .font(PanelFont.secondary)
+                    .foregroundStyle(.secondary)
+                    .help(settings.t("netRememberExplain"))
+                    .accessibilityLabel(settings.t("netRemembered"))
+                Spacer(minLength: PanelStyle.Space.s)
+                Button(settings.t("netForget")) {
+                    Task { await net.removePrivilege() }
+                }
+                .controlSize(.small)
+                .disabled(net.privilegeBusy)
+                .help(settings.t("netForget"))
+                .accessibilityLabel(settings.t("netForget"))
+            } else {
+                Button(settings.t("netRemember")) {
+                    Task { await net.installPrivilege() }
+                }
+                .controlSize(.small)
+                .disabled(net.privilegeBusy)
+                .help(settings.t("netRememberExplain"))
+                .accessibilityLabel(settings.t("netRemember"))
+                Text(settings.t("netRememberExplain"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, PanelStyle.Space.s)
     }
 
     private func opRow(_ op: NetOp) -> some View {

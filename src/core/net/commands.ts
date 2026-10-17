@@ -22,6 +22,16 @@ export type Op = {
 
 export type Step = { cmd: string; args: string[] };
 
+// Absolute paths for the macOS writes that need root. A sudoers rule has to
+// name an absolute path (a bare `networksetup` would not match, and a relative
+// one would be a hole), so the engine invokes exactly the paths the rule names
+// — one definition, and the rule cannot drift from what is actually run.
+export const MAC_COMMANDS = {
+  networksetup: "/usr/sbin/networksetup",
+  ipconfig: "/usr/sbin/ipconfig",
+  arp: "/usr/sbin/arp",
+} as const;
+
 export const OPS: Op[] = [
   {
     id: "flush-dns",
@@ -97,24 +107,24 @@ export function buildSteps(id: NetOpId, info: NetInfo, p: Platform): Step[] {
       if (p === "win") return [{ cmd: "ipconfig", args: ["/flushdns"] }];
       return [{ cmd: "resolvectl", args: ["flush-caches"] }];
     case "reset-dns":
-      if (p === "mac") return [{ cmd: "networksetup", args: ["-setdnsservers", info.service, "Empty"] }];
+      if (p === "mac") return [{ cmd: MAC_COMMANDS.networksetup, args: ["-setdnsservers", info.service, "Empty"] }];
       if (p === "win") {
         return [{ cmd: "netsh", args: ["interface", "ip", "set", "dnsservers", `name=${info.iface ?? ""}`, "source=dhcp"] }];
       }
       return [{ cmd: "resolvectl", args: ["revert", info.iface ?? ""] }];
     case "renew-dhcp":
-      if (p === "mac") return [{ cmd: "ipconfig", args: ["set", info.iface ?? "", "DHCP"] }];
+      if (p === "mac") return [{ cmd: MAC_COMMANDS.ipconfig, args: ["set", info.iface ?? "", "DHCP"] }];
       if (p === "win") return [{ cmd: "ipconfig", args: ["/renew"] }];
       return [
         { cmd: "dhclient", args: ["-r", info.iface ?? ""] },
         { cmd: "dhclient", args: [info.iface ?? ""] },
       ];
     case "clear-arp":
-      if (p === "mac") return [{ cmd: "arp", args: ["-d", "-a"] }];
+      if (p === "mac") return [{ cmd: MAC_COMMANDS.arp, args: ["-d", "-a"] }];
       if (p === "win") return [{ cmd: "arp", args: ["-d", "*"] }];
       return [{ cmd: "ip", args: ["-s", "-s", "neigh", "flush", "all"] }];
     case "reset-mtu":
-      if (p === "mac") return [{ cmd: "networksetup", args: ["-setMTU", info.service, "1500"] }];
+      if (p === "mac") return [{ cmd: MAC_COMMANDS.networksetup, args: ["-setMTU", info.service, "1500"] }];
       if (p === "win") {
         return [{ cmd: "netsh", args: ["interface", "ipv4", "set", "subinterface", info.iface ?? "", "mtu=1500", "store=persistent"] }];
       }
@@ -123,4 +133,16 @@ export function buildSteps(id: NetOpId, info: NetInfo, p: Platform): Step[] {
       if (p === "linux") return [{ cmd: "ip", args: ["route", "flush", "cache"] }];
       return [];
   }
+}
+
+/**
+ * The exact advanced macOS steps the scoped sudo rule permits, resolved for the
+ * interface and service `inspect()` found. This list *is* the rule's content —
+ * nothing outside it can be run through `sudo -n`, which is why it is derived
+ * from `buildSteps` instead of being written out a second time.
+ */
+export function netPrivilegeSteps(info: NetInfo): Step[] {
+  return (["reset-dns", "renew-dhcp", "clear-arp", "reset-mtu"] as const).flatMap((id) =>
+    buildSteps(id, info, "mac"),
+  );
 }

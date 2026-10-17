@@ -5,6 +5,7 @@ import { buildSteps, OPS, type NetOpId, type Step } from "./commands.ts";
 export type { NetOpId } from "./commands.ts";
 import { inspect, type NetInfo } from "./inspect.ts";
 import { isRoot, systemRun, type Runner } from "./run.ts";
+export { netPrivilege, NET_PRIVILEGE_PATH, type NetPrivilege } from "./privilege.ts";
 
 export type NetOutcome = {
   op: NetOpId;
@@ -43,6 +44,9 @@ export type NetFlags = {
 };
 
 const DEFAULT_OPS: NetOpId[] = ["flush-dns"];
+
+const PRIVILEGE_HINT =
+  "cần một lần cài quy tắc sudo giới hạn trong app Dustless (bước “ghi nhớ quyền”), hoặc chạy lại bằng sudo";
 
 export function selectOps(flags: NetFlags): NetOpId[] | undefined {
   const named: NetOpId[] = [];
@@ -100,9 +104,6 @@ async function runOp(
   if (!meta.advanced) {
     return await flushDns(steps, run);
   }
-  if (!root()) {
-    return { op: id, status: "refused", detail: "cần quyền root — chạy lại bằng sudo", before };
-  }
   if (meta.targetsInterface && meta.canInterrupt && info.soloRoute && !opts.force) {
     return {
       op: id,
@@ -111,7 +112,12 @@ async function runOp(
       before,
     };
   }
-  return await execute(id, steps, before, run);
+  // Root runs the step directly. Otherwise it goes through `sudo -n <path>`,
+  // which the scoped sudoers rule can allow and nothing else — `-n` fails
+  // loudly instead of blocking on a password prompt the caller cannot answer.
+  // There is deliberately no unprivileged fallback: a network change that
+  // half-applied is worse than a clean refusal.
+  return await execute(id, steps, before, run, !root());
 }
 
 async function beforeValue(id: NetOpId, info: NetInfo, run: Runner, p: Platform): Promise<string | undefined> {
@@ -150,13 +156,30 @@ async function flushDns(steps: Step[], run: Runner): Promise<NetOutcome> {
   };
 }
 
-async function execute(id: NetOpId, steps: Step[], before: string | undefined, run: Runner): Promise<NetOutcome> {
+/**
+ * Runs every step of one operation. `escalate` wraps each in `sudo -n`, the
+ * same way the AWDL toggle does, so one scoped sudoers rule covers both.
+ */
+async function execute(
+  id: NetOpId,
+  steps: Step[],
+  before: string | undefined,
+  run: Runner,
+  escalate: boolean,
+): Promise<NetOutcome> {
   let failure = "";
   for (const step of steps) {
-    const res = await run(step.cmd, step.args);
+    const res = escalate
+      ? await run("sudo", ["-n", step.cmd, ...step.args])
+      : await run(step.cmd, step.args);
     if (!res.ok && !failure) failure = res.err.trim() || `${step.cmd} failed (exit ${res.code})`;
   }
-  if (failure) return { op: id, status: "failed", detail: failure, before };
+  if (failure) {
+    // A missing sudoers rule is not a broken command, it is a consent the user
+    // has not given yet — name the fix instead of showing sudo's own sentence.
+    const needsPassword = escalate && /password is required|a terminal is required/i.test(failure);
+    return { op: id, status: needsPassword ? "refused" : "failed", detail: needsPassword ? PRIVILEGE_HINT : failure, before };
+  }
   return { op: id, status: "ran", detail: ranDetail(id), before, after: afterValue(id) };
 }
 

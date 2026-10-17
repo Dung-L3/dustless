@@ -125,13 +125,25 @@ public struct DustlessCLI: Sendable {
     /// run through one admin prompt: scoped to this single command, per run, with
     /// nothing left behind in /etc/sudoers.d when it is over. A safe operation
     /// runs directly, so the app never asks for a password it does not need.
-    public func runNetOp(_ id: String, force: Bool) async throws -> NetReport {
+    /// `privilegeInstalled` says the scoped sudo rule is in place. When it is,
+    /// the engine escalates through `sudo -n` itself and never prompts, so the
+    /// app must run it directly; when it is not, one admin prompt per run is
+    /// the only way to root and the operation still has to work.
+    public func runNetOp(_ id: String, force: Bool, privilegeInstalled: Bool = false) async throws -> NetReport {
         guard let op = NetOp(rawValue: id) else {
             throw DustlessError.unreadableOutput("unknown network operation \"\(id)\"")
         }
         let arguments = ["net", op.flag, "--json"] + (force ? ["--force"] : [])
-        let result = op.isAdvanced ? try await runAsRoot(arguments) : try await run(arguments)
+        let viaPrompt = op.isAdvanced && !privilegeInstalled
+        let result = viaPrompt ? try await runAsRoot(arguments) : try await run(arguments)
         return try decode(NetReport.self, from: result)
+    }
+
+    /// The exact sudoers rule for the one-time "remember this authorization"
+    /// step. No root needed: the engine only reads the current interface and
+    /// service to fill it in.
+    public func netPrivilege() async throws -> NetPrivilege {
+        try await decode(NetPrivilege.self, from: run(["net", "--print-privilege", "--json"]))
     }
 
     /// Runs the engine as root through the standard macOS admin prompt.

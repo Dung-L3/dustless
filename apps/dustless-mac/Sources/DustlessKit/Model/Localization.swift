@@ -157,6 +157,21 @@ public enum L10n {
         "httpError": "Lỗi HTTP {status}",
         "decisionA11y": "Áp dụng cho toàn bộ nhóm: {path}",
 
+        // native app — overview
+        "modules": "Mô-đun",
+        "cleanupModule": "Dọn dẹp",
+        "overviewTitle": "Tổng quan",
+        "overviewNoScan": "Chưa quét lần nào.",
+        "overviewProvenance": "Quét {age} · {rules} rule · {ms}",
+        "overviewAgeNow": "vừa xong",
+        "overviewAgeMinutes": "{n} phút trước",
+        "overviewAgeHours": "{n} giờ trước",
+        "overviewAgeDays": "{n} ngày trước",
+        "overviewCoverage": "{n} mục không vượt qua kiểm chứng chéo nên bị loại khỏi tổng dọn dẹp.",
+        "overviewReview": "Xem lại {n} mục · {size}",
+        "overviewView": "Xem",
+        "scanNow": "Quét ngay",
+
         // native app
         "storage": "Lưu trữ",
         "tiers": "Mức an toàn",
@@ -192,6 +207,7 @@ public enum L10n {
         "confirmSheetBody": "{n} đường dẫn này sẽ bị xóa vĩnh viễn khỏi máy Mac. Mục bị chặn và mục đỏ không được liệt kê và không thể xóa.",
         "deleteItemsButton": "Xóa {n} mục · {size}",
         "resultSummary": "Đã thu hồi {freed} trong {elapsed}. Còn trống {free}.",
+        "resultCounts": "Đã xóa {deleted} · Bỏ qua {skipped} · Lỗi {failed}",
         "done": "Xong",
         "close": "Đóng",
         "cleanItemsMenu": "Dọn {n} mục…",
@@ -338,7 +354,7 @@ public enum L10n {
         "networkFilterSafe": "An toàn",
         "networkFilterAdvanced": "Nâng cao",
         "networkNeedsAdmin": "Cần quyền admin",
-        "networkNote": "Thao tác nâng cao thay đổi trạng thái mạng đang chạy và hỏi mật khẩu quản trị một lần cho mỗi lần chạy. Không có gì được áp dụng nếu bạn không bấm Chạy.",
+        "networkNote": "Thao tác nâng cao thay đổi trạng thái mạng đang chạy và hỏi mật khẩu quản trị mỗi lần chạy, trừ khi bạn đã ghi nhớ quyền. Không có gì được áp dụng nếu bạn không bấm Chạy.",
         "networkRun": "Chạy",
         "networkRunning": "Đang chạy…",
         "networkRunNamed": "Chạy {name}",
@@ -354,6 +370,12 @@ public enum L10n {
         "networkOpClearArpHelp": "Xóa các ánh xạ IP sang MAC đã cũ.",
         "networkOpResetMtu": "Đặt lại MTU",
         "networkOpResetMtuHelp": "Đưa MTU của giao diện về 1500.",
+        "netRemember": "Ghi nhớ quyền này…",
+        "netRemembered": "Đã ghi nhớ quyền",
+        "netRememberExplain": "Cài một quy tắc sudo giới hạn cho đúng bốn lệnh mạng nâng cao, để chạy mà không hỏi lại. Không lưu mật khẩu của bạn.",
+        "netForget": "Gỡ quyền",
+        "netRememberFailed": "Không cài được quyền này.",
+        "netNeedsPermission": "Thao tác nâng cao cần quyền đã ghi nhớ một lần.",
     ]
 
     static let en: [String: String] = [
@@ -441,6 +463,21 @@ public enum L10n {
         "httpError": "HTTP {status}",
         "decisionA11y": "Apply to whole group: {path}",
 
+        // native app — overview
+        "modules": "Modules",
+        "cleanupModule": "Cleanup",
+        "overviewTitle": "Overview",
+        "overviewNoScan": "Nothing has been scanned yet.",
+        "overviewProvenance": "Scanned {age} · {rules} rules · {ms}",
+        "overviewAgeNow": "just now",
+        "overviewAgeMinutes": "{n} min ago",
+        "overviewAgeHours": "{n} h ago",
+        "overviewAgeDays": "{n} d ago",
+        "overviewCoverage": "{n} items failed cross-verification and are excluded from the cleanup total.",
+        "overviewReview": "Review {n} items · {size}",
+        "overviewView": "View",
+        "scanNow": "Scan now",
+
         // native app
         "storage": "Storage",
         "tiers": "Tiers",
@@ -476,6 +513,7 @@ public enum L10n {
         "confirmSheetBody": "These {n} paths will be permanently deleted from this Mac. Blocked and red-tier items are not listed and cannot be deleted.",
         "deleteItemsButton": "Delete {n} Items · {size}",
         "resultSummary": "Freed {freed} in {elapsed}. Free space is now {free}.",
+        "resultCounts": "{deleted} deleted · {skipped} skipped · {failed} failed",
         "done": "Done",
         "close": "Close",
         "cleanItemsMenu": "Clean {n} Items…",
@@ -622,7 +660,7 @@ public enum L10n {
         "networkFilterSafe": "Safe",
         "networkFilterAdvanced": "Advanced",
         "networkNeedsAdmin": "Needs admin",
-        "networkNote": "Advanced operations change live network state and ask for your admin password once per run. Nothing is applied unless you press Run.",
+        "networkNote": "Advanced operations change live network state and ask for your admin password on every run unless you remember the permission. Nothing is applied unless you press Run.",
         "networkRun": "Run",
         "networkRunning": "Running…",
         "networkRunNamed": "Run {name}",
@@ -638,6 +676,12 @@ public enum L10n {
         "networkOpClearArpHelp": "Removes stale neighbour (IP-to-MAC) mappings.",
         "networkOpResetMtu": "Reset the MTU",
         "networkOpResetMtuHelp": "Sets the interface MTU back to 1500.",
+        "netRemember": "Remember this authorization…",
+        "netRemembered": "Authorization remembered",
+        "netRememberExplain": "Installs a scoped sudo rule for exactly four advanced network commands, so they run without asking again. Your password is never stored.",
+        "netForget": "Remove",
+        "netRememberFailed": "Could not install this permission.",
+        "netNeedsPermission": "Advanced operations need the one-time remembered permission.",
     ]
 
     static let zh: [String: String] = [
@@ -725,6 +769,21 @@ public enum L10n {
         "httpError": "HTTP 错误 {status}",
         "decisionA11y": "适用于整个分组：{path}",
 
+        // native app — overview
+        "modules": "模块",
+        "cleanupModule": "清理",
+        "overviewTitle": "概览",
+        "overviewNoScan": "尚未扫描。",
+        "overviewProvenance": "扫描于 {age} · {rules} 条规则 · {ms}",
+        "overviewAgeNow": "刚刚",
+        "overviewAgeMinutes": "{n} 分钟前",
+        "overviewAgeHours": "{n} 小时前",
+        "overviewAgeDays": "{n} 天前",
+        "overviewCoverage": "{n} 项未通过交叉验证，已从清理总量中排除。",
+        "overviewReview": "复核 {n} 项 · {size}",
+        "overviewView": "查看",
+        "scanNow": "立即扫描",
+
         // native app
         "storage": "存储",
         "tiers": "层级",
@@ -760,6 +819,7 @@ public enum L10n {
         "confirmSheetBody": "这 {n} 条路径将从这台 Mac 永久删除。已阻止项和红色层级项不会列出，也无法删除。",
         "deleteItemsButton": "删除 {n} 项 · {size}",
         "resultSummary": "已回收 {freed}，用时 {elapsed}。当前可用 {free}。",
+        "resultCounts": "已删除 {deleted} · 已跳过 {skipped} · 失败 {failed}",
         "done": "完成",
         "close": "关闭",
         "cleanItemsMenu": "清理 {n} 项…",
@@ -906,7 +966,7 @@ public enum L10n {
         "networkFilterSafe": "安全",
         "networkFilterAdvanced": "高级",
         "networkNeedsAdmin": "需要管理员",
-        "networkNote": "高级操作会修改当前的网络状态，每次运行都会要求一次管理员密码。除非你点击运行，否则不会应用任何改动。",
+        "networkNote": "高级操作会修改当前的网络状态，每次运行都会要求管理员密码，除非你已记住该权限。除非你点击运行，否则不会应用任何改动。",
         "networkRun": "运行",
         "networkRunning": "正在运行…",
         "networkRunNamed": "运行 {name}",
@@ -922,5 +982,11 @@ public enum L10n {
         "networkOpClearArpHelp": "清除过期的邻居（IP 到 MAC）映射。",
         "networkOpResetMtu": "重置 MTU",
         "networkOpResetMtuHelp": "将接口 MTU 恢复为 1500。",
+        "netRemember": "记住此授权…",
+        "netRemembered": "已记住授权",
+        "netRememberExplain": "安装一条受限的 sudo 规则，仅允许四条高级网络命令，之后运行不再询问。不会保存你的密码。",
+        "netForget": "移除",
+        "netRememberFailed": "无法安装此权限。",
+        "netNeedsPermission": "高级操作需要一次性记住的权限。",
     ]
 }

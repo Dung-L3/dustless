@@ -64,6 +64,25 @@ public struct NetReport: Codable, Sendable, Equatable {
     }
 }
 
+/// The single sudoers rule the app installs so the advanced network operations
+/// stop asking for the admin password. Printed by
+/// `dustless net --print-privilege`, so the app never keeps its own copy of the
+/// rule text — and never sees a password: this is a scoped permission for four
+/// exact commands, not a stored credential.
+public struct NetPrivilege: Codable, Sendable, Equatable {
+    public let user: String
+    public let path: String
+    public let allowed: [String]
+    public let rule: String
+
+    public init(user: String, path: String, allowed: [String], rule: String) {
+        self.user = user
+        self.path = path
+        self.allowed = allowed
+        self.rule = rule
+    }
+}
+
 /// The operations the app offers, mirroring `OPS` in
 /// `src/core/net/commands.ts`.
 ///
