@@ -2,21 +2,7 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-/// One visual language for the app's management modules. Memory, Storage and
-/// Network each used to spell their own tokens, headers, cards and row helpers,
-/// so three modules built from the same ideas drifted apart; the tokens and
-/// everything shared now live here.
-
-// MARK: - Tokens
-
-/// Every metric the panels draw with. The Memory and Storage windows used to
-/// spell their own gaps and fills, which is how two windows built from the same
-/// ideas ended up looking like two products; this is the one place a value is
-/// allowed to live.
 enum PanelStyle {
-    /// The 8pt spacing scale: 4 / 8 / 12 / 16, and nothing else. The chrome above
-    /// a list is a budget, so the gaps between its sections are not free — they
-    /// come from here and nowhere else.
     enum Space {
         static let xs: CGFloat = 4
         static let s: CGFloat = 8
@@ -26,75 +12,40 @@ enum PanelStyle {
 
     static let cardFill = Color.secondary.opacity(0.18)
     static let rowFill = Color.secondary.opacity(0.10)
-    /// One corner radius for strips, rows and fields, so nothing reads as a card
-    /// from one window and a block from another.
     static let radius: CGFloat = 8
-    /// Floor for a list row. Two-line rows grow past it, single-line rows do not
-    /// shrink below it — which is what gives every list in the app the same
-    /// vertical rhythm instead of each row declaring its own padding.
     static let rowMinHeight: CGFloat = 34
-    /// Trailing column for a byte count. Sized once so the digits line up down a
-    /// list: a column that sizes to its widest row makes the numbers beside it
-    /// jump sideways every time a value changes width.
     static let byteColumnWidth: CGFloat = 68
 }
 
-/// The sizes the panels are allowed to set. They were 12.5 / 11.5 / 13.5 and
-/// whatever a view felt like at the time; a type scale only works when the
-/// off-scale sizes are gone.
 enum PanelFont {
-    /// Panel title.
     static let title = Font.system(size: 22, weight: .semibold)
-    /// 16pt: the title of a sheet or a standalone card. One step below a panel
-    /// title because nothing inside a panel is as important as the panel.
     static let heading = Font.system(size: 16, weight: .semibold)
-    /// The one number a pane is about, stated the same way wherever it appears —
-    /// the Cleanup summary and the Overview hero are the same figure and used
-    /// to be drawn at 19 and 40pt in two different windows.
     static let hero = Font.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit()
-    /// 13pt: a row title, a number, a sheet heading — anything the eye lands on.
     static func emphasis(_ weight: Font.Weight = .medium) -> Font {
         .system(size: 13, weight: weight)
     }
-    /// A number that must not jitter as it updates.
     static func number(_ weight: Font.Weight = .medium) -> Font {
         .system(size: 13, weight: weight, design: .rounded).monospacedDigit()
     }
     static let body = Font.system(size: 12)
     static let secondary = Font.system(size: 11)
     static let caption = Font.system(size: 10.5)
-    /// Monospaced, for paths, pids and the engine's own sentences.
     static func mono(_ size: CGFloat = 11, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
 }
 
 extension View {
-    /// The standard tile background: one corner radius, one fill, everywhere.
     func panelCard(_ fill: Color = PanelStyle.cardFill) -> some View {
         background(fill, in: .rect(cornerRadius: PanelStyle.radius))
     }
 
-    /// Section label above a group of rows.
     func panelSectionHeader() -> some View {
         font(PanelFont.emphasis(.semibold))
             .foregroundStyle(.secondary)
     }
 }
 
-// MARK: - Panel skeleton
-
-/// The frame the management modules share: header, summary strip, filter bar,
-/// then content that takes whatever height is left.
-///
-/// Every panel used to invent its own vertical rhythm — a divider here, a picker
-/// on its own row there — and the result was chrome eating the list. The order
-/// and the gaps live here instead, so "the list gets the rest" is true of all
-/// three and a panel can only fill in the four bands.
-///
-/// It sets no window frame and no background: the modules are destinations in
-/// one window now, and the window owns its size and its chrome. A module only
-/// fills the pane it is given.
 struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>: View {
     @ViewBuilder let header: () -> Header
     @ViewBuilder let summary: () -> Summary
@@ -106,11 +57,6 @@ struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>:
             header()
             summary()
             filters()
-            // `maxHeight: .infinity` is the whole clause. Do not add
-            // `.layoutPriority` here: it buys the content its leftover height by
-            // compressing the bands above, and a line-limited paragraph in a band
-            // loses a line when that happens — measured, the AirDrop note capped
-            // at two lines rendered one. Bound the paragraph instead.
             content()
                 .frame(maxHeight: .infinity)
         }
@@ -119,13 +65,6 @@ struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>:
     }
 }
 
-/// The single filter row: the panel's filter control on the left, its count and
-/// search field on the right.
-///
-/// Split across three rows it was the largest thing in the window that never told
-/// the user anything — three bands of chrome for one decision. One row keeps the
-/// filtering obvious (a dense screen with no visible filter is the failure mode)
-/// and gives the list the height back.
 struct PanelFilterBar<Filter: View, Trailing: View>: View {
     let placeholder: String
     @Binding var text: String
@@ -143,11 +82,6 @@ struct PanelFilterBar<Filter: View, Trailing: View>: View {
     }
 }
 
-// MARK: - Stats
-
-/// One labelled number for the summary strip. It is a caption over a value, not a
-/// card: the metric grids this replaced spent a third of the window on six tiles
-/// that said the same thing in a taller box.
 struct PanelStat: View {
     let label: String
     let value: String
@@ -170,9 +104,6 @@ struct PanelStat: View {
     }
 }
 
-/// A row of stats that wraps instead of squeezing: six of them fit across the
-/// window, and a narrow one folds to a second row instead of truncating every
-/// label to nothing.
 struct PanelStatStrip: View {
     let stats: [(label: String, value: String)]
 
@@ -189,14 +120,9 @@ struct PanelStatStrip: View {
     }
 }
 
-// MARK: - Chips
-
-/// A coloured dot with a short label in a tinted capsule. Carries the memory
-/// pressure state and each process category, so both read the same way.
 struct StatusChip: View {
     let color: Color
     let text: String
-    /// Tinted chips read as status; muted ones read as metadata.
     var prominent: Bool = false
 
     var body: some View {
@@ -215,11 +141,6 @@ struct StatusChip: View {
     }
 }
 
-// MARK: - Header
-
-/// The title row every panel shares: a title, an optional secondary line, then
-/// the panel's controls. There is deliberately no close button here — these are
-/// destinations in one window, which owns its own traffic lights.
 struct PanelHeader<Accessory: View>: View {
     let title: String
     var subtitle: String?
@@ -253,20 +174,11 @@ struct PanelHeader<Accessory: View>: View {
 }
 
 extension PanelHeader where Accessory == EmptyView {
-    /// A title row with nothing beside it.
     init(title: String, subtitle: String? = nil) {
         self.init(title: title, subtitle: subtitle) { EmptyView() }
     }
 }
 
-// MARK: - Search
-
-/// The filter field the panels share.
-///
-/// `.searchable` is not an option here: it attaches to the *window* toolbar, so
-/// from inside a panel's plain `VStack` the field would appear next to the
-/// sidebar and filter a module it does not belong to. Each panel owns its own
-/// query instead, and keeps it next to the list it filters.
 struct SearchField: View {
     let placeholder: String
     @Binding var text: String
@@ -303,7 +215,6 @@ struct SearchField: View {
     }
 }
 
-/// A compact bordered refresh button, used by the panels that re-read on demand.
 struct RefreshButton: View {
     let isBusy: Bool
     let action: () -> Void
@@ -331,11 +242,6 @@ struct RefreshButton: View {
     }
 }
 
-// MARK: - States
-
-/// The one loading / empty / error state used by every panel, so the Memory and
-/// Storage windows cannot drift apart on how they say "still working",
-/// "nothing here" and "that failed".
 struct PanelStateView: View {
     enum Kind {
         case loading
@@ -385,19 +291,6 @@ struct PanelStateView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// An engine error is worth copying, so it is selectable and monospaced.
-    ///
-    /// Bounded at six lines. This view sits in the content band of a panel that
-    /// does not scroll, centred top to bottom: the messages it carries embed the
-    /// engine's own stderr, and a Rust panic backtrace is 344 characters — nine
-    /// lines at this width, 126pt of a pane that had less to spare. The cap costs
-    /// the eye nothing that matters, because the whole sentence is still on the
-    /// hover and still selectable.
-    ///
-    /// Note the order: `lineLimit` *after* `fixedSize(vertical:)`, because
-    /// `fixedSize` hands the text an unbounded height proposal and would
-    /// otherwise win. Measured at 440pt with this chain, one line is 14pt, two
-    /// are 28 and six are 84 — the cap binds.
     private var messageLabel: some View {
         Text(message)
             .font(kind == .error ? PanelFont.mono(11) : PanelFont.body)
@@ -425,9 +318,6 @@ private struct OptionalTextSelection: ViewModifier {
     }
 }
 
-// MARK: - Path actions
-
-/// Shared context menu for file path actions (Reveal in Finder, Copy Path).
 struct PathContextMenu: ViewModifier {
     let path: String
     @EnvironmentObject private var settings: AppSettings

@@ -1,7 +1,5 @@
 import Foundation
 
-/// UI language for the native app. Adding a language here means adding a table
-/// below to match; `tests/i18n.test.ts` fails until every language lines up.
 public enum Lang: String, CaseIterable, Identifiable, Sendable {
     case vi
     case en
@@ -9,7 +7,6 @@ public enum Lang: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
-    /// The endonym shown in the Settings picker.
     public var displayName: String {
         switch self {
         case .vi: "Tiếng Việt"
@@ -20,7 +17,6 @@ public enum Lang: String, CaseIterable, Identifiable, Sendable {
 
     public static let fallback: Lang = .en
 
-    /// Map a BCP-47 tag from `Locale.preferredLanguages` onto a supported language.
     public static func preferred(_ identifier: String) -> Lang {
         let tag = identifier.lowercased()
         if tag.hasPrefix("vi") { return .vi }
@@ -30,8 +26,6 @@ public enum Lang: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// A translated string is stored as its key plus interpolation variables, never
-/// as rendered text — so an error shown while the language changes re-renders.
 public struct L10nText: Equatable, Sendable, Hashable {
     public let key: String
     public let vars: [String: String]
@@ -42,10 +36,6 @@ public struct L10nText: Equatable, Sendable, Hashable {
     }
 }
 
-/// The string table. These tables are the single source for the app's wording in
-/// every language; nothing else holds a copy. `tests/i18n.test.ts` keeps the
-/// languages consistent — same key set, no blank translations, matching
-/// `{placeholder}` sets — so a key added to one is required in all.
 public enum L10n {
     public static func text(_ lang: Lang, _ text: L10nText) -> String {
         render(lang, text.key, text.vars)
@@ -67,10 +57,7 @@ public enum L10n {
         }
     }
 
-    /// Tier words are stored under the tier's own name (`green`/`yellow`/`red`/`blocked`).
     public static func tierKey(_ tier: Tier) -> String { tier.rawValue }
-
-    // MARK: - String tables (keep every language in step)
 
     static let vi: [String: String] = [
         "language": "Ngôn ngữ",
@@ -159,7 +146,6 @@ public enum L10n {
         "httpError": "Lỗi HTTP {status}",
         "decisionA11y": "Áp dụng cho toàn bộ nhóm: {path}",
 
-        // native app — overview
         "modules": "Mô-đun",
         "cleanupModule": "Dọn dẹp",
         "overviewTitle": "Tổng quan",
@@ -174,7 +160,6 @@ public enum L10n {
         "overviewView": "Xem",
         "scanNow": "Quét ngay",
 
-        // native app
         "storage": "Lưu trữ",
         "tiers": "Mức an toàn",
         "actions": "Hành động",
@@ -243,15 +228,12 @@ public enum L10n {
         "errNotFound": "Không tìm thấy engine dustless. Đã tìm: {list}. Tạo bằng `bun run build`, rồi chạy scripts/bundle.sh để chép vào Dustless.app.",
         "errNotExecutable": "Thấy dustless tại {path} nhưng không thực thi được. Chạy: chmod +x {path}",
 
-        // native app — row actions
         "revealInFinder": "Hiện trong Finder",
         "copyPath": "Sao chép đường dẫn",
 
-        // native app — findings filter
         "searchFindings": "Lọc kết quả theo rule hoặc đường dẫn",
         "noMatches": "Không khớp kết quả nào",
 
-        // native app — panel filters
         "searchProcesses": "Lọc tiến trình theo tên, bundle hoặc PID",
         "searchApps": "Lọc ứng dụng theo tên, bundleId hoặc đường dẫn",
         "searchFiles": "Lọc tệp theo tên hoặc đường dẫn",
@@ -260,7 +242,6 @@ public enum L10n {
         "filterCategory": "Lọc theo loại",
         "filterShowing": "{shown} / {total}",
 
-        // native app — memory view
         "memory": "Bộ nhớ",
         "memoryPressure": "Áp lực bộ nhớ",
         "memoryAvailable": "Có sẵn",
@@ -296,10 +277,8 @@ public enum L10n {
         "busyMemory": "Đang đo mức dùng bộ nhớ…",
         "busyStorage": "Đang đọc các ổ đĩa…",
 
-        // native app — storage view
         "storageNote": "Thu hồi được đo bởi engine.",
 
-        // native app — apps view
         "appsTitle": "Ứng dụng",
         "appsUninstall": "Gỡ cài đặt",
         "appsTrashTitle": "Di chuyển vào Thùng rác?",
@@ -324,7 +303,6 @@ public enum L10n {
         "appsEmpty": "Không tìm thấy ứng dụng nào.",
         "volumeUsageHelp": "{name}: đã dùng {percent} dung lượng.",
 
-        // native app — largest files view
         "largeFilesTitle": "Tệp lớn nhất",
         "largeFilesCount": "{n} tệp",
         "largeFilesEmpty": "Không có tệp lớn nào trong thư mục home.",
@@ -333,7 +311,6 @@ public enum L10n {
         "largeFilesTrashHelp": "Chuyển {name} vào Thùng rác",
         "largeFilesTrashed": "Đã chuyển vào Thùng rác",
 
-        // native app — AirDrop (AWDL) toggle
         "awdlTitle": "Wi-Fi & AirDrop",
         "awdlOn": "AWDL: đang bật — có thể gây gai ping Wi-Fi",
         "awdlOff": "AWDL: đã tắt — Wi-Fi ổn định",
@@ -349,7 +326,6 @@ public enum L10n {
         "awdlInstallFailed": "Không cài được quyền bật/tắt.",
         "awdlNeedsPrivilege": "Thao tác này cần quyền bật/tắt cài một lần.",
 
-        // native app — network panel
         "networkTitle": "Mạng",
         "networkState": "Kết nối",
         "networkInterface": "Giao diện mạng",
@@ -473,7 +449,6 @@ public enum L10n {
         "httpError": "HTTP {status}",
         "decisionA11y": "Apply to whole group: {path}",
 
-        // native app — overview
         "modules": "Modules",
         "cleanupModule": "Cleanup",
         "overviewTitle": "Overview",
@@ -488,7 +463,6 @@ public enum L10n {
         "overviewView": "View",
         "scanNow": "Scan now",
 
-        // native app
         "storage": "Storage",
         "tiers": "Tiers",
         "actions": "Actions",
@@ -557,15 +531,12 @@ public enum L10n {
         "errNotFound": "The dustless engine was not found. Searched: {list}. Build it with `bun run build`, then re-run scripts/bundle.sh to copy it into Dustless.app.",
         "errNotExecutable": "Found dustless at {path} but it is not executable. Run: chmod +x {path}",
 
-        // native app — row actions
         "revealInFinder": "Reveal in Finder",
         "copyPath": "Copy Path",
 
-        // native app — findings filter
         "searchFindings": "Filter findings by rule or path",
         "noMatches": "No matches",
 
-        // native app — panel filters
         "searchProcesses": "Filter processes by name, bundle or pid",
         "searchApps": "Filter apps by name, bundleId or path",
         "searchFiles": "Filter files by name or path",
@@ -574,7 +545,6 @@ public enum L10n {
         "filterCategory": "Filter by category",
         "filterShowing": "{shown} of {total}",
 
-        // native app — memory view
         "memory": "Memory",
         "memoryPressure": "Memory Pressure",
         "memoryAvailable": "Available",
@@ -610,10 +580,8 @@ public enum L10n {
         "busyMemory": "Measuring memory usage…",
         "busyStorage": "Reading volumes…",
 
-        // native app — storage view
         "storageNote": "Reclaimable measured by the engine.",
 
-        // native app — apps view
         "appsTitle": "Applications",
         "appsUninstall": "Uninstall",
         "appsTrashTitle": "Move to Trash?",
@@ -638,7 +606,6 @@ public enum L10n {
         "appsEmpty": "No applications found.",
         "volumeUsageHelp": "{name}: {percent} of capacity used.",
 
-        // native app — largest files view
         "largeFilesTitle": "Largest files",
         "largeFilesCount": "{n} files",
         "largeFilesEmpty": "No large files in your home folder.",
@@ -647,7 +614,6 @@ public enum L10n {
         "largeFilesTrashHelp": "Move {name} to the Trash",
         "largeFilesTrashed": "Moved to Trash",
 
-        // native app — AirDrop (AWDL) toggle
         "awdlTitle": "Wi-Fi & AirDrop",
         "awdlOn": "AWDL: on — may cause Wi-Fi spikes",
         "awdlOff": "AWDL: off — Wi-Fi stable",
@@ -663,7 +629,6 @@ public enum L10n {
         "awdlInstallFailed": "Could not install the toggle permission.",
         "awdlNeedsPrivilege": "This needs the one-time toggle permission.",
 
-        // native app — network panel
         "networkTitle": "Network",
         "networkState": "Connection",
         "networkInterface": "Interface",
@@ -787,7 +752,6 @@ public enum L10n {
         "httpError": "HTTP 错误 {status}",
         "decisionA11y": "适用于整个分组：{path}",
 
-        // native app — overview
         "modules": "模块",
         "cleanupModule": "清理",
         "overviewTitle": "概览",
@@ -802,7 +766,6 @@ public enum L10n {
         "overviewView": "查看",
         "scanNow": "立即扫描",
 
-        // native app
         "storage": "存储",
         "tiers": "层级",
         "actions": "操作",
@@ -871,15 +834,12 @@ public enum L10n {
         "errNotFound": "未找到 dustless 引擎。已搜索：{list}。请先运行 `bun run build`，再运行 scripts/bundle.sh 复制到 Dustless.app。",
         "errNotExecutable": "在 {path} 找到 dustless，但不可执行。请运行：chmod +x {path}",
 
-        // native app — row actions
         "revealInFinder": "在访达中显示",
         "copyPath": "复制路径",
 
-        // native app — findings filter
         "searchFindings": "按规则或路径筛选结果",
         "noMatches": "无匹配结果",
 
-        // native app — panel filters
         "searchProcesses": "按名称、bundle 或 PID 筛选进程",
         "searchApps": "按名称、bundleId 或路径筛选应用",
         "searchFiles": "按名称或路径筛选文件",
@@ -888,7 +848,6 @@ public enum L10n {
         "filterCategory": "按类别筛选",
         "filterShowing": "{shown} / {total}",
 
-        // native app — memory view
         "memory": "内存",
         "memoryPressure": "内存压力",
         "memoryAvailable": "可用",
@@ -924,10 +883,8 @@ public enum L10n {
         "busyMemory": "正在测量内存占用…",
         "busyStorage": "正在读取卷信息…",
 
-        // native app — storage view
         "storageNote": "可回收量由引擎实测。",
 
-        // native app — apps view
         "appsTitle": "应用程序",
         "appsUninstall": "卸载",
         "appsTrashTitle": "移至废纸篓？",
@@ -952,7 +909,6 @@ public enum L10n {
         "appsEmpty": "未找到任何应用程序。",
         "volumeUsageHelp": "{name}：已使用 {percent} 容量。",
 
-        // native app — largest files view
         "largeFilesTitle": "最大的文件",
         "largeFilesCount": "{n} 个文件",
         "largeFilesEmpty": "主目录中没有大文件。",
@@ -961,7 +917,6 @@ public enum L10n {
         "largeFilesTrashHelp": "将 {name} 移至废纸篓",
         "largeFilesTrashed": "已移至废纸篓",
 
-        // native app — AirDrop (AWDL) toggle
         "awdlTitle": "Wi-Fi 与 AirDrop",
         "awdlOn": "AWDL：已开启 — 可能导致 Wi-Fi 卡顿",
         "awdlOff": "AWDL：已关闭 — Wi-Fi 稳定",
@@ -977,7 +932,6 @@ public enum L10n {
         "awdlInstallFailed": "无法安装切换权限。",
         "awdlNeedsPrivilege": "此操作需要一次性的切换权限。",
 
-        // native app — network panel
         "networkTitle": "网络",
         "networkState": "连接",
         "networkInterface": "网络接口",

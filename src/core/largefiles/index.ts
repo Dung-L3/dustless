@@ -9,15 +9,6 @@ const MiB = 1024 * 1024;
 export const DEFAULT_MIN_SIZE = 200 * MiB;
 export const DEFAULT_LIMIT = 50;
 
-/**
- * Directories the walk never enters.
- * - `.Trash` is what the user already reclaimed; listing it would offer to
- *   trash the same bytes twice.
- * - `.git` holds repository history, not junk. A pack or a loose object is
- *   owned by the repo, and trashing one corrupts it rather than freeing space.
- *   Everything else in the home directory — Documents, Desktop, caches,
- *   `Library` — is walked on purpose: those are the files hogging the disk.
- */
 const SKIP_DIRS = new Set([".git", ".Trash"]);
 
 export type LargeFile = {
@@ -27,29 +18,18 @@ export type LargeFile = {
 };
 
 export type FindLargeFilesOptions = {
-  /** Directories to walk. Default: the home directory. */
   roots?: string[];
-  /** Smallest file worth reporting, in bytes. Default: 200 MiB. */
   minSize?: number;
-  /** How many entries to return, largest first. Default: 50. */
   limit?: number;
 };
 
 export type DeleteLargeFileOptions = {
   path: string;
-  /** The roots the listing was built from; the path must be inside one. */
   roots?: string[];
   confirm: boolean;
-  /** Defaults to `~/.Trash`, same as `dustless apps --uninstall`. */
   trashDir?: string;
 };
 
-/**
- * Only directories inside the home directory are ever walked. That one rule is
- * what keeps `/System`, `/Library`, `/Applications`, `/private/var` and every
- * other volume and mount out — none of them live under `$HOME` — instead of
- * carrying a deny list that would need one entry per new system directory.
- */
 function scannedRoots(roots?: string[]): string[] {
   const home = resolve(homedir());
   const list = [...new Set((roots ?? [home]).map((root) => resolve(root)))];
@@ -61,14 +41,6 @@ function scannedRoots(roots?: string[]): string[] {
   return list;
 }
 
-/** Unreadable directories and files are skipped silently — a walk of a real
- * home hits TCC-protected folders and racing temp files on every run.
- *
- * ponytail: one directory at a time, with its files stat'ed in parallel —
- * 30-130s of wall clock on the author's home depending on what else is doing
- * I/O. Eight walkers sharing the stack measured ten times *slower*, so the
- * queue is left alone until that stops being true. The CLI prints the
- * elapsed time so the wait reads as work rather than as a hang. */
 async function walk(root: string, minSize: number, found: LargeFile[]): Promise<void> {
   const stack = [root];
   while (stack.length) {
@@ -78,8 +50,6 @@ async function walk(root: string, minSize: number, found: LargeFile[]): Promise<
     if (!entries) continue;
     const files: string[] = [];
     for (const entry of entries) {
-      // A symlink is not the bytes it points at, and following one would walk
-      // (and then offer to trash) files the user never sees at that path.
       if (entry.isSymbolicLink()) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -106,18 +76,6 @@ export async function findLargeFiles(opts: FindLargeFilesOptions = {}): Promise<
     .slice(0, limit);
 }
 
-/**
- * Moves one listed file to the Trash. There is no hard delete: the path has to
- * be a plain file inside a scanned root, not on the red list, and it goes
- * through the same `moveToTrash` the app uninstaller uses, so the result is an
- * ordinary `.Trash` entry the user can put back.
- *
- * The red list is the point of the extra check: `findLargeFiles` deliberately
- * walks `Documents`, `Library/Mail` and everything else, so a user can point
- * `--delete` at any of it. Listing a file is harmless. Deleting the user's mail
- * or a repository's objects is not, so those paths are refused by name here,
- * exactly as `scan` refuses to emit them as findings.
- */
 export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<UninstallReport> {
   const target = resolve(opts.path);
   const roots = scannedRoots(opts.roots);
@@ -134,8 +92,6 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
   }
   if (!opts.confirm) return refuse("confirm required");
   const meta = await lstat(target).catch(() => null);
-  // A path that is not there is nothing to move, not an error: `apps
-  // --uninstall` reports the same way for a leftover that has already gone.
   if (!meta) {
     return {
       outcomes: [{ path: opts.path, status: "skipped", bytes: 0, detail: "does not exist" }],

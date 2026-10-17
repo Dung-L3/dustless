@@ -14,7 +14,6 @@ public enum BinaryLocationError: LocalizedError {
         }
     }
 
-    /// Translatable form of `errorDescription` for the UI.
     public var localized: L10nText {
         switch self {
         case .notFound(let searched):

@@ -39,9 +39,6 @@ public struct ScanReport: Codable, Sendable {
         findings.filter { !$0.isDeletableByEngine }
     }
 
-    /// Safety invariant: a scan never pre-selects anything. The engine fails
-    /// closed (`src/core/apply.ts`) and the UI must too — the user opts in to
-    /// each path, so a fresh report starts with an empty selection.
     public var initialSelection: Set<String> { [] }
 }
 

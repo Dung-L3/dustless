@@ -1,11 +1,6 @@
 import DustlessKit
 import SwiftUI
 
-/// The detail pane: whichever module the sidebar picked.
-///
-/// One view owns the switch so the module switch has exactly one animation
-/// site. It is a short opacity cross-fade and nothing else — a slide here
-/// implied the modules are a stack of pages, which is not what they are.
 struct ModuleContent: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var router: AppRouter
@@ -16,12 +11,6 @@ struct ModuleContent: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // No `.id` on the module: the `switch` already builds a fresh
-            // module on every change, so re-identifying the chain on top of that
-            // only builds the incoming one twice — measured, its body ran twice
-            // per switch with the id and once without. The cross-fade is
-            // unaffected either way, because a conditional is already one
-            // insertion and one removal. State lifetime is unaffected too.
             .transition(.opacity)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: router.module)
     }
@@ -51,7 +40,6 @@ struct ModuleContent: View {
     }
 }
 
-/// The Storage module: loads the volume data on appear, then fills the pane.
 struct StorageModuleView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
@@ -63,8 +51,6 @@ struct StorageModuleView: View {
 
     @ViewBuilder
     private var state: some View {
-        // A refresh re-reads behind the pane, so only a pane that has never read
-        // anything blanks out. A failed read wins over everything else.
         if let space = store.diskSpace {
             StorageView(space: space, reclaimable: store.report?.reclaimable)
         } else if store.storagePhase == .failed {
@@ -90,7 +76,6 @@ struct StorageModuleView: View {
     }
 }
 
-/// The Memory module: loads the process list on appear, then fills the pane.
 struct MemoryModuleView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
@@ -102,8 +87,6 @@ struct MemoryModuleView: View {
 
     @ViewBuilder
     private var state: some View {
-        // Same shape as the Storage module: keep the last report on screen, and
-        // only blank the pane when there is nothing to show and nothing coming.
         if store.memoryReport != nil {
             MemoryView()
         } else if store.memoryPhase == .failed {
@@ -129,7 +112,6 @@ struct MemoryModuleView: View {
     }
 }
 
-/// The Network module: reads the live state on appear, then fills the pane.
 struct NetworkModuleView: View {
     @ObservedObject var net: NetControl
 
@@ -142,8 +124,6 @@ struct NetworkModuleView: View {
 
     @ViewBuilder
     private var state: some View {
-        // A failed refresh keeps the last report on screen, so only a pane that
-        // has never read the state blanks out and offers a retry.
         if net.report != nil {
             NetView(net: net)
         } else if let error = net.loadError {

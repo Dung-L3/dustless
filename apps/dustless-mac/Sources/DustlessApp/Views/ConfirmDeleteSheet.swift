@@ -116,26 +116,12 @@ struct ConfirmDeleteSheet: View {
     }
 }
 
-/// What the last cleanup actually did, drawn inline above the findings list.
-///
-/// This was a modal result sheet ending in Done, which asked for a second
-/// acknowledgement nobody needed: the deletion had already happened and the
-/// list behind it shows what is left. The card says the same thing without
-/// blocking, and its corner × is a card affordance rather than a page exit.
-///
-/// Every number here is the engine's own measurement — `freed` is the delta it
-/// read off the volume, `freeAfter` the volume reading afterwards. Nothing is
-/// projected from the reclaimable total, and nothing here suggests the deleted
-/// items can be brought back: `apply` unlinks them, and the confirmation sheet
-/// says so before the click.
 struct CleanupResultCard: View {
     let report: ApplyReport
     let onClose: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
 
-    /// The per-outcome rows start folded: the counts are the answer, and a
-    /// report with dozens of outcomes must not push the list off screen.
     @State private var isExpanded = false
 
     var body: some View {
@@ -166,8 +152,6 @@ struct CleanupResultCard: View {
         }
     }
 
-    /// Reclaimed space as the engine measured it, and the volume reading it
-    /// ended on. Free space is a reading, not a promise about the next scan.
     private var headline: some View {
         HStack(alignment: .firstTextBaseline, spacing: PanelStyle.Space.l) {
             VStack(alignment: .leading, spacing: 2) {
@@ -201,9 +185,6 @@ struct CleanupResultCard: View {
         ]))
     }
 
-    /// What happened to the selection, in the three words the panel already uses
-    /// for those outcomes. A zero count is left visible rather than hidden: the
-    /// user asked what was skipped, and "0" answers it.
     private var counts: some View {
         Text(settings.t("resultCounts", [
             "deleted": "\(report.deleted.count)",
@@ -217,9 +198,6 @@ struct CleanupResultCard: View {
 
     private var disclosure: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            // Bounded like the storage card's outcome list: a big cleanup can
-            // report hundreds of paths, and the list under it still has to be
-            // reachable without scrolling past all of them.
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(report.outcomes) { outcome in
@@ -235,7 +213,6 @@ struct CleanupResultCard: View {
     }
 
     private func outcomeRow(_ outcome: ApplyOutcome) -> some View {
-        // One lookup, not one per line: the glyph and its spoken label must agree.
         let status = settings.t(statusKey(for: outcome.status))
         return HStack(alignment: .top, spacing: PanelStyle.Space.m) {
             Image(systemName: symbol(for: outcome.status))
@@ -286,7 +263,6 @@ struct CleanupResultCard: View {
         }
     }
 
-    /// The cleanup vocabulary, so this reads like the rest of the module.
     private func statusKey(for status: ApplyStatus) -> String {
         switch status {
         case .deleted: "deleted"

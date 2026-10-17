@@ -83,40 +83,22 @@ function say(line = ""): void {
   if (!flag("quiet")) console.log(line);
 }
 
-/**
- * Errors always go to stderr and `--quiet` never suppresses them: a quiet run
- * that exits 1 with no message is the worst outcome there is. `say()` is for
- * results, this is for the reason there is no result.
- */
 function errorOut(line: string): void {
   console.error(paint("31", line));
 }
 
-/**
- * The one shape a machine caller gets for an argument or validation error: a
- * single JSON object on stdout, so `--json` output stays parseable, and exit 1.
- * A human run gets the same sentence on stderr.
- */
 async function fail(message: string): Promise<number> {
   if (flag("json")) await writeOut(`${JSON.stringify({ error: message })}\n`);
   else errorOut(`✖ ${message}`);
   return 1;
 }
 
-/** `opt()` reports a value it could not find as undefined; this turns a
- *  missing value into a usage error instead of a silent default. */
 function required(name: string, usage: string): string {
   const value = opt(name);
   if (value === undefined) throw new Error(`cần một giá trị cho --${name} — ${usage}`);
   return value;
 }
 
-/**
- * The flags each command actually reads. A typo used to be harmless-looking and
- * then perform a real action (`net --bogus` ran the default DNS flush), so an
- * unknown flag is refused before anything runs. Kept as data next to the parser
- * so a new flag has one obvious place to be declared.
- */
 const GLOBAL_FLAGS = ["json", "quiet", "yes", "help", "version"] as const;
 const COMMAND_FLAGS: Record<string, readonly string[]> = {
   scan: [],
@@ -133,8 +115,6 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
   help: [],
 };
 
-/** The first `--flag` this command does not declare, or null. Values (the token
- *  after an option) never start with `--`, so they are not mistaken for flags. */
 function unknownFlag(command: string): string | null {
   const allowed = new Set<string>([...GLOBAL_FLAGS, ...(COMMAND_FLAGS[command] ?? [])]);
   for (const token of argv) {
@@ -192,12 +172,6 @@ async function runScan(): Promise<number> {
   return 0;
 }
 
-/**
- * The caller's own selection: the exact resolved paths from the report it showed
- * the user. Anything not in the set is skipped, so a per-row choice survives the
- * round trip instead of being widened to every green/yellow finding the fresh
- * scan happened to find. Read before the scan, so a bad file deletes nothing.
- */
 async function readSelection(): Promise<Set<string> | undefined> {
   if (!flag("only-file")) return undefined;
   const file = required("only-file", "dustless apply --only-file <selection.json>");
@@ -223,8 +197,6 @@ async function runApply(): Promise<number> {
     if (!flag("json")) say("Không có mục nào đủ điều kiện xóa.");
     return 0;
   }
-  // The confirmation counts what will actually be touched, so a selection never
-  // has to be told apart from the rest of the report to know what is on it.
   const selected = only ? deletable.filter((f) => only.has(resolve(f.path))) : deletable;
   if (!flag("yes") && !(await confirmSummary(selected, report.totals.blocked.count))) {
     await printApply(idleApply());
@@ -341,9 +313,6 @@ async function runDoctor(): Promise<number> {
     paths: Object.fromEntries(await Promise.all(KEY_PATHS.map(async (p) => [p, await probe(p)] as const))),
     hygiene,
   };
-  // The Full Disk Access verdict is the reason this command exits 1. Compute it
-  // before the machine-readable branch too, or `doctor --json` and `doctor`
-  // disagree about the same machine.
   const mail = report.paths["~/Library/Mail"] ?? "";
   const missingFda = mail.includes("EPERM") || mail.includes("EACCES");
   if (flag("json")) {
@@ -356,8 +325,6 @@ async function runDoctor(): Promise<number> {
   }
   say(bold("\n  đọc được các path"));
   for (const [path, state] of Object.entries(report.paths)) say(`  ${dim(path.padEnd(26))} ${state}`);
-  // This line is the reason the run exits 1, so it is an error: stderr, and
-  // never taken away by --quiet.
   if (missingFda) {
     errorOut(`✖ thiếu Full Disk Access — cấp trong System Settings › Privacy & Security › Full Disk Access`);
   } else {
@@ -389,11 +356,6 @@ async function runNet(): Promise<number> {
   return netExitCode(report);
 }
 
-/**
- * Prints the sudoers rule the Network panel installs, so the one-time
- * "remember this authorization" step has exactly one definition of what it
- * allows. No root needed: this only reads the current interface and service.
- */
 async function printNetPrivilege(): Promise<number> {
   if (platform !== "mac") {
     return await fail("quy tắc sudoers cho net chỉ áp dụng trên macOS");
@@ -404,9 +366,6 @@ async function printNetPrivilege(): Promise<number> {
   }
   try {
     const info = await inspect(platform, systemRun);
-    // `networksetup` takes a *service name* ("Wi-Fi"), never a device ("en0").
-    // A rule built on an unresolved one names a command the OS rejects every
-    // time, so print the honest error instead of a rule that cannot work.
     if (!info.iface || !info.service) {
       return await fail(
         `không phân giải được dịch vụ mạng hiện tại (interface: ${info.iface ?? "?"}, service: ${info.service || "?"}) — không in được quy tắc sudo chính xác`,
@@ -564,7 +523,6 @@ async function runApps(_rest: string[]): Promise<number> {
   return 0;
 }
 
-/** `200mb` / `200MiB` / a plain byte count. NaN when unparseable. */
 function sizeOpt(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
   const match = /^(\d+(?:\.\d+)?)\s*([bkmgt])?(?:i?b)?$/i.exec(raw.trim());
@@ -620,7 +578,6 @@ async function main(): Promise<number> {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;
   }
-  // `scan --help` used to run a full scan. Help wins for every command.
   if (flag("help")) {
     console.log(HELP);
     return 0;
@@ -652,11 +609,6 @@ async function main(): Promise<number> {
   throw new Error(`lệnh không hợp lệ "${command}" — chạy \`dustless help\``);
 }
 
-// `main()` can print hundreds of KB (e.g. `ram --json` lists every process).
-// When stdout is a pipe the kernel buffer fills at 64 KiB and the rest waits in
-// user space, so letting the process end here truncated the tail to exactly
-// 65536 bytes — file redirects looked fine, but MCP clients, agents and the app
-// read through pipes and got broken JSON. Drain stdout first.
 function flushStdout(): Promise<void> {
   return new Promise((resolve) => process.stdout.write("", () => resolve()));
 }
@@ -671,8 +623,6 @@ main().then(
     await flushStdout();
     process.exitCode = code;
   },
-  // Every argument or validation error lands here and has one shape: a JSON
-  // object on stdout under `--json`, the sentence on stderr otherwise, exit 1.
   async (err: Error) => {
     await fail(err.message);
     await flushStdout();

@@ -2,8 +2,6 @@ import AppKit
 import DustlessKit
 import SwiftUI
 
-/// Light / Dark / follow-the-system. The raw values double as the i18n keys
-/// (`system`, `light`, `dark`) already defined in the string tables.
 enum AppAppearance: String, CaseIterable, Identifiable {
     case system
     case light
@@ -11,23 +9,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// The AppKit appearance this mode means. `nil` = follow the system.
-    ///
-    /// An `NSAppearance`, not a SwiftUI `ColorScheme`, on purpose.
-    /// `.preferredColorScheme` does follow a live change and does release cleanly
-    /// when handed back `nil` — but it pins the choice on each *scene's* window,
-    /// so it never reaches a surface that is not inside a scene. The menu-bar
-    /// popover is AppKit's, drawn outside every SwiftUI scene, and that is the one
-    /// piece of the app that stayed on the system scheme while the window went
-    /// dark. `NSApp.appearance` is the single value every window, every sheet and
-    /// every AppKit-drawn control reads, and `nil` is the documented way to hand
-    /// the app back to the system.
-    ///
-    /// Measured, with the window already open and the setting flipped at runtime:
-    /// under `NSApp.appearance` the main window and the settings window both report
-    /// `appearance == nil` and an `effectiveAppearance` equal to the app's choice —
-    /// they *inherit* it instead of being pinned, so a window or sheet created
-    /// after the switch is already correct without anything re-applying it.
     @MainActor
     var nsAppearance: NSAppearance? {
         switch self {
@@ -38,10 +19,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Language + appearance, persisted in `UserDefaults` and shared as an
-/// environment object. Publishing the language re-renders every view that
-/// reads `t(...)`, so a switch applies without a relaunch; publishing the
-/// appearance pushes it onto the app, see `applyAppearance()`.
 @MainActor
 final class AppSettings: ObservableObject {
     private enum Key {
@@ -61,10 +38,6 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Whether the app is a normal app — Dock icon, app menu bar, ⌘Tab — or the
-    /// menu-bar-only shape it used to ship as. On by default: it has a real window,
-    /// and a window that cannot be reached from the Dock or ⌘Tab is a window the
-    /// user cannot find again.
     @Published var showInDock: Bool {
         didSet {
             UserDefaults.standard.set(showInDock, forKey: Key.showInDock)
@@ -79,30 +52,14 @@ final class AppSettings: ObservableObject {
         let storedAppearance = UserDefaults.standard.string(forKey: Key.appearance)
         appearance = storedAppearance.flatMap(AppAppearance.init(rawValue:)) ?? .system
         showInDock = UserDefaults.standard.object(forKey: Key.showInDock) as? Bool ?? true
-        // Before any window exists, so a stored Dark does not open the app in the
-        // system's appearance for a frame — and so it is not a promise Settings
-        // makes that the app only keeps until the next launch.
         applyAppearance()
         applyActivationPolicy()
     }
 
-    /// Push the current appearance onto the app, for every scene at once.
-    ///
-    /// Called from `init` and from the setter, and safe to call again: it only
-    /// writes the value that is set, so the app converges on the choice in
-    /// `AppSettings` instead of on whatever the last writer left behind.
     func applyAppearance() {
         NSApplication.shared.appearance = appearance.nsAppearance
     }
 
-    /// Show or hide the Dock icon, the app menu bar and the ⌘Tab entry.
-    ///
-    /// `.regular` is a normal app and `.accessory` is the menu-bar-only shape. The
-    /// bundle no longer carries `LSUIElement`, so `.regular` is what the process
-    /// starts as and `.accessory` is applied at launch when the user asked for it.
-    /// That is the whole reason this is runtime code: a plist key cannot be changed
-    /// once the app has launched, and the user has to be able to switch back
-    /// without a reinstall.
     func applyActivationPolicy() {
         NSApplication.shared.setActivationPolicy(showInDock ? .regular : .accessory)
     }
@@ -131,12 +88,6 @@ final class AppSettings: ObservableObject {
         L10n.render(language, tab.emptyKey)
     }
 
-    /// "just now" / "5 min ago" / "2 h ago" / "3 d ago", from the moment a report
-    /// landed. Shared by the dashboard's provenance line and the menu-bar popover
-    /// so the two surfaces cannot age the same report differently.
-    ///
-    /// It does not tick on its own: a label that silently grows stale is a lie in
-    /// the other direction, and the next scan redraws it anyway.
     func relativeAge(since date: Date?) -> String {
         guard let date else { return t("overviewAgeNow") }
         let seconds = Date().timeIntervalSince(date)
@@ -146,10 +97,6 @@ final class AppSettings: ObservableObject {
         return t("overviewAgeDays", ["n": "\(Int(seconds / 86400))"])
     }
 
-    /// Where the numbers on screen came from, in one line: how long ago the scan
-    /// ran, how many rules produced findings, how long it took. The rule count is
-    /// derived from the report rather than a hard-coded list, so a rule that found
-    /// nothing never reaches the user as a claim.
     func provenance(_ report: ScanReport?, scannedAt: Date?) -> String {
         guard let report else { return t("overviewNoScan") }
         return t("overviewProvenance", [
@@ -159,8 +106,6 @@ final class AppSettings: ObservableObject {
         ])
     }
 
-    /// The memory pressure word the engine reported. Both the dashboard and the
-    /// menu-bar popover print it, so the mapping lives once.
     func pressureLabel(_ pressure: Pressure) -> String {
         switch pressure {
         case .normal: t("pressureNormal")
@@ -169,7 +114,6 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// "today" or "12d old", from the age in days, in the current language.
     func age(_ days: Double) -> String {
         days < 1 ? t("today") : t("ageDays", ["n": "\(Int(days.rounded()))"])
     }

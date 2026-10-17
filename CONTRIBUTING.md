@@ -67,4 +67,10 @@ Mở issue kèm:
 - TypeScript, `bun:test` — không thêm test framework, không thêm dependency
 - Không dependency mới nếu chưa bàn bạc trong issue
 - Test cho mọi logic kiểm chứng — đây là phần dễ sai nhất của dự án
-- Comment giải thích *tại sao*, không phải *là gì*
+- **Không viết comment trong code.** Mọi lý do, số đo và cạm bẫy nằm ở
+  [`docs/DECISIONS.md`](docs/DECISIONS.md): đổi một quyết định thì sửa entry ở đó,
+  thêm một quyết định mới thì thêm entry ở đó. Code chỉ nói *làm gì*; file kia nói
+  *tại sao*, và nói một mạch thay vì rải rác từng dòng.
+- File logic (engine, service, model, script) tối đa **300–500 dòng**, quá thì tách
+  theo trách nhiệm. File view/layout và bảng dữ liệu (`Localization.swift`) không
+  bị giới hạn này.

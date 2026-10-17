@@ -4,9 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertTempRoot, cleanupAll, exec, sandbox, type Sandbox } from "./e2e/harness.ts";
 
-// Every case drives the compiled binary in a child process whose HOME is an
-// mkdtemp sandbox. Setting process.env.HOME would not move os.homedir() for the
-// engine, and a wrong home here means a real file leaves the build.
 const MiB = 1024 * 1024;
 const FILM = 300 * MiB;
 const BACKUP = 260 * MiB;
@@ -23,8 +20,6 @@ function dirname(path: string): string {
   return path.split(/[/\\]/).slice(0, -1).join("/");
 }
 
-/** `truncate` grows the file as a hole, so a 300 MiB fixture costs no disk and
- *  still reports its full size through lstat. */
 async function plant(path: string, bytes: number, mtime?: Date): Promise<string> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "");
@@ -33,8 +28,6 @@ async function plant(path: string, bytes: number, mtime?: Date): Promise<string>
   return path;
 }
 
-/** Everything the walker has an opinion about: two files over the default
- *  threshold, one under it, one tiny, the Trash, a `.git` pack and a link. */
 async function stage(box: Sandbox, link: boolean): Promise<void> {
   const { home } = box;
   await plant(join(home, "Downloads", "film.mov"), FILM, PINNED);
@@ -75,7 +68,6 @@ describe("largefiles listing", () => {
     for (const skipped of [".Trash/already-deleted.bin", "project/.git/objects/pack-0001"]) {
       expect([...listed].some((p) => p.endsWith(skipped))).toBe(false);
     }
-    // Everything else is walked on purpose — including the user documents.
     expect(names(files)).toContain("notes.bin");
     expect(names(files)).toContain("tiny.txt");
   });
@@ -113,7 +105,6 @@ describe("largefiles listing", () => {
   test.skipIf(process.platform === "win32")("never follows a symlink", async () => {
     const files = await list(box, "--min-size", "1b");
     expect(names(files)).not.toContain("film-link.mov");
-    // The link's target is still listed once, under its real path.
     expect(names(files).filter((n) => n === "film.mov")).toHaveLength(1);
   });
 });
@@ -150,8 +141,6 @@ describe("largefiles --delete", () => {
   });
 
   test("refuses a path outside the scanned roots and leaves it alone", async () => {
-    // Driven through exec() rather than box.run(), which only accepts
-    // arguments inside the sandbox home.
     const outside = assertTempRoot(await mkdtemp(join(tmpdir(), "dustless-largefiles-outside-")));
     const victim = await plant(join(outside, "keepme.bin"), FILM);
     try {
@@ -190,8 +179,6 @@ describe("largefiles --delete", () => {
     expect(await exists(join(dir, "backup.tar"))).toBe(true);
   });
 
-  // The red list (`src/core/paths.ts`) is the same one `scan` uses: these paths
-  // are never offered as findings, so `--delete` must refuse them by name too.
   test("refuses a red-listed path and leaves it in place", async () => {
     const doc = join(box.home, "Documents", "notes.bin");
     const run = await box.run(["largefiles", "--delete", doc, "--confirm", "--json"]);
@@ -204,8 +191,6 @@ describe("largefiles --delete", () => {
   });
 
   test("refuses a .git path even though the walker never enters one", async () => {
-    // The walk skips `.git` on its own, so this path can only be reached by
-    // naming it directly — which is exactly the case the guard is for.
     const pack = join(box.home, "project", ".git", "objects", "pack-0001");
     const run = await box.run(["largefiles", "--delete", pack, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
@@ -224,8 +209,6 @@ describe("largefiles --delete", () => {
   });
 
   test("a flag with no value is a usage error, not a path named after the next flag", async () => {
-    // `--delete --json` used to resolve the literal string "--json" against the
-    // cwd, so the flag after it silently became the file to trash.
     const before = await readdir(box.home);
     for (const args of [["largefiles", "--delete", "--json"], ["largefiles", "--delete", "--confirm", "--json"]]) {
       const run = await box.run(args);

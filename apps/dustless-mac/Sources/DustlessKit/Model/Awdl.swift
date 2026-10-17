@@ -1,7 +1,5 @@
 import Foundation
 
-/// The live state of the AWDL (AirDrop) radio. Mirrors `AwdlState` in
-/// `src/core/net/awdl.ts`; the raw values are the wire format, not a paraphrase.
 public enum AwdlState: String, Codable, Sendable {
     case on
     case off
@@ -25,8 +23,6 @@ public struct AwdlOutcome: Codable, Sendable, Equatable {
     }
 }
 
-/// The report from `dustless awdl --json`. `outcome` is null for a read-only
-/// status call and set once a toggle has been attempted.
 public struct AwdlReport: Codable, Sendable, Equatable {
     public let platform: String
     public let interface: String?
@@ -43,9 +39,6 @@ public struct AwdlReport: Codable, Sendable, Equatable {
     }
 }
 
-/// The single sudoers rule the app installs for one-click toggling. Printed by
-/// `dustless awdl --print-privilege`, so the app never keeps its own copy of the
-/// rule text.
 public struct AwdlPrivilege: Codable, Sendable, Equatable {
     public let user: String
     public let path: String

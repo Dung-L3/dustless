@@ -10,10 +10,6 @@ struct SummaryHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: PanelStyle.Space.l) {
-            // `—` until there is a report. "Reclaimable 0 B · Free 0 B" above
-            // "Nothing scanned yet" reads as a measurement; a dash reads as the
-            // absence of one. A real zero after a scan is still a real zero, so
-            // the dash is only ever the missing report.
             metric(
                 title: settings.t("reclaimableMetric"),
                 value: report.map { ByteFormat.string($0.reclaimable) } ?? "—",
@@ -55,10 +51,6 @@ struct SummaryHeader: View {
                 }
             }
             .disabled(isScanning)
-            // No ⌘R here: the File menu's command owns it. A second
-            // registration with a narrower disable rule meant that in Cleanup,
-            // where this header is on screen, the two answers to ⌘R disagreed
-            // about whether the scan could start.
             .help(settings.t("rescanHelp"))
         }
         .padding(.horizontal, PanelStyle.Space.l)

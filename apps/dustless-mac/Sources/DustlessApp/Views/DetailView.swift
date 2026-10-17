@@ -8,7 +8,6 @@ struct DetailView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Findings-list opacity, animated once per new scan report and nothing else.
     @State private var listOpacity = 1.0
 
     var body: some View {
@@ -26,10 +25,6 @@ struct DetailView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // A rescan that failed keeps the report it could not replace, so the
-            // error is a banner over the numbers rather than a pane that took
-            // them away. Without a report there is nothing to keep, and the
-            // error owns the pane — with the retry under it.
             if let report = store.report {
                 if let error = store.engineError {
                     staleBanner(settings.text(error))
@@ -51,9 +46,6 @@ struct DetailView: View {
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: store.busyMessage)
     }
 
-    /// The engine's sentence, verbatim, with the × that puts it away. Same
-    /// affordance as the result cards: a banner nobody can clear is a permanent
-    /// one.
     private func staleBanner(_ text: String) -> some View {
         HStack(alignment: .top, spacing: PanelStyle.Space.s) {
             Label(text, systemImage: "exclamationmark.triangle.fill")
@@ -82,20 +74,12 @@ struct DetailView: View {
         let allItems = store.tierTab.findings(in: report)
         let filteredItems = filteredFindings(allItems)
         return VStack(spacing: 0) {
-            // What the last clean did, above the list it changed rather than
-            // over it: after the deletion the user should still be able to read
-            // what is left. Stays on screen through the post-clean rescan, which
-            // is what leaves the fresh list visible under it.
             if let apply = store.lastApply, store.showingCleanupResult {
                 CleanupResultCard(report: apply) { store.showingCleanupResult = false }
                     .padding(.horizontal, PanelStyle.Space.l)
                     .padding(.top, PanelStyle.Space.m)
             }
 
-            // The same in-panel filter field every other module uses, rather
-            // than `.searchable`: that attaches to the window toolbar, so the
-            // field appeared beside the sidebar and a query was lost on every
-            // module switch. The query lives in the store, which outlives both.
             PanelFilterBar(placeholder: settings.t("searchFindings"), text: $store.findingsQuery) {
                 EmptyView()
             } trailing: {
@@ -119,9 +103,6 @@ struct DetailView: View {
                     }
                 }
                 .listStyle(.inset)
-                // A new report replaced the findings under the cursor, so a short
-                // fade says "these are new numbers" without moving anything —
-                // a slide would imply the rows scrolled away on their own.
                 .opacity(listOpacity)
             }
 
@@ -133,9 +114,6 @@ struct DetailView: View {
         }
     }
 
-    /// Opacity only, and under 200ms: enough for a changed list to register as
-    /// changed, short enough that a ⌘R does not feel like a page turn. Nothing
-    /// happens at all when the user asked for less motion.
     private func fadeInFindings() {
         guard !reduceMotion else {
             listOpacity = 1
@@ -162,10 +140,6 @@ struct DetailView: View {
                     isSelected: store.selection.contains(finding.id),
                     onToggle: { store.toggle(finding) }
                 )
-                // Held for the whole run: the list under these rows is about to
-                // be replaced by a new report with its own selection, so a
-                // toggle made during the scan is a decision about a list that is
-                // no longer on screen.
                 .disabled(store.isBusy)
             }
         } header: {

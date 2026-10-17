@@ -8,7 +8,6 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    /// i18n key for the tab label (`safeTab` / `reviewTab` / `lockedTab`).
     var titleKey: String {
         switch self {
         case .safe: "safeTab"
@@ -17,7 +16,6 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// i18n key for the empty state (`emptySafe` / `emptyReview` / `emptyLocked`).
     var emptyKey: String {
         switch self {
         case .safe: "emptySafe"
@@ -42,9 +40,6 @@ enum TierTab: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Deliberately no keyboard shortcut. These used to be ⌘1/⌘2/⌘3, and nothing
-    /// referenced them — the Go menu owns those keys for the modules, so the tier
-    /// switch had two live answers to one keypress.
     func findings(in report: ScanReport) -> [Finding] {
         report.findings.filter { finding in
             switch self {

@@ -1,9 +1,3 @@
-# Dustless rule database
-# tier: green = tự tái tạo · yellow = cần quyết định · red = nằm trong danh sách đen tích hợp
-# requireVerify: nếu kiểm chứng thất bại, rule bị hạ xuống yellow
-# match: regex lọc basename của thư mục con
-# paths: key = mac | win | linux | all
-
 - id: gradle.version_cache
   tier: green
   desc: Gradle cache của version không project nào dùng

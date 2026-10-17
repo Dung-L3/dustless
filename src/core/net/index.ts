@@ -79,12 +79,6 @@ export async function net(opts: NetOptions = {}): Promise<NetReport> {
   };
 }
 
-/**
- * The process exit status for one run. A refused or failed outcome means the
- * operation did not happen, so a script has to be able to tell "did nothing"
- * from "did the thing": both are a non-zero exit, and the report (unchanged) is
- * what says why.
- */
 export function netExitCode(report: Pick<NetReport, "outcomes">): 0 | 1 {
   return report.outcomes.some((o) => o.status === "refused" || o.status === "failed") ? 1 : 0;
 }
@@ -122,11 +116,6 @@ async function runOp(
       before,
     };
   }
-  // Root runs the step directly. Otherwise it goes through `sudo -n <path>`,
-  // which the scoped sudoers rule can allow and nothing else — `-n` fails
-  // loudly instead of blocking on a password prompt the caller cannot answer.
-  // There is deliberately no unprivileged fallback: a network change that
-  // half-applied is worse than a clean refusal.
   return await execute(id, steps, before, run, !root());
 }
 
@@ -166,10 +155,6 @@ async function flushDns(steps: Step[], run: Runner): Promise<NetOutcome> {
   };
 }
 
-/**
- * Runs every step of one operation. `escalate` wraps each in `sudo -n`, the
- * same way the AWDL toggle does, so one scoped sudoers rule covers both.
- */
 async function execute(
   id: NetOpId,
   steps: Step[],
@@ -185,11 +170,6 @@ async function execute(
     if (!res.ok && !failure) failure = res.err.trim() || `${step.cmd} failed (exit ${res.code})`;
   }
   if (failure) {
-    // A missing or stale sudoers rule is not a broken command, it is a consent
-    // the user has not given yet — name the fix instead of showing sudo's own
-    // sentence. `not allowed to execute` is what sudo says when a rule exists
-    // but does not match (a different interface, a service renamed), and that
-    // is the same situation: it needs the rule installed, not a debugging pass.
     const needsConsent = escalate && /password is required|a terminal is required|not allowed to execute/i.test(failure);
     return { op: id, status: needsConsent ? "refused" : "failed", detail: needsConsent ? PRIVILEGE_HINT : failure, before };
   }

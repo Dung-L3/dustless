@@ -2,10 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 
-// The menu bar mark is an NSImage template (isTemplate = true): macOS uses only
-// its alpha channel. An opaque background therefore paints a solid square in
-// the menu bar, which is exactly what shipped before. Decode the PNG and assert
-// the background is transparent, so it cannot regress unnoticed.
 const ASSET = join(import.meta.dir, "..", "apps", "dustless-mac", "Assets", "MenuBarIcon.png");
 
 type Png = { width: number; height: number; rgba: Uint8Array };

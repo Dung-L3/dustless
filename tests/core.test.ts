@@ -323,8 +323,6 @@ describe("an explicit selection", () => {
   });
 
   test("a selection never widens past the safety guards", async () => {
-    // The selection is a filter on what may be deleted, never a licence: a red
-    // path inside the set, and a blocked finding inside the set, both stay.
     const red = join(sandbox, "Documents", "notes");
     const blocked = join(sandbox, "blocked-in-selection");
     await mkdir(red, { recursive: true });

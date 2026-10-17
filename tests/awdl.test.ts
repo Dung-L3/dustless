@@ -110,7 +110,6 @@ describe("setAwdl", () => {
     expect(report.outcome?.status).toBe("refused");
     expect(report.outcome?.detail).toContain("root");
     expect(report.changed).toBe(false);
-    // The failed escalation must not fall back to an unprivileged write.
     expect(calls.some((c) => c.cmd === IFCONFIG && c.args.includes("down"))).toBe(false);
   });
 
@@ -122,9 +121,6 @@ describe("setAwdl", () => {
   });
 
   test("a stale sudoers rule — 'not allowed to execute' — is a refusal, not a failure", async () => {
-    // sudo says this when a rule exists but does not match the command. The
-    // user's situation is the same as having no rule at all, so it is refused
-    // with the honest hint instead of reported as a broken command.
     const { run } = stub({
       "sudo -n /sbin/ifconfig awdl0 down": {
         ok: false,
@@ -164,7 +160,6 @@ describe("awdlPrivilege", () => {
     expect(privilege.rule).toBe(
       "mac ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up\n",
     );
-    // NOPASSWD, scoped, and no wildcard that would widen the rule.
     expect(privilege.rule).toContain("NOPASSWD:");
     expect(privilege.rule).not.toContain("*");
   });
