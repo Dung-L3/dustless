@@ -234,3 +234,46 @@ describe.skipIf(process.platform !== "darwin")("net --print-privilege refuses an
     await box.dispose();
   });
 });
+describe("arguments are validated before anything runs", () => {
+  let box: Sandbox;
+
+  beforeAll(async () => {
+    box = await sandbox("flags");
+  });
+  afterAll(async () => {
+    await box.dispose();
+  });
+
+  // `mcp` is excluded on purpose: a validation bug there would start a stdio
+  // server and hang the suite instead of failing a test.
+  const commands = ["scan", "apply", "rule", "doctor", "net", "awdl", "ram", "apps", "largefiles"];
+
+  test("an unknown flag is refused for every command, as one JSON object", async () => {
+    for (const command of commands) {
+      const run = await box.run([command, "--definitely-not-a-flag", "--json"]);
+      expect({ command, code: run.code }).toEqual({ command, code: 1 });
+      const payload = oneJsonObject(run.stdout);
+      expect(String(payload.error)).toContain("unknown flag");
+      expect(String(payload.error)).toContain(command);
+    }
+  });
+
+  test("a typo on net cannot run the default DNS flush", async () => {
+    const run = await box.run(["net", "--bogus", "--json"]);
+    expect(run.code).toBe(1);
+    expect(String(oneJsonObject(run.stdout).error)).toContain("unknown flag");
+  });
+
+  test("--help wins over running the command", async () => {
+    const run = await box.run(["scan", "--help"]);
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("dustless");
+    expect(run.stdout).not.toContain('"findings"');
+  });
+
+  test("doctor --json and doctor agree on the exit code", async () => {
+    const json = await box.run(["doctor", "--json"]);
+    const human = await box.run(["doctor"]);
+    expect(json.code).toBe(human.code);
+  });
+});

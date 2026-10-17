@@ -97,7 +97,7 @@ struct MemoryModuleView: View {
 
     var body: some View {
         state
-            .task { await store.fetchMemory() }
+            .task { await store.ensureMemory() }
     }
 
     @ViewBuilder

@@ -45,6 +45,9 @@ final class NetControl: ObservableObject {
     @Published private(set) var privilegeError: L10nText?
 
     let awdl = AwdlControl.shared
+    /// When the last successful state read landed. A module switch within the
+    /// window reuses it; the Refresh button always forces a read.
+    private(set) var lastLoadedAt: Date?
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -78,6 +81,7 @@ final class NetControl: ObservableObject {
         loadError = nil
         do {
             report = try await DustlessCLI.resolve().net()
+            lastLoadedAt = Date()
         } catch {
             loadError = Self.describe(error)
         }
@@ -86,6 +90,13 @@ final class NetControl: ObservableObject {
         // window owns — without this the toggle reads "unknown" until the menu
         // bar happens to refresh it.
         await awdl.refresh()
+    }
+
+    /// Same rule as memory: switching to the module is not a reason to re-read
+    /// the network; a stale panel is.
+    func refreshIfStale(maxAge: TimeInterval = 15) async {
+        if let at = lastLoadedAt, report != nil, Date().timeIntervalSince(at) < maxAge { return }
+        await refresh()
     }
 
     /// Runs one operation, then re-reads the state so the connection block shows

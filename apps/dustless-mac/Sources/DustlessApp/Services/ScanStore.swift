@@ -44,6 +44,9 @@ final class ScanStore: ObservableObject {
 
     // Independent loading state for Memory/Storage windows — does NOT touch main phase/cli
     @Published private(set) var memoryPhase: LoadPhase = .idle
+    /// When the last successful memory read landed, so a module switch can reuse
+    /// it instead of paying for `ram --json` again.
+    private(set) var memoryLoadedAt: Date?
     @Published private(set) var memoryError: L10nText?
     @Published private(set) var storagePhase: LoadPhase = .idle
     @Published private(set) var storageError: L10nText?
@@ -164,12 +167,22 @@ final class ScanStore: ObservableObject {
             let cli = try DustlessCLI.resolve()
             let report = try await cli.ram()
             self.memoryReport = report
+            memoryLoadedAt = Date()
             memoryPhase = .loaded
         } catch {
             memoryReport = nil
+            memoryLoadedAt = nil
             memoryError = Self.describe(error)
             memoryPhase = .failed
         }
+    }
+
+    /// Reuses the last successful read when it is recent. The dashboard and the
+    /// Memory module both appear on a module switch, which is not a reason to
+    /// re-read the whole process table.
+    func ensureMemory(maxAge: TimeInterval = 45) async {
+        if let at = memoryLoadedAt, memoryReport != nil, Date().timeIntervalSince(at) < maxAge { return }
+        await fetchMemory()
     }
 
     func fetchStorage() async {

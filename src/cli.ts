@@ -111,6 +111,39 @@ function required(name: string, usage: string): string {
   return value;
 }
 
+/**
+ * The flags each command actually reads. A typo used to be harmless-looking and
+ * then perform a real action (`net --bogus` ran the default DNS flush), so an
+ * unknown flag is refused before anything runs. Kept as data next to the parser
+ * so a new flag has one obvious place to be declared.
+ */
+const GLOBAL_FLAGS = ["json", "quiet", "yes", "help", "version"] as const;
+const COMMAND_FLAGS: Record<string, readonly string[]> = {
+  scan: [],
+  apply: ["only-file"],
+  rule: [],
+  doctor: [],
+  net: ["advanced", "flush-dns", "reset-dns", "renew-dhcp", "clear-arp", "reset-mtu", "flush-routing", "dry-run", "force", "print-privilege"],
+  awdl: ["on", "off", "print-privilege"],
+  ram: ["list", "kill", "confirm", "force", "sigkill", "filter", "sort"],
+  apps: ["uninstall", "confirm", "purge", "trash-dir"],
+  largefiles: ["min-size", "limit", "delete", "confirm", "trash-dir"],
+  mcp: [],
+  version: [],
+  help: [],
+};
+
+/** The first `--flag` this command does not declare, or null. Values (the token
+ *  after an option) never start with `--`, so they are not mistaken for flags. */
+function unknownFlag(command: string): string | null {
+  const allowed = new Set<string>([...GLOBAL_FLAGS, ...(COMMAND_FLAGS[command] ?? [])]);
+  for (const token of argv) {
+    if (!token.startsWith("--")) continue;
+    if (!allowed.has(token.slice(2))) return token;
+  }
+  return null;
+}
+
 async function printScan(report: ScanReport): Promise<void> {
   if (flag("json")) {
     await writeOut(`${JSON.stringify(report)}\n`);
@@ -308,9 +341,14 @@ async function runDoctor(): Promise<number> {
     paths: Object.fromEntries(await Promise.all(KEY_PATHS.map(async (p) => [p, await probe(p)] as const))),
     hygiene,
   };
+  // The Full Disk Access verdict is the reason this command exits 1. Compute it
+  // before the machine-readable branch too, or `doctor --json` and `doctor`
+  // disagree about the same machine.
+  const mail = report.paths["~/Library/Mail"] ?? "";
+  const missingFda = mail.includes("EPERM") || mail.includes("EACCES");
   if (flag("json")) {
     await writeOut(`${JSON.stringify(report, null, 2)}\n`);
-    return 0;
+    return missingFda ? 1 : 0;
   }
   say(bold(`\ndustless doctor ${VERSION}`));
   for (const [key, value] of Object.entries(report).slice(0, 6)) {
@@ -318,10 +356,9 @@ async function runDoctor(): Promise<number> {
   }
   say(bold("\n  đọc được các path"));
   for (const [path, state] of Object.entries(report.paths)) say(`  ${dim(path.padEnd(26))} ${state}`);
-  const mail = report.paths["~/Library/Mail"] ?? "";
   // This line is the reason the run exits 1, so it is an error: stderr, and
   // never taken away by --quiet.
-  if (mail.includes("EPERM") || mail.includes("EACCES")) {
+  if (missingFda) {
     errorOut(`✖ thiếu Full Disk Access — cấp trong System Settings › Privacy & Security › Full Disk Access`);
   } else {
     say(paint("32", "✔ không thấy dấu hiệu thiếu Full Disk Access"));
@@ -333,7 +370,7 @@ async function runDoctor(): Promise<number> {
   }
   if (stale.length > 8) say(dim(`  … và ${stale.length - 8} mục nữa, xem --json`));
   if (hygiene.items.length === 0) say(dim("  không có mục nào đáng ngờ"));
-  return mail.includes("EPERM") ? 1 : 0;
+  return missingFda ? 1 : 0;
 }
 
 async function runNet(): Promise<number> {
@@ -583,7 +620,14 @@ async function main(): Promise<number> {
     console.log(flag("json") ? JSON.stringify({ version: VERSION }) : VERSION);
     return 0;
   }
+  // `scan --help` used to run a full scan. Help wins for every command.
+  if (flag("help")) {
+    console.log(HELP);
+    return 0;
+  }
   const [command = "help", ...rest] = args.positional;
+  const unknown = unknownFlag(command);
+  if (unknown) return await fail(`unknown flag ${unknown} for ${command} — chạy \`dustless help\``);
   if (command === "scan") return await runScan();
   if (command === "apply") return await runApply();
   if (command === "rule") return await runRule(rest[0] ?? "", rest.slice(1));
