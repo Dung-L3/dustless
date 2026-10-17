@@ -49,15 +49,9 @@ struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
     @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var store: ScanStore
 
-    @State private var volumes: [VolumeInfo] = []
     @State private var section: StorageSection = .apps
-    @State private var apps: [InstalledApp] = []
-    @State private var isLoadingApps = false
-    /// Held as a key, never as rendered text: `ScanStore.describe` maps the
-    /// engine's own error onto the app's wording, so a message that outlives a
-    /// language switch re-renders in the language that is on screen now.
-    @State private var appsError: L10nText?
     @State private var appsQuery = ""
     @State private var sheet: StorageSheet?
     /// What the last uninstall or trash removed, drawn inline above the list.
@@ -72,16 +66,11 @@ struct StorageView: View {
     /// language.
     @State private var nextAlert: (titleKey: String, message: L10nText)?
     @State private var isUninstalling = false
-    @State private var largeFiles: [LargeFile] = []
-    @State private var isLoadingFiles = false
-    @State private var filesError: L10nText?
-    @State private var filesLoaded = false
     @State private var filesQuery = ""
     @State private var isTrashingFile = false
     /// Resolved at render, never stored rendered — see `nextAlert`.
     @State private var actionErrorTitleKey = ""
     @State private var actionError: L10nText?
-    @State private var dataLoaded = false
 
     var body: some View {
         // Filtered once here and threaded down: the body re-runs on every
@@ -98,17 +87,14 @@ struct StorageView: View {
         } filters: {
             filterBar(
                 shown: section == .apps ? appsVisible.count : filesVisible.count,
-                total: section == .apps ? apps.count : largeFiles.count
+                total: section == .apps ? store.storageApps.count : store.storageLargeFiles.count
             )
         } content: {
             inventory(apps: appsVisible, files: filesVisible)
         }
         .task {
-            if !dataLoaded {
-                await loadVolumes()
-                await loadApps()
-                dataLoaded = true
-            }
+            await store.ensureStorageVolumes()
+            await store.ensureStorageApps()
         }
         .sheet(item: $sheet, onDismiss: presentNext) { item in
             sheetContent(item)
@@ -215,7 +201,7 @@ struct StorageView: View {
     private var volumeStrip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: PanelStyle.Space.s) {
-                ForEach(volumes) { volume in
+                ForEach(store.storageVolumes) { volume in
                     VolumeCard(volume: volume)
                 }
             }
@@ -238,9 +224,8 @@ struct StorageView: View {
             .onChange(of: section) { _, next in
                 // Walking the home directory is slower than reading an app
                 // list, so it waits until the tab is actually opened.
-                if next == .files, !filesLoaded {
-                    filesLoaded = true
-                    Task { await loadLargeFiles() }
+                if next == .files {
+                    Task { await store.ensureStorageFiles() }
                 }
             }
         } trailing: {
@@ -275,8 +260,8 @@ struct StorageView: View {
 
     private var isInventoryLoading: Bool {
         switch section {
-        case .apps: isLoadingApps
-        case .files: isLoadingFiles
+        case .apps: store.isLoadingStorageApps
+        case .files: store.isLoadingStorageFiles
         }
     }
 
@@ -301,19 +286,19 @@ struct StorageView: View {
     /// filter that hides everything. The last one is not an empty list.
     @ViewBuilder
     private func appsBody(_ visible: [InstalledApp]) -> some View {
-        if let error = appsError {
+        if let error = store.storageAppsError {
             PanelStateView(
                 kind: .error,
                 message: settings.text(error),
                 title: settings.t("appsTitle"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await loadApps() } }
+                action: { Task { await store.fetchStorageApps() } }
             )
-        } else if apps.isEmpty {
+        } else if store.storageApps.isEmpty {
             // Zero applications is a real answer, not a reason to spin.
             PanelStateView(
-                kind: isLoadingApps ? .loading : .empty,
-                message: isLoadingApps ? settings.t("busyApps") : settings.t("appsEmpty")
+                kind: store.isLoadingStorageApps ? .loading : .empty,
+                message: store.isLoadingStorageApps ? settings.t("busyApps") : settings.t("appsEmpty")
             )
             .frame(minHeight: 120)
         } else if visible.isEmpty {
@@ -339,18 +324,18 @@ struct StorageView: View {
     /// retry, or the rows.
     @ViewBuilder
     private func largeFilesBody(_ visible: [LargeFile]) -> some View {
-        if let error = filesError {
+        if let error = store.storageFilesError {
             PanelStateView(
                 kind: .error,
                 message: settings.text(error),
                 title: settings.t("largeFilesTitle"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await loadLargeFiles() } }
+                action: { Task { await store.fetchStorageFiles() } }
             )
-        } else if largeFiles.isEmpty {
+        } else if store.storageLargeFiles.isEmpty {
             PanelStateView(
-                kind: isLoadingFiles ? .loading : .empty,
-                message: isLoadingFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty")
+                kind: store.isLoadingStorageFiles ? .loading : .empty,
+                message: store.isLoadingStorageFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty")
             )
             .frame(minHeight: 120)
         } else if visible.isEmpty {
@@ -380,14 +365,14 @@ struct StorageView: View {
 
     private var filteredApps: [InstalledApp] {
         let needle = needle(appsQuery)
-        guard !needle.isEmpty else { return apps }
-        return apps.filter { $0.matches(needle) }
+        guard !needle.isEmpty else { return store.storageApps }
+        return store.storageApps.filter { $0.matches(needle) }
     }
 
     private var filteredFiles: [LargeFile] {
         let needle = needle(filesQuery)
-        guard !needle.isEmpty else { return largeFiles }
-        return largeFiles.filter { $0.matches(needle) }
+        guard !needle.isEmpty else { return store.storageLargeFiles }
+        return store.storageLargeFiles.filter { $0.matches(needle) }
     }
 
     /// The count pill. With a filter on it reads "3 of 40" instead of pretending
@@ -440,48 +425,6 @@ struct StorageView: View {
         "\(settings.t("reclaimableHelp")) \(settings.t("storageNote"))"
     }
 
-    /// Reading volume metadata is synchronous disk I/O, and a network or
-    /// external volume can take seconds to answer — on the main actor that is a
-    /// frozen window, so it runs on a detached task and only the result hops back.
-    private func loadVolumes() async {
-        volumes = await Task.detached { Self.readVolumes() }.value
-    }
-
-    private nonisolated static func readVolumes() -> [VolumeInfo] {
-        let keys: [URLResourceKey] = [.volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]
-        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        var result: [VolumeInfo] = []
-        for url in urls {
-            do {
-                let values = try url.resourceValues(forKeys: Set(keys))
-                guard let total = values.volumeTotalCapacity,
-                      let available = values.volumeAvailableCapacity,
-                      total > 0, available >= 0 else { continue }
-                let totalU = UInt64(total)
-                let availableU = UInt64(available)
-                let used = totalU - availableU
-                let name = values.volumeName ?? url.lastPathComponent
-                result.append(VolumeInfo(name: name, total: totalU, used: used, free: availableU))
-            } catch {
-                continue
-            }
-        }
-        return result
-    }
-
-    private func loadApps() async {
-        isLoadingApps = true
-        appsError = nil
-        do {
-            let cli = try DustlessCLI.resolve()
-            let fetchedApps = try await cli.apps()
-            apps = fetchedApps.sorted { $0.bytes > $1.bytes }
-        } catch {
-            appsError = ScanStore.describe(error)
-        }
-        isLoadingApps = false
-    }
-
     private func performUninstall(_ app: InstalledApp) async {
         isUninstalling = true
         defer { isUninstalling = false }
@@ -495,26 +438,14 @@ struct StorageView: View {
             // The app is gone now, so it leaves the list on this run rather than
             // when the next read finishes: a slow or failed refresh must not leave
             // a deleted bundle sitting in the inventory.
-            apps.removeAll { $0.path == app.path }
-            await loadApps()
+            store.removeStorageApp(atPath: app.path)
+            await store.fetchStorageApps()
             // Purging frees real space on the disk it lived on, so the volume
             // strip has to re-read free space, not just the app list.
-            await loadVolumes()
+            await store.fetchStorageVolumes()
         } catch {
             fail(error, titleKey: "appsUninstall")
         }
-    }
-
-    private func loadLargeFiles() async {
-        isLoadingFiles = true
-        filesError = nil
-        do {
-            let cli = try DustlessCLI.resolve()
-            largeFiles = try await cli.largefiles()
-        } catch {
-            filesError = ScanStore.describe(error)
-        }
-        isLoadingFiles = false
     }
 
     private func performTrash(_ file: LargeFile) async {
@@ -525,7 +456,7 @@ struct StorageView: View {
             let report = try await cli.deleteLargeFile(path: file.path)
             result = StorageResult(report: report, titleKey: "largeFilesTrashed")
             sheet = nil
-            largeFiles.removeAll { $0.path == file.path }
+            store.removeStorageFile(atPath: file.path)
             // The report is on screen already; re-reading the walk is not worth
             // the seconds it takes when the tab is closed again.
         } catch {

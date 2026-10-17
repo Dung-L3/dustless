@@ -51,6 +51,26 @@ final class ScanStore: ObservableObject {
     @Published private(set) var storagePhase: LoadPhase = .idle
     @Published private(set) var storageError: L10nText?
 
+    // Storage inventory: the volume strip and the two lists in StorageView.
+    // Held here rather than in the view because StorageView is rebuilt on every
+    // module switch — its @State used to throw the inventory away, so every visit
+    // re-read the app list and every mounted volume. A last-loaded timestamp lets
+    // a return inside the window repaint from cache and re-read only when the
+    // list is genuinely old.
+    @Published private(set) var storageVolumes: [VolumeInfo] = []
+    @Published private(set) var storageApps: [InstalledApp] = []
+    @Published private(set) var storageLargeFiles: [LargeFile] = []
+    @Published private(set) var isLoadingStorageApps = false
+    @Published private(set) var isLoadingStorageFiles = false
+    @Published private(set) var storageAppsError: L10nText?
+    @Published private(set) var storageFilesError: L10nText?
+    /// When the last successful read of each inventory landed, so a module
+    /// switch can reuse it instead of paying for the engine again. `nil` until
+    /// the first success, which is how a failed read retries on the next visit.
+    private(set) var storageVolumesLoadedAt: Date?
+    private(set) var storageAppsLoadedAt: Date?
+    private(set) var storageFilesLoadedAt: Date?
+
     private var cli: DustlessCLI?
 
     var canClean: Bool {
@@ -199,6 +219,103 @@ final class ScanStore: ObservableObject {
             storageError = Self.describe(error)
             storagePhase = .failed
         }
+    }
+
+    // MARK: - Storage inventory
+
+    /// Reuses the last successful read when it is recent. A module switch is not
+    /// a reason to re-read every mounted volume or the app list; a stale panel
+    /// is. The uninstall path and the retry buttons call the `fetch…` versions
+    /// directly, which never consult the window.
+    func ensureStorageVolumes(maxAge: TimeInterval = 45) async {
+        if let at = storageVolumesLoadedAt, Date().timeIntervalSince(at) < maxAge { return }
+        await fetchStorageVolumes()
+    }
+
+    func ensureStorageApps(maxAge: TimeInterval = 45) async {
+        if let at = storageAppsLoadedAt, Date().timeIntervalSince(at) < maxAge { return }
+        await fetchStorageApps()
+    }
+
+    func ensureStorageFiles(maxAge: TimeInterval = 45) async {
+        if let at = storageFilesLoadedAt, Date().timeIntervalSince(at) < maxAge { return }
+        await fetchStorageFiles()
+    }
+
+    /// Reads every mounted volume. Synchronous disk I/O, and a network or
+    /// external volume can take seconds to answer — on the main actor that is a
+    /// frozen window, so it runs on a detached task and only the result hops back.
+    func fetchStorageVolumes() async {
+        storageVolumes = await Task.detached { Self.readVolumes() }.value
+        storageVolumesLoadedAt = Date()
+    }
+
+    private nonisolated static func readVolumes() -> [VolumeInfo] {
+        let keys: [URLResourceKey] = [.volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]
+        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+        var result: [VolumeInfo] = []
+        for url in urls {
+            do {
+                let values = try url.resourceValues(forKeys: Set(keys))
+                guard let total = values.volumeTotalCapacity,
+                      let available = values.volumeAvailableCapacity,
+                      total > 0, available >= 0 else { continue }
+                let totalU = UInt64(total)
+                let availableU = UInt64(available)
+                let used = totalU - availableU
+                let name = values.volumeName ?? url.lastPathComponent
+                result.append(VolumeInfo(name: name, total: totalU, used: used, free: availableU))
+            } catch {
+                continue
+            }
+        }
+        return result
+    }
+
+    /// Always re-reads the app list, bypassing the staleness window. The
+    /// uninstall path and the retry button both force a fresh answer.
+    func fetchStorageApps() async {
+        guard !isLoadingStorageApps else { return }
+        isLoadingStorageApps = true
+        storageAppsError = nil
+        do {
+            let cli = try DustlessCLI.resolve()
+            let fetched = try await cli.apps()
+            storageApps = fetched.sorted { $0.bytes > $1.bytes }
+            storageAppsLoadedAt = Date()
+        } catch {
+            storageAppsError = Self.describe(error)
+        }
+        isLoadingStorageApps = false
+    }
+
+    /// Always re-walks the home directory, bypassing the staleness window. The
+    /// retry button forces it; a trash just removes the row and leaves the walk
+    /// for the next stale visit.
+    func fetchStorageFiles() async {
+        guard !isLoadingStorageFiles else { return }
+        isLoadingStorageFiles = true
+        storageFilesError = nil
+        do {
+            let cli = try DustlessCLI.resolve()
+            storageLargeFiles = try await cli.largefiles()
+            storageFilesLoadedAt = Date()
+        } catch {
+            storageFilesError = Self.describe(error)
+        }
+        isLoadingStorageFiles = false
+    }
+
+    /// The app is gone now, so it leaves the list on this run rather than when
+    /// the next read finishes: a slow or failed refresh must not leave a deleted
+    /// bundle sitting in the inventory.
+    func removeStorageApp(atPath path: String) {
+        storageApps.removeAll { $0.path == path }
+    }
+
+    /// The file was moved to the Trash, so it leaves the list on this run.
+    func removeStorageFile(atPath path: String) {
+        storageLargeFiles.removeAll { $0.path == path }
     }
 
     static func describe(_ error: Error) -> L10nText {
