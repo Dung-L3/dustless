@@ -30,6 +30,7 @@ struct MenuBarContent: View {
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
@@ -202,6 +203,23 @@ struct MenuBarContent: View {
 
     // MARK: - Actions
 
+    /// Navigating away is the one moment the popover has to get out of the way:
+    /// everything else here (Scan, Rescan, Refresh, the AirDrop flip) is meant to
+    /// stay on screen while its result lands. A `.window` popover only closes on a
+    /// real click outside, so without this a row that opens the main window leaves
+    /// the popover floating over the module it just opened — the old `.menu` style
+    /// closed itself the moment an item was picked.
+    ///
+    /// `dismiss` is the environment action every presentation gets, and it is the
+    /// only one that works here: ordering the panel out or closing it directly
+    /// hides the window without telling SwiftUI, whose "is presented" flag then
+    /// still reads open — the next click on the status item does nothing and the
+    /// one after that reopens. Measured on the built bundle, both ways.
+    private func leave(_ action: () -> Void) {
+        dismiss()
+        action()
+    }
+
     /// The two paths that matter. The same shape the Overview dashboard uses: the
     /// scan while there is no report, and Review & Clean once there is — it opens
     /// the confirmation sheet through the router and never deletes on its own.
@@ -253,8 +271,10 @@ struct MenuBarContent: View {
     /// Cleanup, then the confirmation. `select` brings the window forward too, so
     /// the sheet is raised over a window the user can see.
     private func reviewAndClean() {
-        router.select(.cleanup)
-        store.showingConfirmation = true
+        leave {
+            router.select(.cleanup)
+            store.showingConfirmation = true
+        }
     }
 
     // MARK: - Destinations
@@ -270,7 +290,7 @@ struct MenuBarContent: View {
     private func destinationRow(_ module: Module) -> some View {
         let title = settings.t(module.titleKey)
         return Button {
-            router.select(module)
+            leave { router.select(module) }
         } label: {
             HStack(spacing: PanelStyle.Space.s) {
                 Image(systemName: module.symbolName)
@@ -373,13 +393,17 @@ struct MenuBarContent: View {
 
     private var footer: some View {
         HStack(spacing: PanelStyle.Space.s) {
-            Button(settings.t("openDustless"), action: onOpenWindow)
-                .controlSize(.small)
+            Button {
+                leave(onOpenWindow)
+            } label: {
+                Text(settings.t("openDustless"))
+            }
+            .controlSize(.small)
 
             Spacer(minLength: PanelStyle.Space.s)
 
             Button {
-                openSettings()
+                leave { openSettings() }
             } label: {
                 Image(systemName: "gearshape")
             }
