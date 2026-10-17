@@ -15,6 +15,13 @@ struct MenuBarContent: View {
             if let report = store.report {
                 Text(settings.t("freeStat", ["amount": ByteFormat.string(report.freeBefore)]))
                 Text("\(settings.t("reclaimableMetric")): \(ByteFormat.string(report.reclaimable))")
+                if store.engineError != nil {
+                    // The numbers above are from the last good scan; silently
+                    // showing them after a failed one is the menu bar lying.
+                    Text(settings.t("menuStale"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
                 Divider()
                 Button(store.phase == .scanning ? settings.t("scanningShort") : settings.t("rescan")) {
                     Task { await store.rescan() }

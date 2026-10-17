@@ -45,10 +45,12 @@ struct OverviewView: View {
         }
         .task(id: reclaimable) { await countUp(to: Double(reclaimable)) }
         .task {
-            // The module lines are the reason to come here without a scan, and
-            // a stale number is worse than none: read them when it appears.
-            await store.fetchMemory()
-            await net.refresh()
+            // Reuse recent reads so returning to the dashboard is instant, but
+            // free space is re-read every time: uninstalling an app in Storage
+            // changes it, and the panel should not show yesterday's number.
+            await store.ensureMemory()
+            await net.refreshIfStale()
+            await store.fetchStorage()
         }
     }
 
