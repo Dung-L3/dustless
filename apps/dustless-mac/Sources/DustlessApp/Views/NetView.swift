@@ -72,7 +72,10 @@ struct NetView: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             // A refresh that failed keeps the last numbers on screen; the banner
-            // is how the user learns they are stale.
+            // is how the user learns they are stale. Capped for the same reason
+            // as the AirDrop sentence below: this band does not scroll, and an
+            // engine error carries whatever stderr the process printed, which is
+            // not a bounded amount of text.
             if let error = net.loadError {
                 errorLabel(error)
             }
@@ -124,10 +127,22 @@ struct NetView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(awdlStateText)
                         .font(PanelFont.emphasis())
+                    // Two lines, then stop. This block sits in the summary band,
+                    // which does not scroll, and this sentence is ~200 characters in
+                    // every language: unbounded it takes whatever height it wants and
+                    // the list below pays. Measured at the smallest pane the window
+                    // allows, that cost the list 39pt — about one operation row.
+                    //
+                    // The full sentence goes to the hover and to VoiceOver, so the cap
+                    // costs no information: `.help` alone would not, because a
+                    // truncated `Text` labels itself with the truncated string.
                     Text(settings.t("awdlNote"))
                         .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .help(settings.t("awdlNote"))
+                        .accessibilityLabel(settings.t("awdlNote"))
                 }
 
                 Spacer(minLength: PanelStyle.Space.s)
@@ -137,6 +152,9 @@ struct NetView: View {
             .padding(PanelStyle.Space.m)
             .panelCard()
 
+            // The same band as the sentence above, so the same cap: this is
+            // also engine stderr, and an uncapped one took another 50pt out of
+            // the operation list.
             if let error = net.awdl.error {
                 errorLabel(error)
             }
@@ -183,6 +201,10 @@ struct NetView: View {
             .help(turningOn ? settings.t("awdlTurnOn") : settings.t("awdlTurnOff"))
             .accessibilityLabel(turningOn ? settings.t("awdlTurnOn") : settings.t("awdlTurnOff"))
         }
+        // The controls keep their intrinsic width; a narrow pane is paid for by
+        // the sentence beside them truncating. A button that loses its label to
+        // the layout is a control the user cannot read.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - Operations
@@ -205,38 +227,64 @@ struct NetView: View {
         }
     }
 
+    /// The list, plus the two sentences that are not the list's business.
+    ///
+    /// Everything in here is *capped*, and that is the whole vertical budget: an
+    /// uncapped `fixedSize` paragraph cannot be compressed, so in this column it
+    /// holds its lines against the one flexible child and the list pays. Pushing
+    /// these into the scroll instead only hides that — it put the note a scroll
+    /// away, and at the smallest pane the window allows its first two points were
+    /// in the viewport and its other 24 were not. Pinned and capped costs the list
+    /// 34pt, under three quarters of one of its five rows.
     private var operations: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-            if let error = net.runError {
-                errorLabel(error)
-            }
-
-            if let error = net.privilegeError {
-                errorLabel(error)
-            }
-
             // One quiet line, not a card: this is a permission the advanced rows
             // below depend on, and the user is the only one who can grant it.
             rememberRow
 
+            runErrors
+
+            // A filter that matches nothing is not an error, so it keeps its own
+            // state and says so, rather than becoming an empty scroll view.
             if visibleOps.isEmpty {
                 NoMatchesView()
-                    .frame(maxHeight: .infinity)
+                    .frame(minHeight: 120)
             } else {
-                // The list takes whatever height is left, so the filter row above
-                // never pushes the window around.
                 ScrollView {
                     LazyVStack(spacing: PanelStyle.Space.s) {
                         ForEach(visibleOps) { opRow($0) }
                     }
                 }
+                // The list takes whatever height the bands above did not, which
+                // is what this says. No `layoutPriority`: see `PanelScaffold`.
                 .frame(maxHeight: .infinity)
             }
 
+            // The closing disclaimer, under the list it is about. Capped, and the
+            // full sentence goes to the hover and to VoiceOver either way.
             Text(settings.t("networkNote"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
+                .help(settings.t("networkNote"))
+                .accessibilityLabel(settings.t("networkNote"))
+        }
+    }
+
+    /// The two failures a run can report that are not about a single
+    /// row: the operation never started, or the permission it needed was missing.
+    /// Pinned above the list and capped with everything else — an error that
+    /// scrolls out of sight is not reported.
+    @ViewBuilder
+    private var runErrors: some View {
+        if let error = net.runError {
+            errorLabel(error)
+        }
+
+        if let error = net.privilegeError {
+            errorLabel(error)
         }
     }
 
@@ -389,11 +437,26 @@ struct NetView: View {
         settings.t(op.labelKey).lowercased().contains(needle) || op.id.contains(needle)
     }
 
+    /// The engine's own sentence about a failure, verbatim: when it explains a
+    /// refusal, its wording beats anything the UI could paraphrase it with.
+    ///
+    /// Capped at two lines, because every call site is a non-scrolling band and
+    /// engine stderr is not a bounded amount of text. Uncapped, the refresh
+    /// banner and the AirDrop error alone cost the operation list 77pt — three
+    /// of its five rows — at the smallest pane the window allows. The full
+    /// sentence goes to the hover and to VoiceOver either way, so the cap costs
+    /// no information; `.help` alone would not, because a truncated `Text`
+    /// labels itself with the truncated string.
     private func errorLabel(_ error: L10nText) -> some View {
-        Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
+        let text = settings.text(error)
+        return Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(PanelFont.mono(11))
             .foregroundStyle(.orange)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .help(text)
+            .accessibilityLabel(text)
     }
 }

@@ -16,9 +16,12 @@ struct ModuleContent: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The identity is the module, so a switch is one removal plus one
-            // insertion and the cross-fade has something to interpolate.
-            .id(router.module)
+            // No `.id` on the module: the `switch` already builds a fresh
+            // module on every change, so re-identifying the chain on top of that
+            // only builds the incoming one twice — measured, its body ran twice
+            // per switch with the id and once without. The cross-fade is
+            // unaffected either way, because a conditional is already one
+            // insertion and one removal. State lifetime is unaffected too.
             .transition(.opacity)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: router.module)
     }

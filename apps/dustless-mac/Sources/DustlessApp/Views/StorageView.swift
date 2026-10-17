@@ -63,8 +63,10 @@ struct StorageView: View {
     @State private var result: StorageResult?
     /// The alert to show once the current sheet is fully gone. An alert cannot
     /// present on top of a sheet, so an error waits for the dismissal instead of
-    /// racing it.
-    @State private var nextAlert: (title: String, message: String)?
+    /// racing it. The title is a key, like `StorageResult.titleKey`: an alert can
+    /// sit on screen across a language switch, and text rendered when the failure
+    /// happened is the one string that would keep speaking the old language.
+    @State private var nextAlert: (titleKey: String, message: String)?
     @State private var isUninstalling = false
     @State private var largeFiles: [LargeFile] = []
     @State private var isLoadingFiles = false
@@ -72,7 +74,8 @@ struct StorageView: View {
     @State private var filesLoaded = false
     @State private var filesQuery = ""
     @State private var isTrashingFile = false
-    @State private var actionErrorTitle = ""
+    /// Resolved at render, never stored rendered — see `nextAlert`.
+    @State private var actionErrorTitleKey = ""
     @State private var actionError: String?
     @State private var dataLoaded = false
 
@@ -111,7 +114,7 @@ struct StorageView: View {
                 .onExitCommand { sheet = nil }
         }
         .alert(
-            actionErrorTitle,
+            settings.t(actionErrorTitleKey),
             isPresented: .constant(actionError != nil),
             presenting: actionError
         ) { _ in
@@ -176,18 +179,31 @@ struct StorageView: View {
         }
     }
 
-    /// One row per volume. The two-column card grid this replaced spent ~140pt per
-    /// pair of disks on a percent line, a bar and three labelled tiles; a strip
-    /// row says the same thing in about 50pt, so a Mac with one disk spends one
-    /// short row rather than a screenful of chrome.
+    /// One card per volume, side by side and scrolled sideways.
     ///
-    /// No "Volumes" heading above it: every row names its own volume, and a label
-    /// over one row is a row of chrome for nothing. The name is still spoken, as
-    /// the strip's accessibility label.
+    /// It was a column: one row per disk, and the band grew with the machine.
+    /// Measured at 640×560 that cost the inventory 360pt with one volume, 248pt
+    /// with three, 136pt with five and *all of it* with eight — a Mac with a few
+    /// external and network mounts showed an empty Storage pane. The count is
+    /// data the user controls and the panel height is not, so the count may not
+    /// decide the layout.
+    ///
+    /// Turning sideways makes the band a fixed height whatever is mounted, and
+    /// every volume stays reachable by scrolling — no volume is hidden and none
+    /// is dropped. No "Volumes" heading above it: every card names its own volume,
+    /// and a label over the strip is a row of chrome for nothing. The name is
+    /// still spoken, as the strip's accessibility label.
+    ///
+    /// The empty case really is free: measured, an empty `HStack` in a
+    /// horizontal scroll view lays out at 0.00pt, and 1 / 3 / 8 cards all measure
+    /// the same. (It is the `HStack` doing that — a scroll view wrapping a bare
+    /// `EmptyView` measures 10pt. Do not "simplify" the stack away.)
     private var volumeStrip: some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-            ForEach(volumes) { volume in
-                VolumeRow(volume: volume)
+        ScrollView(.horizontal) {
+            HStack(spacing: PanelStyle.Space.s) {
+                ForEach(volumes) { volume in
+                    VolumeCard(volume: volume)
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -464,7 +480,7 @@ struct StorageView: View {
             sheet = nil
             await loadApps()
         } catch {
-            fail(error, title: settings.t("appsUninstall"))
+            fail(error, titleKey: "appsUninstall")
         }
     }
 
@@ -492,20 +508,20 @@ struct StorageView: View {
             // The report is on screen already; re-reading the walk is not worth
             // the seconds it takes when the tab is closed again.
         } catch {
-            fail(error, title: settings.t("largeFilesTitle"))
+            fail(error, titleKey: "largeFilesTitle")
         }
     }
 
-    private func fail(_ error: Error, title: String) {
+    private func fail(_ error: Error, titleKey: String) {
         let message = error.localizedDescription
         // An alert cannot present on top of a sheet. Dismiss the sheet first and
         // let `presentNext` raise the alert once it is gone; with no sheet open
         // there is nothing to wait for.
         if sheet == nil {
-            actionErrorTitle = title
+            actionErrorTitleKey = titleKey
             actionError = message
         } else {
-            nextAlert = (title, message)
+            nextAlert = (titleKey, message)
             sheet = nil
         }
     }
@@ -519,7 +535,7 @@ struct StorageView: View {
             // can be asked to present while it is still dismissing.
             try? await Task.sleep(nanoseconds: 260_000_000)
             nextAlert = nil
-            actionErrorTitle = alert.title
+            actionErrorTitleKey = alert.titleKey
             actionError = alert.message
         }
     }
@@ -538,13 +554,28 @@ struct VolumeInfo: Identifiable, Sendable {
     }
 }
 
-/// One volume as a strip row: name, used percent, a hairline bar, and one caption
-/// carrying all three numbers. The card this replaced needed three metric tiles to
-/// say the same, which is why one disk used to cost more than 140pt of a 620pt
-/// window.
-struct VolumeRow: View {
+/// One volume as a card in the horizontal strip: name and used percent on one
+/// line, a hairline bar, and one caption carrying all three numbers. The three
+/// labelled tiles this replaced said the same in a taller box.
+struct VolumeCard: View {
     let volume: VolumeInfo
     @EnvironmentObject private var settings: AppSettings
+
+    /// Fixed, because the count must not decide the layout — and because every
+    /// child here is already `.lineLimit(1)`, so the height needs no help being
+    /// bounded: measured, the card is 48.00pt with a 34-character name, with
+    /// the longest caption `ByteFormat` can print, and with an empty name. Only
+    /// the width is a decision.
+    ///
+    /// 260, not 210. The caption is the card's only absolute numbers and it is
+    /// what clips first: at 210 the inner box is 186pt and the caption of an
+    /// ordinary 500 GB SSD — "294.9 GB used · 106.7 GB free of 401.6 GB" — is
+    /// 214pt, so the default case lost the total. 260 fits the widest real
+    /// triple in English (214pt) and in Chinese (228pt). Vietnamese wants 278pt
+    /// and still truncates its tail; the hover and the spoken label carry it, and
+    /// widening every card to the longest language would leave the common one
+    /// mostly empty.
+    private static let width: CGFloat = 260
 
     var body: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
@@ -554,30 +585,52 @@ struct VolumeRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: PanelStyle.Space.s)
-                Text(volume.usedPercent, format: .percent.precision(.fractionLength(0)))
+                Text(percentText)
                     .font(PanelFont.number())
                     .foregroundStyle(.secondary)
             }
 
             ProgressView(value: volume.usedPercent)
                 .frame(height: 3)
-                .help(settings.t("volumeUsageHelp", ["name": volume.name]))
 
-            Text(settings.t("volumeCaption", [
-                "used": ByteFormat.string(volume.used),
-                "free": ByteFormat.string(volume.free),
-                "total": ByteFormat.string(volume.total),
-            ]))
-            .font(PanelFont.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
+            Text(captionText)
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .padding(.horizontal, PanelStyle.Space.m)
         .padding(.vertical, PanelStyle.Space.xs)
         .panelCard(PanelStyle.rowFill)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: Self.width)
+        .help(spokenText)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(spokenText)
+    }
+
+    private var percentText: String {
+        volume.usedPercent.formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private var captionText: String {
+        settings.t("volumeCaption", [
+            "used": ByteFormat.string(volume.used),
+            "free": ByteFormat.string(volume.free),
+            "total": ByteFormat.string(volume.total),
+        ])
+    }
+
+    /// The whole card as one sentence, for the hover and for VoiceOver.
+    ///
+    /// It has to carry the caption as well as the name and the percent: the
+    /// combine above would otherwise announce name and percent only, and the
+    /// byte counts live nowhere else. (Truncation is not the reason — a
+    /// truncated `Text` still hands VoiceOver its whole string through `AXValue`,
+    /// which is why this is belt-and-braces rather than a rescue. The caption is
+    /// here because a *custom* label replaces the combined one, and a shorter
+    /// label is a lossy one.)
+    private var spokenText: String {
+        "\(settings.t("volumeUsageHelp", ["name": volume.name, "percent": percentText])) \(captionText)"
     }
 }
 
@@ -908,13 +961,18 @@ struct StorageResultCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(PanelFont.emphasis(.semibold))
-                Text(settings.t("appsResultSummary", [
-                    "freed": ByteFormat.string(report.summary.totalBytes),
-                    "count": "\(report.outcomes.count)",
-                ]))
-                .font(PanelFont.secondary)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                // The card above the list is capped at 160pt, so an uncapped
+                // summary sentence would spend the outcome rows' height instead.
+                // Two lines, with the whole sentence on the hover and the spoken
+                // label.
+                Text(summaryText)
+                    .font(PanelFont.secondary)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .help(summaryText)
+                    .accessibilityLabel(summaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -927,6 +985,13 @@ struct StorageResultCard: View {
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
         }
+    }
+
+    private var summaryText: String {
+        settings.t("appsResultSummary", [
+            "freed": ByteFormat.string(report.summary.totalBytes),
+            "count": "\(report.outcomes.count)",
+        ])
     }
 
     private func outcomeRow(_ outcome: UninstallOutcome) -> some View {
