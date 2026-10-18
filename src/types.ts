@@ -15,6 +15,10 @@ export type Rule = {
   requireVerify?: VerifyName;
   minAgeDays?: number;
   nativeCommand?: string;
+  recoveryLabel?: "download" | "rebuild";
+  busyProcesses?: string[];
+  staleDays?: number;
+  gitClean?: boolean;
 };
 
 export type Finding = {

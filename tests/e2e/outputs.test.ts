@@ -190,12 +190,19 @@ describe("11. rule subcommand", () => {
   });
 
   test("rule add appends a rule the merged database then accepts", async () => {
-    const run = await box.run(["rule", "add", "my.rule", "green", "desc của tôi", join(box.home, ".mycache")]);
+    const run = await box.run(["rule", "add", "my.rule", "green", "desc của tôi", "download", join(box.home, ".mycache")]);
     expect(run.code).toBe(0);
     expect(run.stdout).toContain("my.rule");
     const listed = JSON.parse((await box.run(["rule", "list", "--json"])).stdout) as { id: string; tier: string }[];
     expect(listed.find((r) => r.id === "my.rule")?.tier).toBe("green");
     expect((await box.run(["rule", "validate"])).code).toBe(0);
+  });
+
+  test("rule add refuses a rule without a recovery label", async () => {
+    const run = await box.run(["rule", "add", "my.other", "green", "desc", join(box.home, ".othercache")]);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toBe("");
+    expect((await box.run(["rule", "list", "--json"])).stdout).not.toContain("my.other");
   });
 
   test("rule show prints one rule as JSON and rejects an unknown id", async () => {
