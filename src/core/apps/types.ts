@@ -18,6 +18,7 @@ export type UninstallOptions = {
   confirm: boolean;
   purge?: boolean;
   trashDir?: string;
+  beforeDelete?: () => void | Promise<void>;
 };
 
 export type UninstallOutcome = {
