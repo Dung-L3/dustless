@@ -6,12 +6,14 @@
   requireVerify: gradle_version_unused
   minAgeDays: 30
   nativeCommand: gradle --stop
+  recoveryLabel: download
 
 - id: gradle.wrapper
   tier: green
   desc: Gradle wrapper đã tải về, tự tải lại khi build
   paths: { all: "~/.gradle/wrapper/dists" }
   minAgeDays: 90
+  recoveryLabel: download
 
 - id: npm.cacache
   tier: green
@@ -20,11 +22,13 @@
     all: "~/.npm/_cacache"
     win: "%LOCALAPPDATA%/npm-cache"
   nativeCommand: npm cache verify
+  recoveryLabel: download
 
 - id: npm.npx
   tier: green
   desc: Package tải tạm qua npx, tái tạo khi chạy lại
   paths: { all: "~/.npm/_npx" }
+  recoveryLabel: download
 
 - id: pnpm.store
   tier: green
@@ -34,22 +38,26 @@
     win: "%LOCALAPPDATA%/pnpm/store"
     linux: "~/.local/share/pnpm/store"
   nativeCommand: pnpm store prune
+  recoveryLabel: download
 
 - id: bun.cache
   tier: green
   desc: Bun package cache
   paths: { all: "~/.bun/install/cache" }
+  recoveryLabel: download
 
 - id: uv.cache
   tier: green
   desc: uv cache wheel và source build
   paths: { all: "~/.cache/uv" }
   nativeCommand: uv cache clean
+  recoveryLabel: download
 
 - id: pubcache.hosted
   tier: green
   desc: Dart pub cache, tái tạo bằng pub get
   paths: { all: "~/.pub-cache/hosted" }
+  recoveryLabel: download
 
 - id: homebrew.cache
   tier: green
@@ -58,16 +66,19 @@
     mac: ["/opt/homebrew/var/homebrew/cache", "~/Library/Caches/Homebrew"]
     win: ["~/AppData/Local/Homebrew/Cache", "~/scoop/cache"]
     linux: ["~/.cache/Homebrew", "~/.cache/scoop"]
+  recoveryLabel: download
 
 - id: yarn.cache
   tier: green
   desc: Yarn cache
   paths: { all: "~/.cache/yarn" }
+  recoveryLabel: download
 
 - id: pip.cache
   tier: green
   desc: pip wheel cache
   paths: { all: "~/.cache/pip" }
+  recoveryLabel: download
 
 - id: go.modcache
   tier: green
@@ -76,22 +87,26 @@
     mac: "~/go/pkg/mod"
     win: "%USERPRO%/go/pkg/mod"
     linux: "~/go/pkg/mod"
+  recoveryLabel: download
 
 - id: cargo.registry
   tier: green
   desc: Cargo registry cache
   paths: { all: "~/.cargo/registry/cache" }
+  recoveryLabel: download
 
 - id: browser.brave
   tier: green
   desc: Brave cache, không đụng profile
   paths: { all: "~/Library/Caches/com.brave.Browser" }
   match: '^(Cache|Code Cache|GPUCache|Service Worker)$'
+  recoveryLabel: download
 
 - id: browser.brave_software
   tier: green
   desc: Brave Software cache
   paths: { all: "~/Library/Caches/BraveSoftware" }
+  recoveryLabel: download
 
 - id: browser.chrome
   tier: green
@@ -100,11 +115,13 @@
     mac: "~/Library/Caches/Google/Chrome"
     win: "%LOCALAPPDATA%/Google/Chrome/User Data"
     linux: "~/.cache/google-chrome"
+  recoveryLabel: download
 
 - id: browser.firefox
   tier: green
   desc: Firefox cache
   paths: { all: "~/Library/Caches/Firefox/Profiles" }
+  recoveryLabel: download
 
 - id: browser.edge
   tier: green
@@ -112,6 +129,7 @@
   paths:
     mac: "~/Library/Caches/Microsoft Edge"
     win: "%LOCALAPPDATA%/Microsoft/Edge/User Data"
+  recoveryLabel: download
 
 - id: test.puppeteer
   tier: green
@@ -120,12 +138,14 @@
     mac: "~/.cache/puppeteer"
     win: "%USERPRO%/.cache/puppeteer"
     linux: "~/.cache/puppeteer"
+  recoveryLabel: download
 
 - id: android.avd
   tier: yellow
   desc: Android emulator AVD, tốn hàng GB mỗi cái
   paths: { all: "~/.android/avd/*.avd" }
   minAgeDays: 30
+  recoveryLabel: rebuild
 
 - id: android.system_images
   tier: yellow
@@ -135,6 +155,7 @@
     win: "%LOCALAPPDATA%/Android/Sdk/system-images"
     linux: "~/Android/Sdk/system-images"
   minAgeDays: 90
+  recoveryLabel: download
 
 - id: android.ndk
   tier: yellow
@@ -144,17 +165,20 @@
     win: "%LOCALAPPDATA%/Android/Sdk/ndk"
     linux: "~/Android/Sdk/ndk"
   minAgeDays: 90
+  recoveryLabel: download
 
 - id: container.colima
   tier: yellow
   desc: Colima VM disk, xoá là mất image và container
   paths: { all: "~/.colima/_lima" }
   minAgeDays: 60
+  recoveryLabel: rebuild
 
 - id: container.docker
   tier: yellow
   desc: Docker Desktop VM disk
   paths: { mac: "~/Library/Containers/com.docker.docker" }
+  recoveryLabel: rebuild
 
 - id: project.node_modules
   tier: yellow
@@ -163,6 +187,7 @@
     all: ["~/*/*/node_modules", "~/*/node_modules", "~/*/*/*/node_modules"]
   requireVerify: git_clean
   minAgeDays: 30
+  recoveryLabel: download
 
 - id: project.build
   tier: yellow
@@ -170,3 +195,4 @@
   paths:
     all: ["~/*/*/build", "~/*/build", "~/*/*/*/build"]
   minAgeDays: 30
+  recoveryLabel: rebuild

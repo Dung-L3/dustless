@@ -24,23 +24,27 @@ export async function runRule(sub: string, rest: string[]): Promise<number> {
   }
 
   if (sub === "add") {
-    const [id, tier, desc, ...patterns] = rest;
-    if (!id || !tier || !desc || !patterns.length) {
-      throw new Error("dùng: dustless rule add <id> <green|yellow> <desc> <path>");
+    const [id, tier, desc, recovery, ...patterns] = rest;
+    if (!id || !tier || !desc || !recovery || !patterns.length) {
+      throw new Error("dùng: dustless rule add <id> <green|yellow> <desc> <download|rebuild> <path>");
+    }
+    if (recovery !== "download" && recovery !== "rebuild") {
+      throw new Error("recovery phải là download hoặc rebuild");
     }
     await mkdir(configDir(), { recursive: true });
     const paths = patterns.map((path) => `    all: ${JSON.stringify(path)}`).join("\n");
-    await appendFile(userRulesPath(), `\n- id: ${id}\n  tier: ${tier}\n  desc: ${JSON.stringify(desc)}\n  paths:\n${paths}\n`);
+    await appendFile(userRulesPath(), `\n- id: ${id}\n  tier: ${tier}\n  desc: ${JSON.stringify(desc)}\n  recoveryLabel: ${recovery}\n  paths:\n${paths}\n`);
     say(`đã thêm ${id} vào ${userRulesPath()} (${(await loadRules()).length} rule hợp lệ)`);
     return 0;
   }
   if (sub === "validate") {
-    const count = (await loadRules(rest[0])).length;
+    const rules = await loadRules(rest[0]);
     if (flag("json")) {
-      await writeOut(`${JSON.stringify({ ok: true, rules: count })}\n`);
+      await writeOut(`${JSON.stringify({ ok: true, rules: rules.length })}\n`);
       return 0;
     }
-    say(`OK — ${count} rule hợp lệ`);
+    say(`OK — ${rules.length} rule hợp lệ`);
+    for (const rule of rules) say(`  ${rule.id.padEnd(26)} ${rule.recoveryLabel ?? "—"}`);
     return 0;
   }
   throw new Error(`rule: lệnh con không hợp lệ "${sub}"`);
