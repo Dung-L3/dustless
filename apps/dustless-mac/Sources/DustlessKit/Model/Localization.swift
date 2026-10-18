@@ -228,6 +228,12 @@ public enum L10n {
         "errNotFound": "Không tìm thấy engine dustless. Đã tìm: {list}. Tạo bằng `bun run build`, rồi chạy `bun run bundle:mac` để chép vào Dustless.app.",
         "errNotExecutable": "Thấy dustless tại {path} nhưng không thực thi được. Chạy: chmod +x {path}",
 
+        "scan.unscannable.banner": "{count} quy tắc không quét được: {reasons}",
+        "scan.unscannable.reason.absent": "thiếu",
+        "scan.unscannable.reason.no_access": "không truy cập",
+        "scan.unscannable.reason.not_supported": "không hỗ trợ",
+        "scan.unscannable.reason.error": "lỗi",
+
         "revealInFinder": "Hiện trong Finder",
         "copyPath": "Sao chép đường dẫn",
 
@@ -531,6 +537,12 @@ public enum L10n {
         "errNotFound": "The dustless engine was not found. Searched: {list}. Build it with `bun run build`, then run `bun run bundle:mac` to copy it into Dustless.app.",
         "errNotExecutable": "Found dustless at {path} but it is not executable. Run: chmod +x {path}",
 
+        "scan.unscannable.banner": "{count} rules could not be scanned: {reasons}",
+        "scan.unscannable.reason.absent": "absent",
+        "scan.unscannable.reason.no_access": "no access",
+        "scan.unscannable.reason.not_supported": "not supported",
+        "scan.unscannable.reason.error": "error",
+
         "revealInFinder": "Reveal in Finder",
         "copyPath": "Copy Path",
 
@@ -833,6 +845,12 @@ public enum L10n {
         "errUnreadable": "dustless 引擎返回了此应用无法读取的数据：{reason}",
         "errNotFound": "未找到 dustless 引擎。已搜索：{list}。请先运行 `bun run build`，再运行 `bun run bundle:mac` 复制到 Dustless.app。",
         "errNotExecutable": "在 {path} 找到 dustless，但不可执行。请运行：chmod +x {path}",
+
+        "scan.unscannable.banner": "{count} 条规则无法扫描：{reasons}",
+        "scan.unscannable.reason.absent": "缺失",
+        "scan.unscannable.reason.no_access": "无访问权限",
+        "scan.unscannable.reason.not_supported": "不支持",
+        "scan.unscannable.reason.error": "错误",
 
         "revealInFinder": "在访达中显示",
         "copyPath": "复制路径",

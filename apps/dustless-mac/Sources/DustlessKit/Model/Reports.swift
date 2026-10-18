@@ -23,6 +23,46 @@ public struct TierTotals: Codable, Sendable {
     public let blocked: TierStat
 }
 
+public enum UnscannableReason: String, Codable, CaseIterable, Sendable {
+    case absent
+    case noAccess = "no_access"
+    case notSupported = "not_supported"
+    case error
+}
+
+public struct UnscannableRule: Codable, Sendable, Hashable {
+    public let ruleId: String
+    public let tier: Tier
+    public let desc: String
+    public let reason: UnscannableReason
+    public let pathPatterns: [String]
+}
+
+public struct UnscannableSummary: Codable, Sendable, Hashable {
+    public let absent: Int
+    public let noAccess: Int
+    public let notSupported: Int
+    public let error: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case absent
+        case noAccess = "no_access"
+        case notSupported = "not_supported"
+        case error
+    }
+
+    public init(absent: Int, noAccess: Int, notSupported: Int, error: Int) {
+        self.absent = absent
+        self.noAccess = noAccess
+        self.notSupported = notSupported
+        self.error = error
+    }
+
+    public var total: Int {
+        absent + noAccess + notSupported + error
+    }
+}
+
 public struct ScanReport: Codable, Sendable {
     public let findings: [Finding]
     public let totals: TierTotals
@@ -30,6 +70,19 @@ public struct ScanReport: Codable, Sendable {
     public let freeBefore: UInt64
     public let platform: String
     public let scannedMs: Int
+    public let unscannable: [UnscannableRule]
+    public let unscannableSummary: UnscannableSummary
+
+    public init(findings: [Finding], totals: TierTotals, reclaimable: UInt64, freeBefore: UInt64, platform: String, scannedMs: Int, unscannable: [UnscannableRule], unscannableSummary: UnscannableSummary) {
+        self.findings = findings
+        self.totals = totals
+        self.reclaimable = reclaimable
+        self.freeBefore = freeBefore
+        self.platform = platform
+        self.scannedMs = scannedMs
+        self.unscannable = unscannable
+        self.unscannableSummary = unscannableSummary
+    }
 
     public var deletable: [Finding] {
         findings.filter(\.isDeletableByEngine)
@@ -40,6 +93,29 @@ public struct ScanReport: Codable, Sendable {
     }
 
     public var initialSelection: Set<String> { [] }
+}
+
+public enum UnscannableText {
+    public static func reasonsPresent(in summary: UnscannableSummary) -> [UnscannableReason] {
+        var result: [UnscannableReason] = []
+        if summary.absent > 0 { result.append(.absent) }
+        if summary.noAccess > 0 { result.append(.noAccess) }
+        if summary.notSupported > 0 { result.append(.notSupported) }
+        if summary.error > 0 { result.append(.error) }
+        return result
+    }
+
+    public static func reasonLabel(_ reason: UnscannableReason, lang: Lang) -> String {
+        let key = "scan.unscannable.reason.\(reason.rawValue)"
+        return L10n.render(lang, key)
+    }
+
+    public static func bannerParts(report: ScanReport, lang: Lang) -> (count: Int, reasonLabels: [String])? {
+        guard report.unscannableSummary.total > 0 else { return nil }
+        let reasons = reasonsPresent(in: report.unscannableSummary)
+        let labels = reasons.map { reasonLabel($0, lang: lang) }
+        return (report.unscannableSummary.total, labels)
+    }
 }
 
 public enum ApplyStatus: String, Codable, Sendable {

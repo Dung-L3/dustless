@@ -37,6 +37,16 @@ export type Finding = {
 
 export type TierStat = { count: number; bytes: number };
 
+export type UnscannableReason = "absent" | "no_access" | "not_supported" | "error";
+
+export type UnscannableRule = {
+  ruleId: string;
+  tier: Tier;
+  desc: string;
+  reason: UnscannableReason;
+  pathPatterns: string[];
+};
+
 export type ScanReport = {
   findings: Finding[];
   totals: Record<Tier, TierStat>;
@@ -44,6 +54,8 @@ export type ScanReport = {
   freeBefore: number;
   platform: Platform;
   scannedMs: number;
+  unscannable: UnscannableRule[];
+  unscannableSummary: Record<UnscannableReason, number>;
 };
 
 export type ApplyStatus = "deleted" | "skipped" | "failed";

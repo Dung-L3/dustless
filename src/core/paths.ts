@@ -18,10 +18,24 @@ export function expand(pattern: string): string {
   return out.replace(/^~(?=$|[/\\])/, homedir());
 }
 
-export async function resolvePattern(pattern: string): Promise<string[]> {
+type ResolveResult =
+  | { paths: string[]; error?: undefined }
+  | { paths: string[]; error: { code: string; pattern: string } };
+
+export async function resolvePattern(pattern: string): Promise<ResolveResult> {
   const expanded = expand(pattern);
   if (!expanded.includes("*")) {
-    return await exists(resolved(expanded)) ? [resolved(expanded)] : [];
+    const full = resolved(expanded);
+    const ok = await exists(full);
+    if (ok) return { paths: [full] };
+    try {
+      const { stat } = await import("node:fs/promises");
+      await stat(full);
+      return { paths: [], error: { code: "EACCES", pattern } };
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? "error";
+      return { paths: [], error: { code, pattern } };
+    }
   }
   const star = expanded.indexOf("*");
   const base = resolved(expanded.slice(0, star).replace(/[/\\]$/, ""));
@@ -31,8 +45,9 @@ export async function resolvePattern(pattern: string): Promise<string[]> {
     entries = (await readdir(base, { withFileTypes: true }))
       .filter((e) => e.isDirectory() || e.isSymbolicLink())
       .map((e) => e.name);
-  } catch {
-    return [];
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? "error";
+    return { paths: [], error: { code, pattern } };
   }
   const out: string[] = [];
   for (const name of entries) {
@@ -40,7 +55,7 @@ export async function resolvePattern(pattern: string): Promise<string[]> {
     if (suffix && !(await exists(full))) continue;
     out.push(full);
   }
-  return out.sort();
+  return { paths: out.sort() };
 }
 
 function resolved(p: string): string {
