@@ -88,9 +88,16 @@ describe("redlist-realpath: deletion routes may not reach behind a symlink into 
     expect(await digest(s.box.outside)).toBe(beforeOutside);
     const report = applyJson(run.stdout);
     expect(report.outcomes.length).toBeGreaterThan(0);
+    const through = report.outcomes.find(
+      (o) =>
+        o.path === join(s.portal, "canary.txt") ||
+        o.path === join(s.portalTrailing, "canary.txt"),
+    );
+    expect(through?.status).toBe("failed");
+    expect(through?.detail ?? "").toContain("danh sách đỏ");
   });
 
-  test("apply --yes over symlinked leaves unlinks the links and preserves the canary and the red directory", async () => {
+  test("apply --yes refuses symlinked leaves that resolve into the red directory, preserving the canary, the red directory and the links", async () => {
     const s = await scene("apply-links", RULES_CLEAN);
     const beforeRed = await digest(s.redDir);
     const beforeOutside = await digest(s.box.outside);
@@ -105,6 +112,14 @@ describe("redlist-realpath: deletion routes may not reach behind a symlink into 
     expect(await digest(s.redDir)).toBe(beforeRed);
     expect(await treeBytes(s.redDir)).toBeGreaterThan(0);
     expect(await digest(s.box.outside)).toBe(beforeOutside);
+    expect(await exists(s.portal)).toBe(true);
+    expect(await exists(s.portalTrailing)).toBe(true);
+    const report = applyJson(run.stdout);
+    for (const link of [s.portal, s.portalTrailing]) {
+      const outcome = report.outcomes.find((o) => o.path === link);
+      expect(outcome?.status).toBe("failed");
+      expect(outcome?.detail ?? "").toContain("danh sách đỏ");
+    }
   });
 
   test("apply --only-file whose selection names the links and a path through them must not carry the canary away", async () => {
@@ -138,14 +153,26 @@ describe("redlist-realpath: deletion routes may not reach behind a symlink into 
     expect(await digest(s.redDir)).toBe(beforeRed);
     expect(await treeBytes(s.redDir)).toBeGreaterThan(0);
     expect(await digest(s.box.outside)).toBe(beforeOutside);
+    const report = applyJson(run.stdout);
+    const through = report.outcomes.find(
+      (o) =>
+        o.path === join(s.portal, "canary.txt") ||
+        o.path === join(s.portalTrailing, "canary.txt"),
+    );
+    expect(through?.status).toBe("failed");
+    expect(through?.detail ?? "").toContain("danh sách đỏ");
   });
 
-  test("largefiles --delete refuses both symlink leaves and preserves the canary", async () => {
+  test("largefiles --delete refuses symlink leaves that resolve into the red directory and preserves the canary", async () => {
     const s = await scene("largefiles-symlink", RULES_CLEAN);
     const beforeRed = await digest(s.redDir);
     const beforeOutside = await digest(s.box.outside);
     const leaf = s.portal + "/";
-    for (const [name, target] of [["symlink leaf", s.portal], ["trailing-target symlink", leaf]] as const) {
+    for (const [name, target] of [
+      ["symlink leaf", s.portal],
+      ["trailing-slash symlink", leaf],
+      ["trailing-target symlink", s.portalTrailing],
+    ] as const) {
       const run = await s.box.run([
         "largefiles",
         "--delete",

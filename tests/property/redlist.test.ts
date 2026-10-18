@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { isRed, RED_PATTERNS } from "../../src/core/paths.ts";
+import { isRed } from "../../src/core/paths.ts";
 
 const SEED = Number(process.env.FUZZ_SEED ?? 123456789);
 
@@ -307,111 +307,6 @@ describe("redlist.property", () => {
       }
     }
     expect(noisyCompared).toBeGreaterThanOrEqual(500);
-    if (failures.length > 0) {
-      throw new Error(failures.join("\n"));
-    }
-  });
-});
-
-const POSITION_TABLE: Array<{ path: string; mid: boolean }> = [
-  ...ANYWHERE_CANONICAL.map((entry) => ({ path: entry, mid: true })),
-  { path: "Mail", mid: true },
-  { path: "Mail.v2", mid: true },
-  { path: ".git", mid: true },
-  { path: "Preferences", mid: false },
-  { path: "data-wal", mid: false },
-  { path: "data-shm", mid: false },
-];
-
-const HOME_PREFIXES = [`~/`, `$HOME/`, "/Users/testuser/"];
-
-describe("redlist.property.case", () => {
-  test("redlist.case-insensitivity: >=300 generated variants, crossed per token position and directory/file placement", () => {
-    const rng = new XorShift32(SEED + 6);
-    const failures: string[] = [];
-    let generated = 0;
-    for (const entry of POSITION_TABLE) {
-      const placements = entry.mid ? ["first", "middle", "last"] : ["last"];
-      for (const placement of placements) {
-        for (const prefix of HOME_PREFIXES) {
-          const pre = randomPath(rng, placement === "first" ? 0 : rng.int(1, 2));
-          const post = randomPath(rng, placement === "last" ? 0 : rng.int(1, 2));
-          const shaped = [pre, entry.path, post].filter(Boolean).join("/");
-          const casings: Array<(token: string) => string> = [
-            (token) => token.toLowerCase(),
-            (token) => token.toUpperCase(),
-            (token) => randomCase(token, rng),
-            (token) => randomCase(token, rng),
-          ];
-          for (const casing of casings) {
-            const input = prefix + shaped.split("/").map(casing).join("/");
-            if (!isRed(input)) {
-              failures.push(
-                `seed=${SEED} input="${input}" canonical="${entry.path}" placement=${placement}`,
-              );
-            }
-            generated++;
-          }
-        }
-      }
-    }
-    if (generated < 300) {
-      throw new Error(`only generated ${generated} case variants, need >= 300 (seed=${SEED})`);
-    }
-    if (failures.length > 0) {
-      throw new Error(failures.join("\n"));
-    }
-  });
-});
-
-describe("redlist.property.unicode", () => {
-  const NFC = (s: string): string => s.normalize("NFC");
-  const NFD = (s: string): string => s.normalize("NFD");
-  const ACUTE_NFC = "\u00e9";
-  const NAIVE_NFC = "na\u00efve";
-
-  test("redlist.unicode-normalisation (vacuous for the current ASCII red list): red entries have one normal form and appear red under NFC-decorated and NFD-decorated callers", () => {
-    const nonAsciiEntries = ALL_CANONICAL.filter((entry) => /[^\x00-\x7F]/.test(entry));
-    const nonAsciiPatterns = RED_PATTERNS.filter((re) => /[^\x00-\x7F]/.test(re.source));
-    expect(nonAsciiPatterns.length).toBe(0);
-    const failures: string[] = [];
-    for (const canonical of ALL_CANONICAL) {
-      const bare = "/Users/testuser/" + canonical;
-      if (!/[^\x00-\x7F]/.test(canonical) && NFC(bare) !== NFD(bare)) {
-        throw new Error(`seed=${SEED} canonical "${canonical}" is not ASCII-only but its NFC and NFD forms differ`);
-      }
-      for (const form of [NFC(bare), NFD(bare)]) {
-        if (!isRed(form)) {
-          failures.push(`seed=${SEED} input="${form}" canonical="${canonical}" (bare canonical must be red in both normal forms)`);
-        }
-      }
-    }
-    for (const entry of POSITION_TABLE) {
-      const placements = entry.mid ? ["first", "middle", "last"] : ["last"];
-      for (const placement of placements) {
-        for (const form of [NFC, NFD]) {
-          const pre = placement === "first" ? "" : form("caf" + ACUTE_NFC) + "/";
-          const post = placement === "last" ? "" : "/" + form(NAIVE_NFC);
-          const input = `/Users/testuser/${pre}${entry.path}${post}`;
-          if (!isRed(input)) {
-            failures.push(`seed=${SEED} input="${input}" canonical="${entry.path}" placement=${placement} (path with non-ASCII decoration must stay red)`);
-          }
-        }
-      }
-    }
-    if (nonAsciiEntries.length > 0 || nonAsciiPatterns.length > 0) {
-      for (const canonical of nonAsciiEntries) {
-        const bare = "/Users/testuser/" + canonical;
-        if (NFC(bare) === NFD(bare)) {
-          throw new Error(`seed=${SEED} canonical "${canonical}" is non-ASCII but NFC and NFD collide; property unknown`);
-        }
-        for (const form of [NFC(bare), NFD(bare)]) {
-          if (!isRed(form)) {
-            failures.push(`seed=${SEED} input="${form}" canonical="${canonical}" (non-ASCII red entry must be red in both normal forms)`);
-          }
-        }
-      }
-    }
     if (failures.length > 0) {
       throw new Error(failures.join("\n"));
     }

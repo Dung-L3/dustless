@@ -112,7 +112,7 @@ export function isRedReal(path: string): boolean {
   if (isRed(path)) return true;
   try {
     return isRed(realpathSync(path));
-  } catch {
-    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
