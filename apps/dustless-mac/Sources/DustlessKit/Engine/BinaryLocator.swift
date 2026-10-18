@@ -8,7 +8,7 @@ public enum BinaryLocationError: LocalizedError {
         switch self {
         case .notFound(let searched):
             let list = searched.map(\.path).joined(separator: "\n")
-            return "The dustless engine was not found. Searched:\n\(list)\n\nBuild it with `bun run build`, then re-run scripts/bundle.sh to copy it into Dustless.app."
+            return "The dustless engine was not found. Searched:\n\(list)\n\nBuild it with `bun run build`, then run `bun run bundle:mac` to copy it into Dustless.app."
         case .notExecutable(let url):
             return "Found dustless at \(url.path) but it is not executable. Run: chmod +x \(url.path)"
         }
