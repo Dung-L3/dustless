@@ -117,10 +117,10 @@ function isSystemApp(appPath: string): boolean {
   return resolved.startsWith("/System/Applications" + sep) || resolved === "/System/Applications";
 }
 
-function isAllowedAppDir(appPath: string, appDirs: string[]): boolean {
+function isAllowedAppDir(appPath: string, appDirs: string[], home: string): boolean {
   const resolved = resolve(appPath);
   for (const dir of appDirs) {
-    const expanded = expandHome(dir, homedir());
+    const expanded = expandHome(dir, home);
     if (isUnder(resolved, expanded)) {
       const rel = relative(expanded, resolved);
       return !rel.includes(sep);
@@ -134,9 +134,9 @@ function isDenied(path: string, home: string): boolean {
   const resolvedHome = resolve(home);
 
   const isAllowedAppBundle = (p: string) => {
-    const appDirs = ["/Applications", join(homedir(), "Applications")];
+    const appDirs = ["/Applications", join(home, "Applications")];
     for (const dir of appDirs) {
-      const expanded = expandHome(dir, homedir());
+      const expanded = expandHome(dir, home);
       if (isUnder(p, expanded)) {
         const rel = relative(expanded, p);
         if (!rel.includes(sep) && rel.endsWith(".app")) {
@@ -274,7 +274,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
     };
   }
 
-  if (!isAllowedAppDir(resolvedAppPath, appDirs)) {
+  if (!isAllowedAppDir(resolvedAppPath, appDirs, home)) {
     return {
       outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "app not in allowed app directories" }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
