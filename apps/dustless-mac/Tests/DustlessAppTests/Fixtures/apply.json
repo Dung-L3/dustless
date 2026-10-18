@@ -3,7 +3,7 @@
     {
       "ruleId": "container.docker",
       "tier": "yellow",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Containers/com.docker.docker",
+      "path": "/tmp/dustless-fixture-sandbox/Library/Containers/com.docker.docker",
       "status": "deleted",
       "bytes": 2457600,
       "detail": "captured from scan finding 0, never executed"
@@ -11,7 +11,7 @@
     {
       "ruleId": "gradle.version_cache",
       "tier": "yellow",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.gradle/caches/9.0",
+      "path": "/tmp/dustless-fixture-sandbox/.gradle/caches/9.0",
       "status": "skipped",
       "bytes": 716800,
       "detail": "captured from scan finding 1, never executed"
@@ -19,7 +19,7 @@
     {
       "ruleId": "npm.cacache",
       "tier": "green",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.npm/_cacache",
+      "path": "/tmp/dustless-fixture-sandbox/.npm/_cacache",
       "status": "failed",
       "bytes": 307200,
       "detail": "captured from scan finding 2, never executed"
@@ -27,7 +27,7 @@
     {
       "ruleId": "pip.cache",
       "tier": "green",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cache/pip",
+      "path": "/tmp/dustless-fixture-sandbox/.cache/pip",
       "status": "deleted",
       "bytes": 122880,
       "detail": "captured from scan finding 3, never executed"
@@ -35,7 +35,7 @@
     {
       "ruleId": "bun.cache",
       "tier": "green",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.bun/install/cache",
+      "path": "/tmp/dustless-fixture-sandbox/.bun/install/cache",
       "status": "skipped",
       "bytes": 92160,
       "detail": "captured from scan finding 4, never executed"
@@ -43,14 +43,14 @@
     {
       "ruleId": "gradle.wrapper",
       "tier": "yellow",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.gradle/wrapper/dists",
+      "path": "/tmp/dustless-fixture-sandbox/.gradle/wrapper/dists",
       "status": "failed",
       "bytes": 1,
       "detail": "captured from scan finding 5, never executed"
     }
   ],
   "freed": 2580480,
-  "freeBefore": 316896727040,
-  "freeAfter": 316899307520,
+  "freeBefore": 316615888896,
+  "freeAfter": 316618469376,
   "elapsedMs": 412
 }
