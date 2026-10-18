@@ -122,6 +122,8 @@ export type ScanReport = {
   freeBefore: number;
   platform: string;
   scannedMs: number;
+  unscannable: Array<{ ruleId: string; tier: string; desc: string; reason: string; pathPatterns: string[] }>;
+  unscannableSummary: Record<string, number>;
 };
 
 export type Outcome = {

@@ -1,6 +1,6 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { Finding, Rule, ScanReport, Tier, TierStat } from "../types.ts";
+import type { Finding, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
 import { isRed, matchesBasename, pathsForRule, platform, resolvePattern } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { verify } from "./verify/index.ts";
@@ -12,16 +12,41 @@ const DAY = 86_400_000;
 type Candidate = { rule: Rule; path: string };
 type Tree = { bytes: number; mtime: number; atime: number };
 
+function reasonFromCode(code: string): UnscannableReason {
+  if (code === "ENOENT") return "absent";
+  if (code === "EACCES" || code === "EPERM") return "no_access";
+  return "error";
+}
+
 export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): Promise<ScanReport> {
   const started = Date.now();
   const freeBefore = await freeSpace(opts.roots?.[0]);
   const found: Finding[] = [];
-  await pool(await candidates(await loadRules(), opts.roots), WALKS, async ({ rule, path }) => {
+  const unscannableMap = new Map<string, { rule: Rule; reasons: Map<UnscannableReason, Set<string>>; hasScannablePath: boolean }>();
+  await pool(await candidates(await loadRules(), opts.roots, unscannableMap), WALKS, async ({ rule, path }) => {
     const finding = await inspect(rule, path);
     if (finding && finding.bytes >= (opts.minBytes ?? 0)) found.push(finding);
   });
   found.sort((a, b) => b.bytes - a.bytes);
   const totals = tally(found);
+  const unscannable: UnscannableRule[] = [];
+  for (const [ruleId, data] of unscannableMap) {
+    if (data.hasScannablePath) continue;
+    const allReasons = [...data.reasons.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const primaryReason = allReasons[0]?.[0] ?? "error";
+    const allPatterns = new Set<string>();
+    for (const patterns of data.reasons.values()) for (const p of patterns) allPatterns.add(p);
+    unscannable.push({
+      ruleId,
+      tier: data.rule.tier,
+      desc: data.rule.desc,
+      reason: primaryReason,
+      pathPatterns: [...allPatterns].sort(),
+    });
+  }
+  unscannable.sort((a, b) => a.ruleId.localeCompare(b.ruleId));
+  const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0 };
+  for (const u of unscannable) unscannableSummary[u.reason] += 1;
   return {
     findings: found,
     totals,
@@ -29,15 +54,38 @@ export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): 
     freeBefore,
     platform,
     scannedMs: Date.now() - started,
+    unscannable,
+    unscannableSummary,
   };
 }
 
-async function candidates(rules: Rule[], roots?: string[]): Promise<Candidate[]> {
+async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<string, { rule: Rule; reasons: Map<UnscannableReason, Set<string>>; hasScannablePath: boolean }>): Promise<Candidate[]> {
   const prefixes = roots?.map((root) => resolve(root));
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const rule of rules) {
-    const hits = (await Promise.all(pathsForRule(rule).map((pattern) => resolvePattern(pattern)))).flat();
+    const patterns = pathsForRule(rule);
+    if (!patterns.length) {
+      unscannableMap?.set(rule.id, { rule, reasons: new Map([[ "not_supported", new Set(patterns) ]]), hasScannablePath: false });
+      continue;
+    }
+    const results = await Promise.all(patterns.map((pattern) => resolvePattern(pattern)));
+    let hasAnyPath = false;
+    const ruleData = unscannableMap?.get(rule.id) ?? { rule, reasons: new Map<UnscannableReason, Set<string>>(), hasScannablePath: false };
+    for (const result of results) {
+      if (result.error) {
+        const reason = reasonFromCode(result.error.code);
+        const set = ruleData.reasons.get(reason) ?? new Set();
+        set.add(result.error.pattern);
+        ruleData.reasons.set(reason, set);
+      } else if (result.paths.length > 0) {
+        hasAnyPath = true;
+        ruleData.hasScannablePath = true;
+      }
+    }
+    unscannableMap?.set(rule.id, ruleData);
+    if (!hasAnyPath) continue;
+    const hits = results.flatMap((r) => r.paths);
     for (const path of hits) {
       if (seen.has(path) || isRed(path)) continue;
       if (!matchesBasename(path, rule.match)) continue;

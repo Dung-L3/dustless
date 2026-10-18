@@ -42,6 +42,8 @@ const report = (findings: Finding[], freeBefore = 0): ScanReport => ({
   freeBefore,
   platform: "mac",
   scannedMs: 0,
+  unscannable: [],
+  unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0 },
 });
 
 afterAll(async () => {
