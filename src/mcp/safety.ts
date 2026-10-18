@@ -1,5 +1,5 @@
 import { parse, resolve, sep } from "node:path";
-import { HOME, isRed, RED_PATTERNS } from "../core/paths.ts";
+import { HOME, isRed, isRedReal, RED_PATTERNS } from "../core/paths.ts";
 import type { Finding, Tier } from "../types.ts";
 
 export { HOME, isRed, RED_PATTERNS };
@@ -71,7 +71,7 @@ export function assertTierPermitted(finding: Finding, tier: "green" | "yellow"):
 
 export function assertPathDeletable(finding: Finding): void {
   const full = resolve(finding.path);
-  if (isRed(full)) {
+  if (isRedReal(full)) {
     throw new AgentRefusal(
       `${finding.path} matches the permanent red blocklist (Keychain, Mail, iCloud, git internals, Documents, Desktop, Pictures, SQLite WAL). ` +
         "This guard is hard-coded and cannot be disabled by any parameter.",

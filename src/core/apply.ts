@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { basename, parse, resolve, sep } from "node:path";
 import type { ApplyOutcome, ApplyReport, Finding, Rule, ScanReport, TierChoice } from "../types.ts";
-import { HOME, isRed, platform } from "./paths.ts";
+import { HOME, isRed, isRedReal, platform } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { exec, freeSpace } from "./space.ts";
 
@@ -91,6 +91,7 @@ async function run(
 function refusal(path: string): string {
   const full = resolve(path);
   if (isRed(full)) return "từ chối: nằm trong danh sách đỏ";
+  if (isRedReal(full)) return "từ chối: nằm trong danh sách đỏ (đích thực qua liên kết)";
   if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) return "từ chối: là HOME hoặc thư mục cha của HOME";
   if (full === parse(full).root) return "từ chối: filesystem root";
   return "";

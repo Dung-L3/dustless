@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { isRed } from "../paths.ts";
+import { isRed, isRedReal } from "../paths.ts";
 import { moveToTrash } from "../apps/index.ts";
 import type { UninstallOutcome, UninstallReport } from "../apps/types.ts";
 
@@ -101,6 +101,9 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
   }
   if (isRed(target)) {
     return refuse(`on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`);
+  }
+  if (isRedReal(target)) {
+    return refuse(`resolves into the red list — refusing to touch ${target}`);
   }
   if (!opts.confirm) return refuse("confirm required");
   const meta = await lstat(target).catch(() => null);
