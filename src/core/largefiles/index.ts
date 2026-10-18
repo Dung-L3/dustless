@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { isRed } from "../paths.ts";
+import { realGuard, refusalText } from "../paths.ts";
 import { moveToTrash } from "../apps/index.ts";
 import type { UninstallOutcome, UninstallReport } from "../apps/types.ts";
 
@@ -28,6 +28,7 @@ export type DeleteLargeFileOptions = {
   roots?: string[];
   confirm: boolean;
   trashDir?: string;
+  beforeDelete?: () => void | Promise<void>;
 };
 
 function scannedRoots(roots?: string[]): string[] {
@@ -99,8 +100,13 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
   if (!roots.some((root) => target === root || target.startsWith(root + sep))) {
     return refuse("outside the scanned roots");
   }
-  if (isRed(target)) {
-    return refuse(`on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`);
+  const guard = realGuard(target);
+  if ("refused" in guard) {
+    return refuse(
+      guard.refused === "red"
+        ? `on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`
+        : `${refusalText("unresolvable")} — refusing to touch ${target}`,
+    );
   }
   if (!opts.confirm) return refuse("confirm required");
   const meta = await lstat(target).catch(() => null);
@@ -113,7 +119,7 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
   if (meta.isSymbolicLink()) return refuse("refusing symlink");
   if (!meta.isFile()) return refuse("not a regular file");
 
-  const outcome: UninstallOutcome = { path: target, ...(await moveToTrash(target, opts.trashDir ?? join(homedir(), ".Trash"))) };
+  const outcome: UninstallOutcome = { path: target, ...(await moveToTrash(target, opts.trashDir ?? join(homedir(), ".Trash"), { beforeDelete: opts.beforeDelete })) };
   const ok = outcome.status === "trashed";
   return {
     outcomes: [outcome],

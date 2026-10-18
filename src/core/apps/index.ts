@@ -2,6 +2,9 @@ import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promi
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import type { AppInfo, ListAppsOptions, UninstallOptions, UninstallOutcome, UninstallReport } from "./types.ts";
+import { realGuard, refusalText } from "../paths.ts";
+
+export type DeleteHook = { beforeDelete?: () => void | Promise<void> };
 
 const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
 
@@ -215,7 +218,17 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function moveToTrash(src: string, trashDir: string): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
+async function recheck(src: string, first: string, hook?: () => void | Promise<void>): Promise<string> {
+  await hook?.();
+  const again = realGuard(src);
+  if ("refused" in again) return refusalText(again.refused);
+  if (again.real !== first) return refusalText("changed");
+  return "";
+}
+
+export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHook = {}): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
+  const first = realGuard(src);
+  if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
   const bytes = await dirSize(src);
   const name = src.split(sep).filter(Boolean).pop() ?? "unknown";
   await mkdir(trashDir, { recursive: true });
@@ -225,6 +238,8 @@ export async function moveToTrash(src: string, trashDir: string): Promise<{ stat
     dest = join(trashDir, `${name}.${suffix}`);
     suffix++;
   }
+  const race = await recheck(src, first.real, hooks.beforeDelete);
+  if (race) return { status: "failed", bytes, detail: race };
   try {
     await rename(src, dest);
     return { status: "trashed", bytes, detail: `moved to ${dest}` };
@@ -233,8 +248,12 @@ export async function moveToTrash(src: string, trashDir: string): Promise<{ stat
   }
 }
 
-async function purgePath(src: string): Promise<{ status: "purged" | "failed"; bytes: number; detail: string }> {
+async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: string }> {
+  const first = realGuard(src);
+  if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
   const bytes = await dirSize(src);
+  const race = await recheck(src, first.real, hooks.beforeDelete);
+  if (race) return { status: "failed", bytes, detail: race };
   try {
     await rm(src, { recursive: true, force: true });
     return { status: "purged", bytes, detail: "permanently deleted" };
@@ -334,10 +353,10 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
     }
 
     if (purge) {
-      const result = await purgePath(p);
+      const result = await purgePath(p, { beforeDelete: opts.beforeDelete });
       outcomes.push({ path: p, ...result });
     } else {
-      const result = await moveToTrash(p, trash);
+      const result = await moveToTrash(p, trash, { beforeDelete: opts.beforeDelete });
       outcomes.push({ path: p, ...result });
     }
   }

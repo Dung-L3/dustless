@@ -15,6 +15,13 @@
   reclaimable and is instead reported as unscannable with the new `red` reason
   (`src/core/scan.ts`, `candidates`; `src/core/paths.ts`, `isRedReal`). The app models and localizes
   the reason (`UnscannableReason.red`, key `scan.unscannable.reason.red`).
+- A delete re-resolves the real path at the moment of removal and refuses if it changed: `moveToTrash`
+  and the purge path in `src/core/apps/index.ts` take the same `realGuard` reading twice, once before
+  the trash slot is chosen and again immediately before `rename`/`rm`, and `deleteLargeFile`
+  (`src/core/largefiles/index.ts`) uses `realGuard` at its gate. A path that is swapped for a symlink
+  into a red directory, or retargeted to a different real directory, between the check and the delete
+  is refused with a localized reason and left untouched. Locked by `tests/race-delete.test.ts`, whose
+  `beforeDelete` hook performs the swap.
 
 ### Honesty
 

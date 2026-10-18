@@ -1,0 +1,96 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { moveToTrash } from "../src/core/apps/index.ts";
+import { realGuard } from "../src/core/paths.ts";
+
+const roots: string[] = [];
+
+afterAll(async () => {
+  for (const root of roots) await rm(root, { recursive: true, force: true });
+});
+
+async function box(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "dustless-race-"));
+  roots.push(root);
+  return root;
+}
+
+async function cache(root: string, name = "cache"): Promise<string> {
+  const src = join(root, name);
+  await mkdir(src, { recursive: true });
+  await writeFile(join(src, "data.txt"), "payload");
+  return src;
+}
+
+describe("delete race", () => {
+  test("control: a clean source is trashed", async () => {
+    const root = await box();
+    const src = await cache(root);
+    const result = await moveToTrash(src, join(root, "Trash"));
+    expect(result.status).toBe("trashed");
+    expect(await readFile(join(root, "Trash", "cache", "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("swapping the source for a symlink into a red directory refuses the delete", async () => {
+    const root = await box();
+    const src = await cache(root);
+    const red = join(root, "Documents");
+    await mkdir(red, { recursive: true });
+    await writeFile(join(red, "keep.txt"), "keep");
+    const result = await moveToTrash(src, join(root, "Trash"), {
+      beforeDelete: async () => {
+        await rm(src, { recursive: true, force: true });
+        await symlink(red, src);
+      },
+    });
+    expect(result.status).toBe("failed");
+    expect(result.detail).toContain("danh sách đỏ");
+    expect(await readFile(join(red, "keep.txt"), "utf8")).toBe("keep");
+  });
+
+  test("swapping the target to a different real directory refuses the delete", async () => {
+    const root = await box();
+    const src = await cache(root);
+    const other = await cache(root, "elsewhere");
+    const result = await moveToTrash(src, join(root, "Trash"), {
+      beforeDelete: async () => {
+        await rm(src, { recursive: true, force: true });
+        await symlink(other, src);
+      },
+    });
+    expect(result.status).toBe("failed");
+    expect(result.detail).toContain("thay đổi");
+    expect(await readFile(join(other, "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("a red source is refused before the hook runs", async () => {
+    const root = await box();
+    const src = await cache(join(root, "Documents"), "notes");
+    let ran = false;
+    const result = await moveToTrash(src, join(root, "Trash"), {
+      beforeDelete: () => {
+        ran = true;
+      },
+    });
+    expect(result.status).toBe("failed");
+    expect(result.detail).toContain("danh sách đỏ");
+    expect(ran).toBe(false);
+    expect(await readFile(join(src, "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("realGuard accepts a clean path and refuses a red-resolving one", async () => {
+    const root = await box();
+    const src = await cache(root);
+    const clean = realGuard(src);
+    expect("real" in clean).toBe(true);
+    const red = join(root, "Documents");
+    await mkdir(red, { recursive: true });
+    await writeFile(join(red, "keep.txt"), "keep");
+    const link = join(root, "link");
+    await symlink(red, link);
+    expect(realGuard(link)).toEqual({ refused: "red" });
+    expect(realGuard(join(root, "missing"))).toEqual({ real: join(root, "missing") });
+  });
+});

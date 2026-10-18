@@ -131,3 +131,22 @@ export function isRedReal(path: string): boolean {
     return (err as NodeJS.ErrnoException).code !== "ENOENT";
   }
 }
+
+export type RealGuard = { real: string } | { refused: "red" | "unresolvable" };
+
+export function realGuard(path: string): RealGuard {
+  const full = resolve(path);
+  if (isRed(full)) return { refused: "red" };
+  try {
+    const real = realpathSync(full);
+    return isRed(real) ? { refused: "red" } : { real };
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT" ? { real: full } : { refused: "unresolvable" };
+  }
+}
+
+export function refusalText(reason: "red" | "unresolvable" | "changed"): string {
+  if (reason === "red") return "từ chối: nằm trong danh sách đỏ";
+  if (reason === "unresolvable") return "từ chối: không xác minh được đường dẫn thực";
+  return "từ chối: đường dẫn thay đổi trong lúc chờ xoá";
+}
