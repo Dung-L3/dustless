@@ -98,6 +98,16 @@ describe("memory", () => {
 });
 
 describe("processes", () => {
+  test("a process whose app path contains a space keeps its full helper name", async () => {
+    const ram = createRam({
+      exec: fakeExec(psResponse([
+        { pid: 31337, name: "Brave Browser Helper", mem: 400 * KIB * KIB, command: "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser Helper --type=renderer" },
+      ])),
+    });
+    const procs = await ram.getProcesses();
+    expect(procs[0]?.name).toBe("Brave Browser Helper");
+  });
+
   test("groups processes by executable category", async () => {
     const ram = createRam({
       exec: fakeExec(psResponse([

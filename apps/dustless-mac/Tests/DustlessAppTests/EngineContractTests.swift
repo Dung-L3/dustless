@@ -308,7 +308,7 @@ struct PanelFilterTests {
 private typealias MemProcess = DustlessKit.ProcessInfo
 
 private func process(command: String, mem: UInt64 = 1, pid: Int = 1) throws -> MemProcess {
-    let executable = command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? command
+    let executable = MemProcess.executablePath(in: command)
     let name = executable.split(separator: "/").last.map(String.init) ?? executable
     return try JSONDecoder().decode(MemProcess.self, from: Data("""
     {"pid":\(pid),"ppid":0,"name":"\(name)","command":"\(command)","cpu":0,"mem":\(mem),
