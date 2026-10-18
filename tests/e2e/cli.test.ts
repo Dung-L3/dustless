@@ -8,6 +8,7 @@ import {
   BINARY,
   cleanupAll,
   digest,
+  ensureBinary,
   gradleWrapper,
   measuredFreed,
   MB,
@@ -21,7 +22,7 @@ import {
   type Sandbox,
 } from "./harness.ts";
 
-const built = await Bun.$`bun run build`.cwd(REPO).quiet().nothrow();
+const built = await ensureBinary();
 
 const exists = async (path: string): Promise<boolean> => await stat(path).then(() => true, () => false);
 
