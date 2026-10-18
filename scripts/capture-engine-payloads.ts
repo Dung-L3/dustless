@@ -5,6 +5,8 @@ import type { ApplyReport, Finding, ScanReport } from "../src/types.ts";
 
 const OUT = join(REPO, "apps", "dustless-mac", "Tests", "DustlessAppTests", "Fixtures");
 const PINNED_MTIME = 1_700_000_000_000;
+const SANDBOX_HOME = "/tmp/dustless-fixture-sandbox";
+const PINNED_FREE_BEFORE = 316_615_888_896;
 
 async function stage(box: Sandbox): Promise<void> {
   const { home } = box;
@@ -23,15 +25,30 @@ async function stage(box: Sandbox): Promise<void> {
   await utimes(join(home, "work", "svc", "package.json"), recent, recent);
 }
 
-function pin(report: ScanReport): ScanReport {
+function normalizeHome<T>(value: T, home: string): T {
+  if (typeof value === "string") return value.split(home).join(SANDBOX_HOME) as T;
+  if (Array.isArray(value)) return value.map((v) => normalizeHome(v, home)) as T;
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = normalizeHome(v, home);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+function pin(report: ScanReport, home: string): ScanReport {
+  const normalized = normalizeHome(report, home);
   return {
-    ...report,
-    findings: report.findings.map((f: Finding, at: number) => ({
+    ...normalized,
+    findings: normalized.findings.map((f: Finding, at: number) => ({
       ...f,
       mtime: PINNED_MTIME + at * 1_000,
       atime: PINNED_MTIME + at * 2_000,
       ageDays: Number((40 + at * 1.5).toFixed(3)),
     })),
+    freeBefore: PINNED_FREE_BEFORE,
     scannedMs: 128,
   };
 }
@@ -65,7 +82,7 @@ try {
   await stage(box);
   const run = await box.run(["scan", "--json"]);
   if (run.code !== 0) throw new Error(`scan failed (${run.code}): ${run.stderr}`);
-  const pinned = pin(JSON.parse(run.stdout) as ScanReport);
+  const pinned = pin(JSON.parse(run.stdout) as ScanReport, box.home);
   await mkdir(OUT, { recursive: true });
   await writeFile(join(OUT, "scan.json"), `${JSON.stringify(pinned, null, 2)}\n`);
   await writeFile(join(OUT, "apply.json"), `${JSON.stringify(deriveApply(pinned), null, 2)}\n`);
