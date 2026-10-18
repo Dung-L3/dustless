@@ -103,5 +103,6 @@ export const RED_PATTERNS: RegExp[] = [
 ];
 
 export function isRed(path: string): boolean {
-  return RED_PATTERNS.some((re) => re.test(path));
+  const normalized = path.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+  return RED_PATTERNS.some((re) => re.test(normalized));
 }
