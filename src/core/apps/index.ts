@@ -169,7 +169,7 @@ function isDenied(path: string, home: string): boolean {
     if (isUnder(resolved, deny)) return true;
   }
 
-  if (!isUnder(resolved, resolvedHome) && !isUnder(resolved, "/Applications") && !isUnder(resolved, join(homedir(), "Applications"))) {
+  if (!isUnder(resolved, resolvedHome) && !isUnder(resolved, "/Applications") && !isUnder(resolved, join(resolvedHome, "Applications"))) {
     return true;
   }
 
