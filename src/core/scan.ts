@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Finding, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
-import { isRed, matchesBasename, pathsForRule, platform, resolvePattern } from "./paths.ts";
+import { isRedReal, matchesBasename, pathsForRule, platform, resolvePattern } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { verify } from "./verify/index.ts";
 import { freeSpace } from "./space.ts";
@@ -45,7 +45,7 @@ export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): 
     });
   }
   unscannable.sort((a, b) => a.ruleId.localeCompare(b.ruleId));
-  const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0 };
+  const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0 };
   for (const u of unscannable) unscannableSummary[u.reason] += 1;
   return {
     findings: found,
@@ -79,15 +79,23 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
         set.add(result.error.pattern);
         ruleData.reasons.set(reason, set);
       } else if (result.paths.length > 0) {
-        hasAnyPath = true;
-        ruleData.hasScannablePath = true;
+        for (const path of result.paths) {
+          if (isRedReal(path)) {
+            const set = ruleData.reasons.get("red") ?? new Set();
+            set.add(path);
+            ruleData.reasons.set("red", set);
+            continue;
+          }
+          hasAnyPath = true;
+          ruleData.hasScannablePath = true;
+        }
       }
     }
     unscannableMap?.set(rule.id, ruleData);
     if (!hasAnyPath) continue;
     const hits = results.flatMap((r) => r.paths);
     for (const path of hits) {
-      if (seen.has(path) || isRed(path)) continue;
+      if (seen.has(path) || isRedReal(path)) continue;
       if (!matchesBasename(path, rule.match)) continue;
       if (prefixes && !prefixes.some((prefix) => path.startsWith(prefix))) continue;
       seen.add(path);

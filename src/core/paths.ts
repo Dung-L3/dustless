@@ -1,5 +1,6 @@
 import { homedir, tmpdir } from "node:os";
 import { readdir } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Platform, Rule } from "../types.ts";
 
@@ -120,4 +121,13 @@ export const RED_PATTERNS: RegExp[] = [
 export function isRed(path: string): boolean {
   const normalized = path.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
   return RED_PATTERNS.some((re) => re.test(normalized));
+}
+
+export function isRedReal(path: string): boolean {
+  if (isRed(path)) return true;
+  try {
+    return isRed(realpathSync(path));
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== "ENOENT";
+  }
 }

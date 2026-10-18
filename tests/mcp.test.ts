@@ -26,7 +26,7 @@ function reportOf(findings: Finding[]): ScanReport {
     totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
     reclaimable: 0, freeBefore: 100 * GIB, platform: "mac", scannedMs: 1,
     unscannable: [],
-    unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0 },
+    unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0 },
   };
 }
 

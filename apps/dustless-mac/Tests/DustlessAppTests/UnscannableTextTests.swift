@@ -53,6 +53,17 @@ struct UnscannableTextTests {
         let reasons = UnscannableText.reasonsPresent(in: summary)
         #expect(reasons.isEmpty)
     }
+
+    @Test func redResolvesToLocalizedLabel() throws {
+        let summary = UnscannableSummary(absent: 0, noAccess: 0, notSupported: 0, error: 0, red: 2)
+        let report = try makeReport(summary: summary)
+        let en = try #require(UnscannableText.bannerParts(report: report, lang: .en))
+        #expect(en.reasonLabels == ["red list"])
+        let vi = try #require(UnscannableText.bannerParts(report: report, lang: .vi))
+        #expect(vi.reasonLabels == ["danh sách đỏ"])
+        let zh = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
+        #expect(zh.reasonLabels == ["红名单"])
+    }
 }
 
 private func makeReport(summary: UnscannableSummary) throws -> ScanReport {

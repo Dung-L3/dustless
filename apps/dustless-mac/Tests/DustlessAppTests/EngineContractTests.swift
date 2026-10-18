@@ -70,6 +70,7 @@ struct EngineContractTests {
         #expect(report.unscannableSummary.error == report.unscannable.filter { $0.reason == .error }.count)
         #expect(report.unscannableSummary.noAccess == 0)
         #expect(report.unscannableSummary.notSupported == 0)
+        #expect(report.unscannableSummary.red == report.unscannable.filter { $0.reason == .red }.count)
         #expect(report.unscannableSummary.total == report.unscannable.count)
         let avd = try #require(report.unscannable.first { $0.ruleId == "android.avd" })
         #expect(avd.reason == .absent)
