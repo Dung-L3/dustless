@@ -3,7 +3,7 @@ import { platform } from "../paths.ts";
 import { isRoot, systemRun, type Runner } from "./run.ts";
 
 export const AWDL_INTERFACE = "awdl0";
-export const IFCONFIG = "/sbin/ifconfig";
+export const IFCONFIG = process.env["DUSTLESS_IFCONFIG"] || "/sbin/ifconfig";
 export const AWDL_PRIVILEGE_PATH = "/etc/sudoers.d/dustless-awdl";
 
 export type AwdlState = "on" | "off" | "absent";
