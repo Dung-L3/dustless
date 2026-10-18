@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -12,12 +12,93 @@ export const VERSION = JSON.parse(
   await readFile(join(REPO, "package.json"), "utf8"),
 ).version as string;
 
-if (!(await stat(BINARY).then(() => true, () => false))) {
-  const built = await Bun.$`bun run build`.cwd(REPO).quiet().nothrow();
-  if (built.exitCode !== 0 || !(await stat(BINARY).then(() => true, () => false))) {
-    throw new Error(`could not build the e2e binary ${BINARY} (exit ${built.exitCode}):\n${built.stderr.toString()}`);
+export type BuildOutcome = { exitCode: number; rebuilt: boolean };
+
+const BUILD_INPUT_DIRS = ["src"];
+const BUILD_INPUT_FILES = ["package.json", "scripts/build.ts"];
+const LOCK_TIMEOUT_MS = 120_000;
+const LOCK_STALE_MS = 300_000;
+
+let pending: Promise<BuildOutcome> | null = null;
+
+async function binaryMtime(): Promise<number> {
+  const at = await stat(BINARY).catch(() => null);
+  return at ? at.mtimeMs : 0;
+}
+
+async function newestInputMtime(): Promise<number> {
+  let newest = 0;
+  const stack = BUILD_INPUT_DIRS.map((dir) => join(REPO, dir));
+  while (stack.length) {
+    const dir = stack.pop();
+    if (dir === undefined) continue;
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else newest = Math.max(newest, (await stat(full)).mtimeMs);
+    }
+  }
+  for (const file of BUILD_INPUT_FILES) {
+    newest = Math.max(newest, (await stat(join(REPO, file))).mtimeMs);
+  }
+  return newest;
+}
+
+function lockResource(): string {
+  const repoKey = createHash("sha256").update(REPO).digest("hex").slice(0, 12);
+  return join(tmpdir(), `dustless-e2e-build-${repoKey}`);
+}
+
+async function acquireLock(resource: string): Promise<string> {
+  await mkdir(resource, { recursive: true });
+  const target = join(resource, "owner");
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      const holder = await open(target, "wx");
+      await holder.close();
+      return target;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+    const at = await stat(target).catch(() => null);
+    if (at && Date.now() - at.mtimeMs > LOCK_STALE_MS) {
+      await rm(target, { force: true }).catch(() => undefined);
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${LOCK_TIMEOUT_MS}ms waiting on the e2e build lock ${target}`);
+    }
+    await new Promise((r) => setTimeout(r, 200));
   }
 }
+
+async function buildOnce(): Promise<BuildOutcome> {
+  const lock = await acquireLock(lockResource());
+  try {
+    if ((await binaryMtime()) >= (await newestInputMtime())) return { exitCode: 0, rebuilt: false };
+    console.error("[e2e-harness] dist/dustless is missing or stale; rebuilding");
+    const built = await Bun.$`bun run build`.cwd(REPO).quiet().nothrow();
+    if (built.exitCode !== 0 || !(await stat(BINARY).then(() => true, () => false))) {
+      throw new Error(`could not build the e2e binary ${BINARY} (exit ${built.exitCode}):\n${built.stderr.toString()}`);
+    }
+    return { exitCode: 0, rebuilt: true };
+  } finally {
+    await rm(lock, { force: true }).catch(() => undefined);
+  }
+}
+
+export async function ensureBinary(): Promise<BuildOutcome> {
+  if (!pending) {
+    pending = (async () => {
+      if ((await binaryMtime()) >= (await newestInputMtime())) return { exitCode: 0, rebuilt: false };
+      return buildOnce();
+    })();
+  }
+  return pending;
+}
+
+await ensureBinary();
 
 const TMP = resolve(tmpdir());
 const TIMEOUT_MS = 60_000;
