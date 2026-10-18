@@ -35,6 +35,21 @@ enum PanelFont {
     }
 }
 
+enum PanelMotion {
+    static let crossfade = 0.15
+    static let fade = 0.18
+    static let banner = 0.28
+    static let glance = 0.12
+
+    static func gated(_ reduceMotion: Bool, _ duration: Double) -> Animation? {
+        reduceMotion ? nil : .easeOut(duration: duration)
+    }
+
+    static func content(_ reduceMotion: Bool) -> ContentTransition {
+        reduceMotion ? .identity : .opacity
+    }
+}
+
 extension View {
     func panelCard(_ fill: Color = PanelStyle.cardFill) -> some View {
         background(fill, in: .rect(cornerRadius: PanelStyle.radius))
@@ -86,6 +101,8 @@ struct PanelStat: View {
     let label: String
     let value: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
@@ -97,6 +114,8 @@ struct PanelStat: View {
                 .font(PanelFont.number())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .contentTransition(PanelMotion.content(reduceMotion))
+                .animation(PanelMotion.gated(reduceMotion, PanelMotion.glance), value: value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -220,6 +239,7 @@ struct RefreshButton: View {
     let action: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -229,14 +249,17 @@ struct RefreshButton: View {
                         .controlSize(.small)
                         .scaleEffect(0.7)
                         .frame(width: 12, height: 12)
+                        .transition(.opacity)
                 } else {
                     Image(systemName: "arrow.clockwise")
+                        .transition(.opacity)
                 }
                 Text(settings.t("refresh"))
             }
         }
         .controlSize(.small)
         .disabled(isBusy)
+        .animation(PanelMotion.gated(reduceMotion, PanelMotion.crossfade), value: isBusy)
         .help(settings.t("refreshHelp"))
         .accessibilityLabel(settings.t("refresh"))
     }

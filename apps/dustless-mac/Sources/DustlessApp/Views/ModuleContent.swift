@@ -6,13 +6,10 @@ struct ModuleContent: View {
     @ObservedObject var router: AppRouter
     @ObservedObject var net: NetControl
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .transition(.opacity)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: router.module)
     }
 
     @ViewBuilder

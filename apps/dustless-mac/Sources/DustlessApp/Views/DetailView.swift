@@ -28,6 +28,7 @@ struct DetailView: View {
             if let report = store.report {
                 if let error = store.engineError {
                     staleBanner(settings.text(error))
+                        .transition(.opacity)
                 }
                 tierContent(report)
             } else if let error = store.engineError {
@@ -43,7 +44,8 @@ struct DetailView: View {
                 }
             }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: store.busyMessage)
+        .animation(reduceMotion ? nil : .snappy(duration: PanelMotion.banner), value: store.busyMessage)
+        .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.engineError == nil)
     }
 
     private func staleBanner(_ text: String) -> some View {
@@ -78,6 +80,7 @@ struct DetailView: View {
                 CleanupResultCard(report: apply) { store.showingCleanupResult = false }
                     .padding(.horizontal, PanelStyle.Space.l)
                     .padding(.top, PanelStyle.Space.m)
+                    .transition(.opacity)
             }
 
             PanelFilterBar(placeholder: settings.t("searchFindings"), text: $store.findingsQuery) {
