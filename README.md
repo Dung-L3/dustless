@@ -4,7 +4,7 @@
 
 **Disk cleanup for developer machines.** It measures every toolchain cache in its rule database, proves each one is unused by reading your real projects, and deletes only what passed.
 
-Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.4.0, is read from `package.json` at build time (`src/cli/context.ts`) — one number, one source.
+Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.5.0, is read from `package.json` at build time (`src/cli/context.ts`) — one number, one source.
 
 ---
 
@@ -143,6 +143,30 @@ Type `y` and press Enter to proceed. Anything else — including just pressing E
 
 `y` deletes that item. Anything else skips it and moves on. Nothing is batched behind your back.
 
+## Full Disk Access and unscannable rules
+
+macOS TCC hides some directories from any process that lacks Full Disk Access, and it hides them by
+making them look empty or absent rather than by naming the protected parent. `dustless doctor` probes
+`~/Library/Mail` for exactly that (`src/cli/doctor.ts`, `runDoctor`) and **exits 1 when the probe
+comes back `EPERM` or `EACCES`**. That is by design, not a crash: an environment that cannot read its
+own caches cannot be trusted to report what is in them, so the exit status says so. It is also why a
+scan can find fewer rules than the database holds — a rule whose paths are all unreadable contributes
+nothing.
+
+A scan now says what it could not look at instead of staying silent. `scan --json` carries two extra
+keys beside `findings` and `totals` (`src/types.ts`, `ScanReport`):
+
+- `unscannable` — one entry per rule that produced no scannable path, each with `ruleId`, `tier`,
+  `desc`, the `pathPatterns` that failed, and a `reason` of `absent` (the path does not exist),
+  `no_access` (EACCES/EPERM — usually the missing Full Disk Access), `not_supported` (the rule has no
+  path for this platform) or `error` (`src/core/scan.ts`, `scan`).
+- `unscannableSummary` — the count per reason, with all four keys always present.
+
+Those rules are excluded from `totals`, `reclaimable` and `freed`: the field can only ever add
+information, never a number. The macOS app models both fields and localizes the reason wording
+(`UnscannableRule`, `UnscannableSummary` and `UnscannableText` in
+`apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift`).
+
 ## CLI reference
 
 Every command below is implemented in `src/cli.ts`.
@@ -157,7 +181,7 @@ Every command below is implemented in `src/cli.ts`.
 | `dustless rule validate [file]` | Parse and validate a rules file. Omit the path to validate the merged database. |
 | `dustless doctor` | Platform, home, config dir, rule count, total/free bytes, readability of key paths, Full Disk Access check. |
 | `dustless mcp` | Serve MCP over stdio for an AI agent. See [docs/MCP.md](docs/MCP.md). |
-| `dustless version` | Print `0.4.0`. `dustless help`, and a bare `dustless`, print usage. |
+| `dustless version` | Print `0.5.0`. `dustless help`, and a bare `dustless`, print usage. |
 
 ### Flags
 
