@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   applyJson,
@@ -11,7 +11,6 @@ import {
   treeBytes,
   type Sandbox,
 } from "./harness.ts";
-import { listApps, uninstall } from "../../src/core/apps/index.ts";
 
 afterAll(cleanupAll);
 
@@ -257,6 +256,33 @@ describe("A. --only-file fuzz properties", () => {
     }
   });
 
+  test("onlyfile.apply-refusal-detail", async () => {
+    const box = await sandbox("onlyfile-refusal");
+    try {
+      await plant(join(box.home, ".npm", "_cacache"), 2 * MB, 2);
+      await userRules(
+        box.home,
+        `- id: test.cache\n  tier: green\n  desc: planted\n  paths: { all: ["${join(box.home, ".npm", "_cacache")}"] }\n- id: test.home\n  tier: green\n  desc: planted\n  paths: { all: ["~"] }\n`,
+      );
+      const scan = scanJson((await box.run(["scan", "--json"])).stdout);
+      expect(scan.findings.some((f) => f.ruleId === "test.home")).toBe(true);
+      expect(scan.findings.some((f) => resolve(f.path) === resolve(join(box.home, ".npm", "_cacache")))).toBe(true);
+      const file = join(box.home, "selection-refusal.json");
+      await writeFile(file, JSON.stringify([box.home]));
+      const run = await box.run(["apply", "--yes", "--json", "--only-file", file]);
+      expect(run.code).toBe(1);
+      const result = applyJson(run.stdout);
+      const homeOutcome = result.outcomes.find((o) => resolve(o.path) === resolve(box.home));
+      expect(homeOutcome).toBeDefined();
+      expect(homeOutcome?.status).toBe("failed");
+      expect(homeOutcome?.detail).toContain("từ chối");
+      expect(homeOutcome?.detail).toContain("HOME");
+      expect(await treeBytes(join(box.home, ".npm", "_cacache"))).toBe(2 * MB);
+    } finally {
+      await box.dispose();
+    }
+  });
+
   test("onlyfile.unknown-rule", async () => {
     const { box } = await setupOnlyFileBox("unknown");
     try {
@@ -275,24 +301,27 @@ describe("A. --only-file fuzz properties", () => {
 });
 
 describe("B. uninstall bundle-id traversal fuzz", () => {
+  type AppJson = { bundleId: string; name: string; path: string; bytes: number; relatedPaths: string[] };
+  type UninstallJson = {
+    outcomes: { path: string; status: string; bytes: number; detail: string }[];
+    summary: { trashed: number; purged: number; skipped: number; failed: number; totalBytes: number };
+  };
+
+  let box: Sandbox;
   let seed: number;
-  let root: string;
   let home: string;
   let appsDir: string;
-  let libraryDir: string;
   let victimDir: string;
   let siblingDir: string;
 
   beforeAll(async () => {
     seed = makeSeed();
-    root = await mkdtemp(join("/tmp", `dustless-bundleid-${seed}-`));
-    home = join(root, "home");
+    box = await sandbox(`bundleid-${seed}`);
+    home = box.home;
     appsDir = join(home, "Applications");
-    libraryDir = join(home, "Library");
-    victimDir = join(root, "victim");
-    siblingDir = join(root, "sibling");
+    victimDir = join(box.outside, "victim");
+    siblingDir = join(box.outside, "sibling");
     await mkdir(appsDir, { recursive: true });
-    await mkdir(libraryDir, { recursive: true });
     await mkdir(victimDir, { recursive: true });
     await mkdir(siblingDir, { recursive: true });
     await writeFile(join(victimDir, "precious.txt"), "not yours to delete");
@@ -300,7 +329,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
   });
 
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await box.dispose();
   });
 
   function makeApp(_bundleId: string, name: string) {
@@ -339,9 +368,19 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
   }
 
   async function writeLeftover(bundleId: string, rel: string): Promise<void> {
-    const full = join(libraryDir, rel.replace("{id}", bundleId));
+    const full = join(home, "Library", rel.replace("{id}", bundleId));
     await mkdir(full, { recursive: true });
     await writeFile(join(full, "data.bin"), Buffer.alloc(256, 0x88));
+  }
+
+  async function uninstallViaCli(appPath: string): Promise<{ code: number; stdout: string }> {
+    const run = await box.run(["apps", "--uninstall", appPath, "--confirm", "--purge", "--json"]);
+    return { code: run.code, stdout: run.stdout };
+  }
+
+  async function appsViaCli(): Promise<AppJson[]> {
+    const run = await box.run(["apps", "--json"]);
+    return JSON.parse(run.stdout) as AppJson[];
   }
 
   test("bundleid.traversal", async () => {
@@ -368,36 +407,47 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
       const { id, kind } = traversalIds[index]!;
       const appPath = await writeApp(id, `App_${index}`);
       if (kind === "refuse") {
-        const report = await uninstall({ home, appPath, relatedPaths: [], confirm: true, purge: true });
-        expect(report.summary.purged).toBe(0);
-        expect(report.summary.trashed).toBe(0);
-        expect(report.summary.failed).toBeGreaterThanOrEqual(1);
-        expect(report.outcomes.some(o => o.status === "failed" && (o.detail.includes("not a valid identifier") || o.detail.includes("could not read bundle ID")))).toBe(true);
-      } else {
-        const apps = await listApps({ home, appDirs: [appsDir] });
-        const app = apps.find((entry) => entry.bundleId === id);
-        if (kind === "benign") {
-          expect(app).toBeDefined();
-          expect(app?.relatedPaths.length).toBe(0);
-          const report = await uninstall({ home, appPath, relatedPaths: app?.relatedPaths ?? [], confirm: true, purge: true });
-          expect(report.summary.purged).toBe(1);
-          expect(report.summary.failed).toBe(0);
+        const { code, stdout } = await uninstallViaCli(appPath);
+        expect(code).toBe(1);
+        if (id === "") {
+          const err = JSON.parse(stdout) as { error: string };
+          expect(err.error).toBe("app not found in inventory");
         } else {
-          expect(app?.relatedPaths).toEqual([]);
-          const report = await uninstall({ home, appPath, relatedPaths: app?.relatedPaths ?? [], confirm: true, purge: true });
+          const report = JSON.parse(stdout) as UninstallJson;
+          expect(report.summary.purged).toBe(0);
           expect(report.summary.trashed).toBe(0);
-          expect(report.summary.purged + report.summary.failed).toBe(1);
-          const widen = report.outcomes.filter(
-            (o) => o.status === "purged" && resolve(o.path) !== resolve(appPath),
-          );
-          expect(widen).toEqual([]);
+          expect(report.summary.failed).toBeGreaterThanOrEqual(1);
+          expect(report.outcomes.some(o => o.status === "failed" && (o.detail.includes("not a valid identifier") || o.detail.includes("could not read bundle ID")))).toBe(true);
         }
+      } else if (kind === "benign") {
+        const apps = await appsViaCli();
+        const app = apps.find((entry) => entry.bundleId === id);
+        expect(app).toBeDefined();
+        expect(app?.relatedPaths.length).toBe(0);
+        const { code, stdout } = await uninstallViaCli(appPath);
+        const report = JSON.parse(stdout) as UninstallJson;
+        expect(code).toBe(0);
+        expect(report.summary.purged).toBe(1);
+        expect(report.summary.failed).toBe(0);
+      } else {
+        const apps = await appsViaCli();
+        const app = apps.find((entry) => entry.bundleId === id);
+        expect(app?.relatedPaths).toEqual([]);
+        const { code, stdout } = await uninstallViaCli(appPath);
+        const report = JSON.parse(stdout) as UninstallJson;
+        expect(code).toBe(0);
+        expect(report.summary.trashed).toBe(0);
+        expect(report.summary.purged + report.summary.failed).toBe(1);
+        const widen = report.outcomes.filter(
+          (o) => o.status === "purged" && resolve(o.path) !== resolve(appPath),
+        );
+        expect(widen).toEqual([]);
       }
       expect(await stat(victimDir).then(() => true, () => false)).toBe(true);
       expect(await stat(join(victimDir, "precious.txt")).then(() => true, () => false)).toBe(true);
       await rm(appPath, { recursive: true, force: true });
     }
-  });
+  }, 240_000);
 
   test("bundleid.sibling-safety", async () => {
     const aId = "com.example.a";
@@ -409,19 +459,15 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
     await writeLeftover(bId, "Application Support/{id}");
     await writeLeftover(bId, "Caches/{id}");
 
-    const apps = await listApps({ home, appDirs: [appsDir] });
+    const apps = await appsViaCli();
     const a = apps.find((app) => app.bundleId === aId)!;
     const b = apps.find((app) => app.bundleId === bId)!;
     expect(a).toBeDefined();
     expect(b).toBeDefined();
 
-    const report = await uninstall({
-      home,
-      appPath: a.path,
-      relatedPaths: a.relatedPaths,
-      confirm: true,
-      purge: true,
-    });
+    const { code, stdout } = await uninstallViaCli(a.path);
+    const report = JSON.parse(stdout) as UninstallJson;
+    expect(code).toBe(0);
     expect(report.summary.purged).toBe(1 + a.relatedPaths.length);
     expect(report.summary.failed).toBe(0);
     expect(await stat(a.path).then(() => false, () => true)).toBe(true);
