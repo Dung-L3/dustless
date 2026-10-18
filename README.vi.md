@@ -4,7 +4,7 @@
 
 **Dọn dung lượng ổ đĩa cho máy lập trình viên.** Nó đo mọi cache toolchain trong rule database, chứng minh mỗi mục đã không còn ai dùng bằng cách đọc project thật của bạn, rồi chỉ xóa những gì đã qua kiểm chứng.
 
-Dustless là một binary đã compile, chạy trên macOS, Windows và Linux. Không cần runtime, không daemon, không quyền admin. Phiên bản, 0.1.2, được đọc từ `package.json` lúc build (`src/cli.ts:14`) — một con số, một nguồn.
+Dustless là một binary đã compile, chạy trên macOS, Windows và Linux. Không cần runtime, không daemon, không quyền admin. Phiên bản, 0.4.0, được đọc từ `package.json` lúc build (`src/cli/context.ts`) — một con số, một nguồn.
 
 ---
 
@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 Một id gõ sai, một id mà payload quên mất, một rule mà scan không sinh ra — tất cả đều phân giải thành skip, không bao giờ thành tier của chính rule đó. Phiên bản trước mặc định thành tier của rule, nên một key bị bỏ sót lặng lẽ có nghĩa là "xóa"; đó là thứ đã lấy mất khoảng 36 GB trên một máy thật.
 
-Mặc định đó là lưới an toàn cuối, không phải cơ chế. Mọi caller đều tự dựng map của riêng mình: CLI dựng từ scan đang chạy (`src/cli.ts:134`), MCP dựng từ các rule id nó đã kiểm chứng trước (`src/mcp/tools.ts:188`).
+Mặc định đó là lưới an toàn cuối, không phải cơ chế. Mọi caller đều tự dựng map của riêng mình: CLI dựng từ scan đang chạy (`src/cli/scan.ts`), MCP dựng từ các rule id nó đã kiểm chứng trước (`src/mcp/tools.ts:188`).
 
 ### Vì sao BLOCKED không thể bị ghi đè
 
-Cờ chặn được kiểm tra ở bốn điểm độc lập: scan bật cờ, phần tổng kết của apply loại những finding đó ra khỏi tập cần xóa (`src/cli.ts:118`), `apply()` kiểm tra lại trước khi chạm vào filesystem (`src/core/apply.ts:60`), và safety layer của MCP từ chối cả lệnh (`src/mcp/safety.ts:88`). `--yes` bỏ qua câu hỏi. Nó không thể tạo ra một kiểm chứng đạt, và không thể gỡ cờ chặn. RED cũng vậy: đó là một danh sách regex được biên dịch thẳng vào binary. Không cờ nào, không file rule nào, không tham số MCP nào chạm tới được nó.
+Cờ chặn được kiểm tra ở bốn điểm độc lập: scan bật cờ, phần tổng kết của apply loại những finding đó ra khỏi tập cần xóa (`src/cli/scan.ts`), `apply()` kiểm tra lại trước khi chạm vào filesystem (`src/core/apply.ts:60`), và safety layer của MCP từ chối cả lệnh (`src/mcp/safety.ts:88`). `--yes` bỏ qua câu hỏi. Nó không thể tạo ra một kiểm chứng đạt, và không thể gỡ cờ chặn. RED cũng vậy: đó là một danh sách regex được biên dịch thẳng vào binary. Không cờ nào, không file rule nào, không tham số MCP nào chạm tới được nó.
 
 ## Cài đặt
 
@@ -65,7 +65,7 @@ Push một tag `v*` và workflow build sẽ compile bốn target rồi đính k�
 dustless doctor     # xác nhận nó chạy và đọc được cache của bạn
 ```
 
-`doctor` in ra nền tảng, home directory của bạn, thư mục config, số rule, tổng và dung lượng trống, cùng một bài kiểm tra khả năng đọc theo từng path. Nó trả exit code khác 0 khi một path nó cần không đọc được (`src/cli.ts:265`).
+`doctor` in ra nền tảng, home directory của bạn, thư mục config, số rule, tổng và dung lượng trống, cùng một bài kiểm tra khả năng đọc theo từng path. Nó trả exit code khác 0 khi một path nó cần không đọc được (`src/cli/doctor.ts`).
 
 ### Từ source
 
@@ -133,7 +133,7 @@ Tổng   3.4 GB
 Xóa? [y/N]
 ```
 
-Gõ `y` rồi Enter để tiếp tục. Bất kỳ ký tự nào khác — kể cả chỉ Enter — sẽ hủy và không xóa gì. Nếu có finding bị chặn, bản tổng kết còn nói rõ có bao nhiêu mục không bao giờ xóa được, bạn trả lời thế nào cũng vậy (`src/cli.ts:154`). Giao diện là tiếng Việt vì đó là thứ binary in ra, và vì vậy ở đây nó được giữ nguyên.
+Gõ `y` rồi Enter để tiếp tục. Bất kỳ ký tự nào khác — kể cả chỉ Enter — sẽ hủy và không xóa gì. Nếu có finding bị chặn, bản tổng kết còn nói rõ có bao nhiêu mục không bao giờ xóa được, bạn trả lời thế nào cũng vậy (`src/cli/scan.ts`). Giao diện là tiếng Việt vì đó là thứ binary in ra, và vì vậy ở đây nó được giữ nguyên.
 
 **Bước 3 — trả lời các mục vàng.** Với từng mục YELLOW bạn được hỏi riêng, từng mục một:
 
@@ -157,20 +157,20 @@ Mọi lệnh dưới đây đều được implement trong `src/cli.ts`.
 | `dustless rule validate [file]` | Parse và validate một file rules. Bỏ trống đường dẫn để validate database đã gộp. |
 | `dustless doctor` | Nền tảng, home, thư mục config, số rule, tổng/trống, khả năng đọc các path chính, kiểm tra Full Disk Access. |
 | `dustless mcp` | Phục vụ MCP qua stdio cho AI agent. Xem [docs/MCP.md](docs/MCP.md). |
-| `dustless version` | In `0.1.2`. `dustless help`, và gõ `dustless` trần, in hướng dẫn dùng. |
+| `dustless version` | In `0.4.0`. `dustless help`, và gõ `dustless` trần, in hướng dẫn dùng. |
 
 ### Cờ
 
 | Cờ | Tác dụng |
 | --- | --- |
-| `--json` | Một đối tượng JSON duy nhất trên stdout cho `scan`, `apply`, `rule list`, `doctor`, `version`. Với `apply` nó còn hủy luôn: không có `--yes` thì không có câu hỏi, nên không xóa gì (`src/cli.ts:148`). |
+| `--json` | Một đối tượng JSON duy nhất trên stdout cho `scan`, `apply`, `rule list`, `doctor`, `version`. Với `apply` nó còn hủy luôn: không có `--yes` thì không có câu hỏi, nên không xóa gì (`src/cli/scan.ts`). |
 | `--quiet` | Tắt các dòng dành cho người đọc. |
 | `--yes` | Bỏ qua bước xác nhận. Bỏ qua cả câu hỏi tổng kết **và** các câu hỏi từng mục YELLOW. Nó không bỏ qua kiểm chứng, và không gỡ được BLOCKED hay RED. |
 | `--help` | Hướng dẫn dùng, chỉ khi nó là đối số đứng một mình — `dustless --help`. Sau một từ lệnh khác thì lệnh đó thắng: `dustless scan --help` sẽ chạy một lần scan. |
 
 ### `apply --json`
 
-`apply --json` in đúng một đối tượng JSON trên stdout, ở mọi đường đi tới được nó — đã xóa, không có gì để xóa, đã hủy — với các key `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` là `max(0, freeAfter - freeBefore)`: chênh lệch dung lượng trống của cả volume, không phải tổng số byte của các mục đã xóa, nên nó có thể báo `0` sau một lần xóa thật nếu giữa lúc đó có thứ khác lấp đĩa (`src/core/apply.ts:33`). Một lỗi cứng — ví dụ `~/.config/dustless/rules.yaml` hỏng — vẫn trả exit `1` kèm thông báo trên stderr và không có gì trên stdout (`src/cli.ts:300`).
+`apply --json` in đúng một đối tượng JSON trên stdout, ở mọi đường đi tới được nó — đã xóa, không có gì để xóa, đã hủy — với các key `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` là `max(0, freeAfter - freeBefore)`: chênh lệch dung lượng trống của cả volume, không phải tổng số byte của các mục đã xóa, nên nó có thể báo `0` sau một lần xóa thật nếu giữa lúc đó có thứ khác lấp đĩa (`src/core/apply.ts:33`). Một lỗi cứng — ví dụ `~/.config/dustless/rules.yaml` hỏng — vẫn trả exit `1` kèm thông báo trên stderr và không có gì trên stdout (`src/cli.ts`).
 
 ## macOS app
 
@@ -242,7 +242,7 @@ dustless rule list
 ## Xử lý sự cố
 
 **macOS: thiếu kết quả hoặc `doctor` báo `EPERM`.**
-TCC đang che các thư mục khỏi tiến trình. Cấp Full Disk Access trong System Settings › Privacy & Security › Full Disk Access, rồi đóng và mở lại terminal. `doctor` in ra chẩn đoán này và trả exit `1` khi `~/Library/Mail` trả về `EPERM` (`src/cli.ts:259`). Lưu ý cái bẫy: thiếu quyền làm cho `~/Library/Caches` trông *nhỏ hơn* thực tế, nên một số cache không bao giờ xuất hiện trong scan.
+TCC đang che các thư mục khỏi tiến trình. Cấp Full Disk Access trong System Settings › Privacy & Security › Full Disk Access, rồi đóng và mở lại terminal. `doctor` in ra chẩn đoán này và trả exit `1` khi `~/Library/Mail` trả về `EPERM` (`src/cli/doctor.ts`). Lưu ý cái bẫy: thiếu quyền làm cho `~/Library/Caches` trông *nhỏ hơn* thực tế, nên một số cache không bao giờ xuất hiện trong scan.
 
 **Windows: `EBUSY` hoặc `EPERM` khi xóa.**
 Antivirus và Windows Search indexer giữ khoá tạm thời. `remove()` thử lại tối đa 4 lần trên Windows với backoff luỹ thừa, rồi bỏ cuộc (`src/core/apply.ts:98`). Hãy tắt indexer hoặc loại trừ thư mục đó, rồi chạy lại.
@@ -253,7 +253,7 @@ Antivirus và Windows Search indexer giữ khoá tạm thời. `remove()` thử 
 - Kiểm chứng thất bại. Mục đó là BLOCKED và `--yes` không đổi được.
 - Path trúng danh sách đỏ, là `$HOME` hoặc thư mục cha của nó, hoặc là filesystem root (`src/core/apply.ts:86`).
 
-**`apply` hủy mà không xóa gì cả.** Không có `--yes` thì nó hỏi trước, và nó chỉ hỏi trên stdin là TTY: trong một CI job, một pipe hay một wrapper script, nó in bản tổng kết rồi dừng (`src/cli.ts:157`). Với `--json` cũng vậy, vì không thể hỏi. Hãy chạy trong terminal thật, hoặc dùng MCP server, vì nó có cổng xác nhận tường minh riêng.
+**`apply` hủy mà không xóa gì cả.** Không có `--yes` thì nó hỏi trước, và nó chỉ hỏi trên stdin là TTY: trong một CI job, một pipe hay một wrapper script, nó in bản tổng kết rồi dừng (`src/cli/scan.ts`). Với `--json` cũng vậy, vì không thể hỏi. Hãy chạy trong terminal thật, hoặc dùng MCP server, vì nó có cổng xác nhận tường minh riêng.
 
 **`freed` báo `0` dù file đã bị xóa.** `freed` là mức thay đổi dung lượng trống trên cả volume. Nếu một tiến trình khác ghi vào đĩa trong lúc chạy, chênh lệch bị kẹp về `0` (`src/core/apply.ts:33`). Hãy đọc `status` của từng outcome.
 

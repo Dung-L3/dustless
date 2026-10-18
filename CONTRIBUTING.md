@@ -2,6 +2,10 @@
 
 Cảm ơn bạn muốn đóng góp. Vài quy ước ngắn để mọi thứ nhất quán.
 
+Trước khi sửa gì, đọc [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): nó nói engine và app
+gặp nhau ở đâu, và điều gì phải chạy lại khi một trong hai đổi. Lý do đằng sau những
+quyết định trông lạ nằm ở [docs/DECISIONS.md](docs/DECISIONS.md).
+
 ## Quy trình
 
 1. **Fork** repo này về tài khoản của bạn

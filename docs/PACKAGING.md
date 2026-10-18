@@ -52,8 +52,15 @@ Builds the SwiftUI app (`swift build -c release`), then assembles:
 Dustless.app/Contents/MacOS/Dustless        SwiftUI executable (arm64)
 Dustless.app/Contents/Resources/dustless    CLI engine (the compiled Bun binary)
 Dustless.app/Contents/Resources/Dustless.icns
+Dustless.app/Contents/Resources/MenuBarIcon.png
 Dustless.app/Contents/Info.plist
 ```
+
+Both executables are `chmod 755`, and the build **fails** rather than shipping a
+crippled app if `dist/Dustless.icns` or `Assets/MenuBarIcon.png` is missing — an
+app with no icon or a menu-bar mark that paints a solid square is worse than a
+build that stops. `Info.plist` is passed through `plutil -lint` before the
+signature is taken.
 
 `Info.plist` carries `CFBundleIdentifier` (`dev.dustless.mac`),
 `CFBundleShortVersionString`/`CFBundleVersion` (from `package.json`),

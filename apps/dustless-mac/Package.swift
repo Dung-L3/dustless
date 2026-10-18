@@ -18,6 +18,7 @@ let package = Package(
             name: "DustlessAppTests",
             dependencies: ["DustlessKit"],
             path: "Tests/DustlessAppTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: [
                 .unsafeFlags(["-F/Library/Developer/CommandLineTools/Library/Developer/Frameworks"])
             ],

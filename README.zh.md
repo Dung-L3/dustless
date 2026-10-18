@@ -4,7 +4,7 @@
 
 **开发者机器的磁盘清理工具。** 它测量规则数据库里的每一个工具链缓存，通过读取你真实项目来证明每个缓存已无人使用，然后只删除通过验证的部分。
 
-Dustless 是单个已编译的二进制文件，支持 macOS、Windows 和 Linux。不需要运行时，不驻留后台，不需要管理员权限。版本号 0.1.2 在构建时从 `package.json` 读取（`src/cli.ts:14`）—— 一个数字，一个来源。
+Dustless 是单个已编译的二进制文件，支持 macOS、Windows 和 Linux。不需要运行时，不驻留后台，不需要管理员权限。版本号 0.4.0 在构建时从 `package.json` 读取（`src/cli/context.ts`）—— 一个数字，一个来源。
 
 ---
 
@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 拼错的 id、payload 漏掉的 id、scan 根本没产出的 rule —— 全部解析为 skip，绝不会变成该规则自己的 tier。早期版本默认取规则自身的 tier，于是漏掉一个键就等于静默地说“删除”；那正是从一台真实机器上带走约 36 GB 的原因。
 
-这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli.ts:134`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:188`）。
+这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli/scan.ts`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:188`）。
 
 ### 为什么 BLOCKED 无法被覆盖
 
-封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli.ts:118`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:60`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:88`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。
+封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli/scan.ts`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:60`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:88`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。
 
 ## 安装
 
@@ -65,7 +65,7 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 dustless doctor     # 确认它能运行且能读取你的缓存
 ```
 
-`doctor` 会打印平台、你的主目录、规则目录、规则数量、总容量和剩余容量，以及逐路径的可读性探测。当它需要的某个路径读不到时，退出码非零（`src/cli.ts:265`）。
+`doctor` 会打印平台、你的主目录、规则目录、规则数量、总容量和剩余容量，以及逐路径的可读性探测。当它需要的某个路径读不到时，退出码非零（`src/cli/doctor.ts`）。
 
 ### 从源码运行
 
@@ -133,7 +133,7 @@ Tổng   3.4 GB
 Xóa? [y/N]
 ```
 
-输入 `y` 然后回车继续。其他任何字符 —— 包括直接回车 —— 都会取消，且不删除任何东西。如果存在被封锁的 finding，汇总会另外说明有多少条目无论如何都无法删除（`src/cli.ts:154`）。界面是越南语，因为二进制文件输出的就是越南语，所以这里原样保留。
+输入 `y` 然后回车继续。其他任何字符 —— 包括直接回车 —— 都会取消，且不删除任何东西。如果存在被封锁的 finding，汇总会另外说明有多少条目无论如何都无法删除（`src/cli/scan.ts`）。界面是越南语，因为二进制文件输出的就是越南语，所以这里原样保留。
 
 **第 3 步 —— 回答黄色条目。** 每个 YELLOW 条目都会单独问你，一条一条：
 
@@ -157,20 +157,20 @@ Xóa? [y/N]
 | `dustless rule validate [file]` | 解析并校验一个规则文件。省略路径则校验合并后的数据库。 |
 | `dustless doctor` | 平台、主目录、配置目录、规则数量、总容量/剩余容量、关键路径可读性、Full Disk Access 检查。 |
 | `dustless mcp` | 通过 stdio 提供 MCP 服务供 AI agent 使用。见 [docs/MCP.md](docs/MCP.md)。 |
-| `dustless version` | 打印 `0.1.2`。`dustless help` 以及直接运行 `dustless` 都会打印用法。 |
+| `dustless version` | 打印 `0.4.0`。`dustless help` 以及直接运行 `dustless` 都会打印用法。 |
 
 ### 标志
 
 | 标志 | 作用 |
 | --- | --- |
-| `--json` | 为 `scan`、`apply`、`rule list`、`doctor`、`version` 在 stdout 输出一个 JSON 对象。对 `apply` 它同时意味着取消：没有 `--yes` 就没有提问，所以什么都不会删（`src/cli.ts:148`）。 |
+| `--json` | 为 `scan`、`apply`、`rule list`、`doctor`、`version` 在 stdout 输出一个 JSON 对象。对 `apply` 它同时意味着取消：没有 `--yes` 就没有提问，所以什么都不会删（`src/cli/scan.ts`）。 |
 | `--quiet` | 抑制面向人类阅读的输出行。 |
 | `--yes` | 跳过确认。既跳过汇总提问，**也**跳过每条 YELLOW 的提问。它不跳过验证，也无法解除 BLOCKED 或 RED。 |
 | `--help` | 用法说明，但仅当它是唯一参数时 —— `dustless --help`。在另一个命令词之后，命令本身优先：`dustless scan --help` 会执行一次 scan。 |
 
 ### `apply --json`
 
-`apply --json` 在 stdout 上恰好打印一个 JSON 对象，在每一条走到它的路径上 —— 已删除、无可删除、已取消 —— 键为 `outcomes`、`freed`、`freeBefore`、`freeAfter`、`elapsedMs`（`src/types.ts:56`）。`freed` 是 `max(0, freeAfter - freeBefore)`：整个卷上剩余空间的差值，不是被删条目之和，所以如果期间有别的东西占满了磁盘，一次真实删除之后它也可能读出 `0`（`src/core/apply.ts:33`）。硬错误 —— 比如格式错误的 `~/.config/dustless/rules.yaml` —— 仍然以 `1` 退出，消息在 stderr 上，stdout 上什么都没有（`src/cli.ts:300`）。
+`apply --json` 在 stdout 上恰好打印一个 JSON 对象，在每一条走到它的路径上 —— 已删除、无可删除、已取消 —— 键为 `outcomes`、`freed`、`freeBefore`、`freeAfter`、`elapsedMs`（`src/types.ts:56`）。`freed` 是 `max(0, freeAfter - freeBefore)`：整个卷上剩余空间的差值，不是被删条目之和，所以如果期间有别的东西占满了磁盘，一次真实删除之后它也可能读出 `0`（`src/core/apply.ts:33`）。硬错误 —— 比如格式错误的 `~/.config/dustless/rules.yaml` —— 仍然以 `1` 退出，消息在 stderr 上，stdout 上什么都没有（`src/cli.ts`）。
 
 ## macOS app
 
@@ -242,7 +242,7 @@ dustless rule list
 ## 故障排查
 
 **macOS：结果缺失，或 `doctor` 报 `EPERM`。**
-TCC 在对进程隐藏目录。请在 系统设置 › 隐私与安全性 › 完全磁盘访问权限 中授权，然后退出并重新打开终端。`doctor` 会打印这个诊断，并在 `~/Library/Mail` 返回 `EPERM` 时以 `1` 退出（`src/cli.ts:259`）。注意这个陷阱：缺少授权会让 `~/Library/Caches` 看起来比实际*更小*，于是某些缓存根本不会出现在 scan 结果里。
+TCC 在对进程隐藏目录。请在 系统设置 › 隐私与安全性 › 完全磁盘访问权限 中授权，然后退出并重新打开终端。`doctor` 会打印这个诊断，并在 `~/Library/Mail` 返回 `EPERM` 时以 `1` 退出（`src/cli/doctor.ts`）。注意这个陷阱：缺少授权会让 `~/Library/Caches` 看起来比实际*更小*，于是某些缓存根本不会出现在 scan 结果里。
 
 **Windows：删除时报 `EBUSY` 或 `EPERM`。**
 杀毒软件和 Windows 搜索索引器会持有短暂的锁。在 Windows 上 `remove()` 最多重试 4 次，采用指数退避，之后放弃（`src/core/apply.ts:98`）。关闭索引器或把该目录加入排除列表，然后重跑。
@@ -253,7 +253,7 @@ TCC 在对进程隐藏目录。请在 系统设置 › 隐私与安全性 › �
 - 验证失败。该条目是 BLOCKED，`--yes` 也无法改变。
 - 路径命中红色清单、是 `$HOME` 或它的父目录、或是文件系统根目录（`src/core/apply.ts:86`）。
 
-**`apply` 取消了而什么也没删。** 没有 `--yes` 时它会先问，而且只在 stdin 是 TTY 时才问：在 CI 任务、管道或包装脚本里，它打印完汇总就停（`src/cli.ts:157`）。带 `--json` 时同样如此，因为它无法提问。请在真正的终端里运行，或者改用 MCP server，它有自己显式的确认闸门。
+**`apply` 取消了而什么也没删。** 没有 `--yes` 时它会先问，而且只在 stdin 是 TTY 时才问：在 CI 任务、管道或包装脚本里，它打印完汇总就停（`src/cli/scan.ts`）。带 `--json` 时同样如此，因为它无法提问。请在真正的终端里运行，或者改用 MCP server，它有自己显式的确认闸门。
 
 **`freed` 显示 `0` 但文件确实被删了。** `freed` 是整个卷上剩余空间的变化量。如果运行期间有别的进程往磁盘写数据，这个差值会被压到 `0`（`src/core/apply.ts:33`）。请改看每条 outcome 的 `status`。
 

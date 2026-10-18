@@ -4,7 +4,7 @@
 
 **Disk cleanup for developer machines.** It measures every toolchain cache in its rule database, proves each one is unused by reading your real projects, and deletes only what passed.
 
-Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.1.2, is read from `package.json` at build time (`src/cli.ts:14`) — one number, one source.
+Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.4.0, is read from `package.json` at build time (`src/cli/context.ts`) — one number, one source.
 
 ---
 
@@ -49,11 +49,11 @@ const action = opts.tiers?.[finding.ruleId] ?? "skip";
 
 A misspelled id, an id the payload forgot, a rule the scan never produced — all resolve to skip, never to the rule's own tier. An earlier version defaulted to the rule's tier instead, and an omitted key silently meant "delete"; that is what took roughly 36 GB off a real machine.
 
-The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli.ts:134`), MCP from the rule ids it verified first (`src/mcp/tools.ts:188`).
+The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli/scan.ts`), MCP from the rule ids it verified first (`src/mcp/tools.ts:188`).
 
 ### Why BLOCKED cannot be overridden
 
-The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli.ts:118`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:60`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:88`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it.
+The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli/scan.ts`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:60`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:88`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it.
 
 ## Install
 
@@ -65,7 +65,7 @@ Push a `v*` tag and the build workflow compiles four targets and attaches them t
 dustless doctor     # confirm it runs and can read your caches
 ```
 
-`doctor` prints the platform, your home directory, the rules directory, the rule count, total and free bytes, and a readability probe for the key paths. It exits non-zero when a path it needs is unreadable (`src/cli.ts:265`).
+`doctor` prints the platform, your home directory, the rules directory, the rule count, total and free bytes, and a readability probe for the key paths. It exits non-zero when a path it needs is unreadable (`src/cli/doctor.ts`).
 
 ### From source
 
@@ -133,7 +133,7 @@ Tổng   3.4 GB
 Xóa? [y/N]
 ```
 
-Type `y` and press Enter to proceed. Anything else — including just pressing Enter — cancels and deletes nothing. If there are blocked findings, the summary also states how many items can never be deleted, whatever you answer (`src/cli.ts:154`). The interface is Vietnamese because that is what the binary prints, which is why it is reproduced verbatim here.
+Type `y` and press Enter to proceed. Anything else — including just pressing Enter — cancels and deletes nothing. If there are blocked findings, the summary also states how many items can never be deleted, whatever you answer (`src/cli/scan.ts`). The interface is Vietnamese because that is what the binary prints, which is why it is reproduced verbatim here.
 
 **Step 3 — answer the yellow ones.** For each YELLOW item you get its own prompt, one at a time:
 
@@ -157,13 +157,13 @@ Every command below is implemented in `src/cli.ts`.
 | `dustless rule validate [file]` | Parse and validate a rules file. Omit the path to validate the merged database. |
 | `dustless doctor` | Platform, home, config dir, rule count, total/free bytes, readability of key paths, Full Disk Access check. |
 | `dustless mcp` | Serve MCP over stdio for an AI agent. See [docs/MCP.md](docs/MCP.md). |
-| `dustless version` | Print `0.1.2`. `dustless help`, and a bare `dustless`, print usage. |
+| `dustless version` | Print `0.4.0`. `dustless help`, and a bare `dustless`, print usage. |
 
 ### Flags
 
 | Flag | Effect |
 | --- | --- |
-| `--json` | One JSON object on stdout for `scan`, `apply`, `rule list`, `doctor`, `version`. For `apply` it also cancels: with no `--yes` there is no prompt, so nothing is deleted (`src/cli.ts:148`). |
+| `--json` | One JSON object on stdout for `scan`, `apply`, `rule list`, `doctor`, `version`. For `apply` it also cancels: with no `--yes` there is no prompt, so nothing is deleted (`src/cli/scan.ts`). |
 | `--quiet` | Suppress the human-readable lines. |
 | `--yes` | Skip the confirmation. Skips the summary question **and** the per-item YELLOW questions. It does not skip verification, and it does not unblock BLOCKED or RED. |
 | `--only-file <selection.json>` | Apply only the exact paths in this JSON array of absolute paths; every other finding is `skipped` as not selected. Omit it and `apply` keeps its behaviour of offering every green/yellow finding. An unreadable file, or one that is not an array of strings, exits `1` and deletes nothing. |
@@ -254,7 +254,7 @@ dustless rule list
 ## Troubleshooting
 
 **macOS: results are missing or `doctor` reports `EPERM`.**
-TCC is hiding directories from the process. Grant Full Disk Access in System Settings › Privacy & Security › Full Disk Access, then quit and reopen the terminal. `doctor` prints this diagnosis and exits `1` when `~/Library/Mail` comes back `EPERM` (`src/cli.ts:259`). Note the trap: a missing grant makes `~/Library/Caches` look *smaller* than it is, so some caches never appear in a scan at all.
+TCC is hiding directories from the process. Grant Full Disk Access in System Settings › Privacy & Security › Full Disk Access, then quit and reopen the terminal. `doctor` prints this diagnosis and exits `1` when `~/Library/Mail` comes back `EPERM` (`src/cli/doctor.ts`). Note the trap: a missing grant makes `~/Library/Caches` look *smaller* than it is, so some caches never appear in a scan at all.
 
 **Windows: `EBUSY` or `EPERM` on delete.**
 Antivirus and the Windows Search indexer hold transient locks. `remove()` retries up to 4 attempts on Windows with exponential backoff, and gives up after that (`src/core/apply.ts:98`). Close the indexer or exclude the directory, then re-run.
@@ -265,7 +265,7 @@ Antivirus and the Windows Search indexer hold transient locks. `remove()` retrie
 - Verification failed. That item is BLOCKED and `--yes` will not change it.
 - The path hit the red blocklist, is `$HOME` or a parent of it, or is the filesystem root (`src/core/apply.ts:86`).
 
-**`apply` cancels without deleting anything.** With no `--yes` it asks first, and it only asks on a TTY stdin: in a CI job, a pipe or a wrapper script it prints the summary and stops (`src/cli.ts:157`). The same happens with `--json`, which cannot prompt. Run it in a real terminal, or use the MCP server, which has its own explicit-confirmation gate.
+**`apply` cancels without deleting anything.** With no `--yes` it asks first, and it only asks on a TTY stdin: in a CI job, a pipe or a wrapper script it prints the summary and stops (`src/cli/scan.ts`). The same happens with `--json`, which cannot prompt. Run it in a real terminal, or use the MCP server, which has its own explicit-confirmation gate.
 
 **`freed` says `0` but files were deleted.** `freed` is the change in free space on the whole volume. If another process wrote to the disk during the run, the delta clamps to `0` (`src/core/apply.ts:33`). Read the per-outcome `status` instead.
 
@@ -273,7 +273,7 @@ Antivirus and the Windows Search indexer hold transient locks. `remove()` retrie
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/TESTING.md](docs/TESTING.md). `main` is protected, including for the owner: no direct push, one required status check, linear history, and `@Dung-L3` code-owner review on every change. Fork, branch, commit, open a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/TESTING.md](docs/TESTING.md). `main` is protected, including for the owner: no direct push, one required status check, linear history, and `@Dung-L3` code-owner review on every change. Fork, branch, commit, open a pull request.
 
 The golden rule: **do not add a cleanup rule to the rule database without writing the verification that proves it is safe.** A rule that deletes files without checking whether anyone still needs them is a bug, not a feature.
 
