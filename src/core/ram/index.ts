@@ -230,7 +230,7 @@ function parsePsLine(line: string): ProcessInfo | null {
   const cpu = Number(parts[3]);
   const rss = Number(parts[4]);
   const command = parts.slice(5).join(" ");
-  const executable = command.split(/\s+/)[0] ?? "";
+  const executable = executableOf(command);
   const name = executable.split("/").pop() ?? executable;
   if (!Number.isFinite(pid) || pid <= 0) return null;
   return {
@@ -244,6 +244,30 @@ function parsePsLine(line: string): ProcessInfo | null {
     root: owner === "root",
     category: classify(command),
   };
+}
+
+function executableOf(command: string): string {
+  const marker = [".app/Contents/MacOS/", ".app/Contents/Resources/"]
+    .map((prefix) => ({ prefix, at: command.lastIndexOf(prefix) }))
+    .reduce((a, b) => (b.at > a.at ? b : a));
+  if (marker.at >= 0) {
+    const after = command.slice(marker.at + marker.prefix.length);
+    const args = after.match(/[ \t]-/)?.index;
+    return (args !== undefined ? after.slice(0, args) : after).trimEnd();
+  }
+  const args = command.indexOf(" --");
+  if (args >= 0) return command.slice(0, args);
+  const headEnd = command.search(/\s/);
+  const head = headEnd < 0 ? command : command.slice(0, headEnd);
+  if (!head.startsWith("/")) return head;
+  for (let at = headEnd; at >= 0 && at < command.length; ) {
+    while (at < command.length && /\s/.test(command[at]!)) at += 1;
+    let end = at;
+    while (end < command.length && !/\s/.test(command[end]!)) end += 1;
+    if (!command.slice(at, end).includes("/")) return command.slice(0, at).trimEnd();
+    at = end;
+  }
+  return command;
 }
 
 function classify(command: string): ProcessCategory {

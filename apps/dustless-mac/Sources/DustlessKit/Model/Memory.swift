@@ -47,7 +47,41 @@ public enum Category: String, Codable, Sendable {
 
 extension ProcessInfo {
     public var executablePath: String {
-        command.split(separator: " ", maxSplits: 1).first.map(String.init) ?? name
+        Self.executablePath(in: command)
+    }
+
+    public static func executablePath(in command: String) -> String {
+        let marker = [".app/Contents/MacOS/", ".app/Contents/Resources/"]
+            .compactMap { prefix -> (String, Range<String.Index>)? in
+                command.range(of: prefix, options: .backwards).map { (prefix, $0) }
+            }
+            .max { $0.1.lowerBound < $1.1.lowerBound }
+        if let (prefix, range) = marker {
+            let after = String(command[range.upperBound...])
+            let args = after.isEmpty ? nil : (after.range(of: " -") ?? after.range(of: "\t-"))
+            if let args {
+                return String(after[..<args.lowerBound]).trimmingCharacters(in: .whitespaces)
+            }
+            return after
+        }
+        if let args = command.range(of: " --") {
+            return String(command[..<args.lowerBound])
+        }
+        let headEnd = command.firstIndex(where: \.isWhitespace) ?? command.endIndex
+        let head = String(command[..<headEnd])
+        if !head.hasPrefix("/") { return head }
+        var at: String.Index? = headEnd
+        while let index = at, index < command.endIndex {
+            var start = index
+            while start < command.endIndex, command[start].isWhitespace { start = command.index(after: start) }
+            var end = start
+            while end < command.endIndex, !command[end].isWhitespace { end = command.index(after: end) }
+            if !command[start..<end].contains("/") {
+                return String(command[..<index]).trimmingCharacters(in: .whitespaces)
+            }
+            at = end
+        }
+        return command
     }
 }
 
