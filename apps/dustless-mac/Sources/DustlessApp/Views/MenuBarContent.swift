@@ -13,6 +13,7 @@ struct MenuBarContent: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
@@ -175,6 +176,7 @@ struct MenuBarContent: View {
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
             }
 
             if store.report == nil {
@@ -187,6 +189,7 @@ struct MenuBarContent: View {
                 .controlSize(.large)
                 .disabled(store.isBusy)
                 .help(settings.t("rescanHelp"))
+                .transition(.opacity)
             } else {
                 if store.selectedFindings.isEmpty {
                     Button {
@@ -197,6 +200,7 @@ struct MenuBarContent: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .help(settings.t("menuPickToClean"))
+                    .transition(.opacity)
                 } else {
                     Button(action: reviewAndClean) {
                         Text(settings.t("overviewReview", [
@@ -209,6 +213,7 @@ struct MenuBarContent: View {
                     .controlSize(.large)
                     .disabled(!store.canClean)
                     .help(settings.t("reviewAndDeleteHelp"))
+                    .transition(.opacity)
                 }
 
                 Button {
@@ -225,6 +230,8 @@ struct MenuBarContent: View {
                 .help(settings.t("rescanHelp"))
             }
         }
+        .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.selectedFindings.isEmpty)
+        .animation(PanelMotion.gated(reduceMotion, PanelMotion.crossfade), value: store.report == nil)
     }
 
     private func reviewAndClean() {

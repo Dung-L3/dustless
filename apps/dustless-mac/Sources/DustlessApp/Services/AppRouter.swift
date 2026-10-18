@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum Module: String, CaseIterable, Identifiable, Hashable {
@@ -45,7 +46,14 @@ final class AppRouter: ObservableObject {
     @Published var module: Module = .overview
 
     func select(_ module: Module) {
-        self.module = module
+        let animated = module != self.module && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if animated {
+            withAnimation(.easeOut(duration: PanelMotion.crossfade)) {
+                self.module = module
+            }
+        } else {
+            self.module = module
+        }
         if MainWindowTracker.shared.window?.isKeyWindow != true {
             openMainWindow()
         }
