@@ -41,13 +41,14 @@ function scannedRoots(roots?: string[]): string[] {
   return list;
 }
 
+const WALKERS = 32;
+
 async function walk(root: string, minSize: number, found: LargeFile[]): Promise<void> {
-  const stack = [root];
-  while (stack.length) {
-    const dir = stack.pop();
-    if (dir === undefined) break;
+  const stack: string[] = [];
+
+  const visit = async (dir: string): Promise<void> => {
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
-    if (!entries) continue;
+    if (!entries) return;
     const files: string[] = [];
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
@@ -63,7 +64,18 @@ async function walk(root: string, minSize: number, found: LargeFile[]): Promise<
       const meta = stats[at];
       if (meta && meta.size >= minSize) found.push({ path: file, size: meta.size, mtime: meta.mtimeMs });
     });
-  }
+  };
+
+  const worker = async (): Promise<void> => {
+    while (stack.length) {
+      const dir = stack.pop();
+      if (dir === undefined) break;
+      await visit(dir);
+    }
+  };
+
+  await visit(root);
+  await Promise.all(Array.from({ length: WALKERS }, () => worker()));
 }
 
 export async function findLargeFiles(opts: FindLargeFilesOptions = {}): Promise<LargeFile[]> {
