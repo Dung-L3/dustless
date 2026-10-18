@@ -1,14 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   applyJson,
   cleanupAll,
   digest,
-  MB,
-  plant,
   sandbox,
-  scanJson,
   treeBytes,
   type Sandbox,
   type ApplyReport,

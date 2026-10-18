@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { isRed, RED_PATTERNS } from "../../src/core/paths.ts";
+import { isRed } from "../../src/core/paths.ts";
 
 const SEED = Number(process.env.FUZZ_SEED ?? 123456789);
 
@@ -16,7 +16,7 @@ class XorShift32 {
     return this.state;
   }
   nextFloat(): number { return this.next() / 0x100000000; }
-  pick<T>(arr: T[]): T { return arr[this.next() % arr.length]; }
+  pick<T>(arr: T[]): T { return arr[this.next() % arr.length] as T; }
   bool(p = 0.5): boolean { return this.nextFloat() < p; }
   int(min: number, max: number): number { return min + this.next() % (max - min + 1); }
 }
