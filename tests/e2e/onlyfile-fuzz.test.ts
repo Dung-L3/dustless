@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
   applyJson,
-  BINARY,
   cleanupAll,
   MB,
   plant,
@@ -37,13 +36,13 @@ class XorShift32 {
     return Math.floor(this.nextFloat() * max);
   }
   pick<T>(arr: T[]): T {
-    return arr[this.nextInt(arr.length)];
+    return arr[this.nextInt(arr.length)]!;
   }
   shuffle<T>(arr: T[]): T[] {
     const out = [...arr];
     for (let i = out.length - 1; i > 0; i--) {
       const j = this.nextInt(i + 1);
-      [out[i], out[j]] = [out[j], out[i]];
+      [out[i], out[j]] = [out[j]!, out[i]!];
     }
     return out;
   }
@@ -80,7 +79,7 @@ async function setupOnlyFileBox(label: string): Promise<{ box: Sandbox; seed: nu
 
 describe("A. --only-file fuzz properties", () => {
   test("onlyfile.refuses-red", async () => {
-    const { box, seed, rng } = await setupOnlyFileBox("red");
+    const { box } = await setupOnlyFileBox("red");
     try {
       const scan = scanJson((await box.run(["scan", "--json"])).stdout);
       const redFinding = scan.findings.find((f) => f.path === join(box.home, PLANTED_RED));
@@ -161,7 +160,7 @@ describe("A. --only-file fuzz properties", () => {
   });
 
   test("onlyfile.unicode-and-slashes", async () => {
-    const { box, seed } = await setupOnlyFileBox("unicode");
+    const { box } = await setupOnlyFileBox("unicode");
     try {
       const base = "café";
       const nfc = base.normalize("NFC");
@@ -204,7 +203,7 @@ describe("A. --only-file fuzz properties", () => {
   });
 
   test("onlyfile.huge-list", async () => {
-    const { box, seed, rng } = await setupOnlyFileBox("huge");
+    const { box, rng } = await setupOnlyFileBox("huge");
     try {
       const start = Date.now();
       const selections: string[] = [];
@@ -280,7 +279,6 @@ describe("A. --only-file fuzz properties", () => {
 
 describe("B. uninstall bundle-id traversal fuzz", () => {
   let seed: number;
-  let rng: XorShift32;
   let root: string;
   let home: string;
   let appsDir: string;
@@ -290,7 +288,6 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
 
   beforeAll(async () => {
     seed = makeSeed();
-    rng = new XorShift32(seed);
     root = await mkdtemp(join("/tmp", `dustless-bundleid-${seed}-`));
     home = join(root, "home");
     appsDir = join(home, "Applications");
@@ -309,7 +306,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  function makeApp(bundleId: string, name: string) {
+  function makeApp(_bundleId: string, name: string) {
     const appPath = join(appsDir, `${name}.app`);
     const contents = join(appPath, "Contents");
     const macos = join(contents, "MacOS");
@@ -398,8 +395,8 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
   test("bundleid.sibling-safety", async () => {
     const aId = "com.example.a";
     const bId = "com.example.b";
-    const aApp = await writeApp(aId, "AppA");
-    const bApp = await writeApp(bId, "AppB");
+    await writeApp(aId, "AppA");
+    await writeApp(bId, "AppB");
     await writeLeftover(aId, "Application Support/{id}");
     await writeLeftover(aId, "Caches/{id}");
     await writeLeftover(bId, "Application Support/{id}");
