@@ -22,6 +22,11 @@
   into a red directory, or retargeted to a different real directory, between the check and the delete
   is refused with a localized reason and left untouched. Locked by `tests/race-delete.test.ts`, whose
   `beforeDelete` hook performs the swap.
+- The apply path and the MCP delete guard re-resolve the real path at the moment of removal too:
+  `remove` (`src/core/apply.ts`) reads `realGuard` before and immediately before the `rm` and refuses
+  when the target changed or resolves into a red directory, and `assertPathDeletable`
+  (`src/mcp/safety.ts`) uses `realGuard` for its red test. Locked by `tests/race-delete-apply.test.ts`,
+  whose `beforeDelete` hook performs the swap.
 
 ### Honesty
 

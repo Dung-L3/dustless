@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { basename, parse, resolve, sep } from "node:path";
 import type { ApplyOutcome, ApplyReport, Finding, Rule, ScanReport, TierChoice } from "../types.ts";
-import { HOME, isRed, platform } from "./paths.ts";
+import { HOME, isRed, realGuard, refusalText, platform } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { exec, freeSpace } from "./space.ts";
 
@@ -18,6 +18,7 @@ type Options = {
   assumeYes?: boolean;
   onPrompt?: (finding: Finding) => Promise<boolean>;
   only?: ReadonlySet<string>;
+  beforeDelete?: () => void | Promise<void>;
 };
 
 export async function apply(report: ScanReport, opts: Options = {}): Promise<ApplyReport> {
@@ -82,7 +83,7 @@ async function run(
     outcome.detail = opts.onPrompt ? "người dùng từ chối" : "cần xác nhận, chạy lại với --yes";
     return outcome;
   }
-  const failure = await remove(finding.path);
+  const failure = await remove(finding.path, opts.beforeDelete);
   outcome.status = failure ? "failed" : "deleted";
   outcome.detail = failure;
   return outcome;
@@ -100,7 +101,13 @@ async function confirm(finding: Finding, opts: Options): Promise<boolean> {
   return (await opts.onPrompt?.(finding)) ?? false;
 }
 
-async function remove(path: string): Promise<string> {
+async function remove(path: string, beforeDelete?: () => void | Promise<void>): Promise<string> {
+  const first = realGuard(path);
+  if ("refused" in first) return refusalText(first.refused);
+  await beforeDelete?.();
+  const again = realGuard(path);
+  if ("refused" in again) return refusalText(again.refused);
+  if (again.real !== first.real) return refusalText("changed");
   const attempts = platform === "win" ? 4 : 1;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
