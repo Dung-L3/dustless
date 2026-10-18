@@ -4,7 +4,7 @@
       "ruleId": "container.docker",
       "tier": "yellow",
       "desc": "Docker Desktop VM disk",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Containers/com.docker.docker",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Containers/com.docker.docker",
       "bytes": 2457600,
       "mtime": 1700000000000,
       "atime": 1700000000000,
@@ -17,7 +17,7 @@
       "ruleId": "gradle.version_cache",
       "tier": "yellow",
       "desc": "Gradle cache của version không project nào dùng",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.gradle/caches/9.0",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.gradle/caches/9.0",
       "bytes": 716800,
       "mtime": 1700000001000,
       "atime": 1700000002000,
@@ -30,7 +30,7 @@
       "ruleId": "npm.cacache",
       "tier": "green",
       "desc": "npm cache tarball",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.npm/_cacache",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.npm/_cacache",
       "bytes": 307200,
       "mtime": 1700000002000,
       "atime": 1700000004000,
@@ -43,7 +43,7 @@
       "ruleId": "pip.cache",
       "tier": "green",
       "desc": "pip wheel cache",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/pip",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cache/pip",
       "bytes": 122880,
       "mtime": 1700000003000,
       "atime": 1700000006000,
@@ -56,7 +56,7 @@
       "ruleId": "bun.cache",
       "tier": "green",
       "desc": "Bun package cache",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.bun/install/cache",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.bun/install/cache",
       "bytes": 92160,
       "mtime": 1700000004000,
       "atime": 1700000008000,
@@ -69,7 +69,7 @@
       "ruleId": "gradle.wrapper",
       "tier": "yellow",
       "desc": "Gradle wrapper đã tải về, tự tải lại khi build",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.gradle/wrapper/dists",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.gradle/wrapper/dists",
       "bytes": 1,
       "mtime": 1700000005000,
       "atime": 1700000010000,
@@ -98,7 +98,7 @@
     }
   },
   "reclaimable": 3696641,
-  "freeBefore": 322754465792,
+  "freeBefore": 316896727040,
   "platform": "mac",
   "scannedMs": 128,
   "unscannable": [
@@ -108,7 +108,7 @@
       "desc": "Android emulator AVD, tốn hàng GB mỗi cái",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.android/avd/*.avd"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.android/avd/*.avd"
       ]
     },
     {
@@ -117,7 +117,7 @@
       "desc": "Android NDK, build native cần đúng phiên bản",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Android/sdk/ndk"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Android/sdk/ndk"
       ]
     },
     {
@@ -126,7 +126,7 @@
       "desc": "Ảnh hệ thống Android cho emulator",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Android/sdk/system-images"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Android/sdk/system-images"
       ]
     },
     {
@@ -135,7 +135,7 @@
       "desc": "Brave cache, không đụng profile",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/com.brave.Browser"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/com.brave.Browser"
       ]
     },
     {
@@ -144,7 +144,7 @@
       "desc": "Brave Software cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/BraveSoftware"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/BraveSoftware"
       ]
     },
     {
@@ -153,7 +153,7 @@
       "desc": "Chrome cache, không đụng profile",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Google/Chrome"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/Google/Chrome"
       ]
     },
     {
@@ -162,7 +162,7 @@
       "desc": "Edge cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Microsoft Edge"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/Microsoft Edge"
       ]
     },
     {
@@ -171,7 +171,7 @@
       "desc": "Firefox cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Firefox/Profiles"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/Firefox/Profiles"
       ]
     },
     {
@@ -180,7 +180,7 @@
       "desc": "Cargo registry cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cargo/registry/cache"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cargo/registry/cache"
       ]
     },
     {
@@ -189,7 +189,7 @@
       "desc": "Colima VM disk, xoá là mất image và container",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.colima/_lima"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.colima/_lima"
       ]
     },
     {
@@ -198,7 +198,7 @@
       "desc": "Go module cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/go/pkg/mod"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/go/pkg/mod"
       ]
     },
     {
@@ -208,7 +208,7 @@
       "reason": "absent",
       "pathPatterns": [
         "/opt/homebrew/var/homebrew/cache",
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Homebrew"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/Caches/Homebrew"
       ]
     },
     {
@@ -217,7 +217,7 @@
       "desc": "Package tải tạm qua npx, tái tạo khi chạy lại",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.npm/_npx"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.npm/_npx"
       ]
     },
     {
@@ -226,7 +226,7 @@
       "desc": "pnpm content-addressable store",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/pnpm/store"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/Library/pnpm/store"
       ]
     },
     {
@@ -249,7 +249,7 @@
       "desc": "Dart pub cache, tái tạo bằng pub get",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.pub-cache/hosted"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.pub-cache/hosted"
       ]
     },
     {
@@ -258,7 +258,7 @@
       "desc": "Puppeteer browser tải về",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/puppeteer"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cache/puppeteer"
       ]
     },
     {
@@ -267,7 +267,7 @@
       "desc": "uv cache wheel và source build",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/uv"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cache/uv"
       ]
     },
     {
@@ -276,7 +276,7 @@
       "desc": "Yarn cache",
       "reason": "absent",
       "pathPatterns": [
-        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/yarn"
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-WYZ8Tm/.cache/yarn"
       ]
     }
   ],
@@ -284,6 +284,7 @@
     "absent": 18,
     "no_access": 0,
     "not_supported": 0,
-    "error": 2
+    "error": 2,
+    "red": 0
   }
 }

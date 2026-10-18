@@ -233,6 +233,7 @@ public enum L10n {
         "scan.unscannable.reason.no_access": "không truy cập",
         "scan.unscannable.reason.not_supported": "không hỗ trợ",
         "scan.unscannable.reason.error": "lỗi",
+        "scan.unscannable.reason.red": "danh sách đỏ",
 
         "revealInFinder": "Hiện trong Finder",
         "copyPath": "Sao chép đường dẫn",
@@ -542,6 +543,7 @@ public enum L10n {
         "scan.unscannable.reason.no_access": "no access",
         "scan.unscannable.reason.not_supported": "not supported",
         "scan.unscannable.reason.error": "error",
+        "scan.unscannable.reason.red": "red list",
 
         "revealInFinder": "Reveal in Finder",
         "copyPath": "Copy Path",
@@ -851,6 +853,7 @@ public enum L10n {
         "scan.unscannable.reason.no_access": "无访问权限",
         "scan.unscannable.reason.not_supported": "不支持",
         "scan.unscannable.reason.error": "错误",
+        "scan.unscannable.reason.red": "红名单",
 
         "revealInFinder": "在访达中显示",
         "copyPath": "复制路径",

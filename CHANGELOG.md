@@ -10,6 +10,11 @@
   seeded property tests (`tests/property/redlist.test.ts`) and the symlink-escape end-to-end cases
   (`tests/e2e/symlink-red.test.ts`).
 - Fuzz cases for the `--only-file` selection set and for bundle-id traversal (`tests/e2e/onlyfile-fuzz.test.ts`).
+- A scan resolves a candidate's real path before the red-list test, so a cache directory that is
+  really a symlink into a red directory (Documents, Keychains, `.git`, …) is never counted as
+  reclaimable and is instead reported as unscannable with the new `red` reason
+  (`src/core/scan.ts`, `candidates`; `src/core/paths.ts`, `isRedReal`). The app models and localizes
+  the reason (`UnscannableReason.red`, key `scan.unscannable.reason.red`).
 
 ### Honesty
 

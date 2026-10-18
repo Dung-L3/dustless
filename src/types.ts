@@ -37,7 +37,7 @@ export type Finding = {
 
 export type TierStat = { count: number; bytes: number };
 
-export type UnscannableReason = "absent" | "no_access" | "not_supported" | "error";
+export type UnscannableReason = "absent" | "no_access" | "not_supported" | "error" | "red";
 
 export type UnscannableRule = {
   ruleId: string;

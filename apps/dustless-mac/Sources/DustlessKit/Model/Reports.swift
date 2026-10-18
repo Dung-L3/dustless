@@ -28,6 +28,7 @@ public enum UnscannableReason: String, Codable, CaseIterable, Sendable {
     case noAccess = "no_access"
     case notSupported = "not_supported"
     case error
+    case red
 }
 
 public struct UnscannableRule: Codable, Sendable, Hashable {
@@ -43,23 +44,26 @@ public struct UnscannableSummary: Codable, Sendable, Hashable {
     public let noAccess: Int
     public let notSupported: Int
     public let error: Int
+    public let red: Int
 
     private enum CodingKeys: String, CodingKey {
         case absent
         case noAccess = "no_access"
         case notSupported = "not_supported"
         case error
+        case red
     }
 
-    public init(absent: Int, noAccess: Int, notSupported: Int, error: Int) {
+    public init(absent: Int, noAccess: Int, notSupported: Int, error: Int, red: Int = 0) {
         self.absent = absent
         self.noAccess = noAccess
         self.notSupported = notSupported
         self.error = error
+        self.red = red
     }
 
     public var total: Int {
-        absent + noAccess + notSupported + error
+        absent + noAccess + notSupported + error + red
     }
 }
 
@@ -102,6 +106,7 @@ public enum UnscannableText {
         if summary.noAccess > 0 { result.append(.noAccess) }
         if summary.notSupported > 0 { result.append(.notSupported) }
         if summary.error > 0 { result.append(.error) }
+        if summary.red > 0 { result.append(.red) }
         return result
     }
 
