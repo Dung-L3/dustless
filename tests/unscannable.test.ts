@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,8 @@ import { scan } from "../src/core/scan.ts";
 import { sandbox as e2eSandbox, scanJson, userRules } from "./e2e/harness.ts";
 
 const sandbox = await mkdtemp(join(tmpdir(), "dustless-unscannable-"));
+const priorConfigHome = process.env["XDG_CONFIG_HOME"];
+process.env["XDG_CONFIG_HOME"] = join(sandbox, "config");
 
 const writeRules = async (body: string): Promise<string> => {
   const { userRulesPath } = await import("../src/core/rules.ts");
@@ -16,6 +19,9 @@ const writeRules = async (body: string): Promise<string> => {
 };
 
 afterAll(async () => {
+  if (priorConfigHome === undefined) delete process.env["XDG_CONFIG_HOME"];
+  else process.env["XDG_CONFIG_HOME"] = priorConfigHome;
+  spawnSync("chmod", ["-R", "u+rwX", sandbox], { stdio: "ignore" });
   await rm(sandbox, { recursive: true, force: true });
 });
 
