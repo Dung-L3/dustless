@@ -65,6 +65,30 @@ struct EngineContractTests {
         #expect(report.reclaimable > 0)
         #expect(report.freeBefore > 0)
         #expect(report.platform == "mac")
+        #expect(!report.unscannable.isEmpty)
+        #expect(report.unscannableSummary.absent == report.unscannable.filter { $0.reason == .absent }.count)
+        #expect(report.unscannableSummary.error == report.unscannable.filter { $0.reason == .error }.count)
+        #expect(report.unscannableSummary.noAccess == 0)
+        #expect(report.unscannableSummary.notSupported == 0)
+        #expect(report.unscannableSummary.total == report.unscannable.count)
+        let avd = try #require(report.unscannable.first { $0.ruleId == "android.avd" })
+        #expect(avd.reason == .absent)
+        #expect(avd.tier == .yellow)
+        #expect(!avd.pathPatterns.isEmpty)
+        #expect(report.totals.green.count == 3)
+        #expect(report.totals.yellow.count == 3)
+        #expect(report.totals.red.count == 0)
+        #expect(report.totals.blocked.count == 0)
+        #expect(report.totals.green.bytes == 522_240)
+        #expect(report.totals.yellow.bytes == 3_174_401)
+    }
+
+    @Test func rejectsAnUnknownUnscannableReasonRatherThanGuessing() {
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode(UnscannableRule.self, from: Data(#"""
+            {"ruleId":"r","tier":"green","desc":"d","reason":"maybe","pathPatterns":["/a"]}
+            """#.utf8))
+        }
     }
 
     @Test func decodesRealApplyPayload() throws {

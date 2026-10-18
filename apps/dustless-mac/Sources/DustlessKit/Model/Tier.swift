@@ -19,6 +19,11 @@ public enum Tier: String, Codable, CaseIterable, Sendable {
 public struct TierStat: Codable, Sendable {
     public let count: Int
     public let bytes: UInt64
+
+    public init(count: Int, bytes: UInt64) {
+        self.count = count
+        self.bytes = bytes
+    }
 }
 
 public extension Finding {

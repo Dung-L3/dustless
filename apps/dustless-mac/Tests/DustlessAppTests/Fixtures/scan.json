@@ -4,7 +4,7 @@
       "ruleId": "container.docker",
       "tier": "yellow",
       "desc": "Docker Desktop VM disk",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/Library/Containers/com.docker.docker",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Containers/com.docker.docker",
       "bytes": 2457600,
       "mtime": 1700000000000,
       "atime": 1700000000000,
@@ -17,7 +17,7 @@
       "ruleId": "gradle.version_cache",
       "tier": "yellow",
       "desc": "Gradle cache của version không project nào dùng",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.gradle/caches/9.0",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.gradle/caches/9.0",
       "bytes": 716800,
       "mtime": 1700000001000,
       "atime": 1700000002000,
@@ -30,7 +30,7 @@
       "ruleId": "npm.cacache",
       "tier": "green",
       "desc": "npm cache tarball",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.npm/_cacache",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.npm/_cacache",
       "bytes": 307200,
       "mtime": 1700000002000,
       "atime": 1700000004000,
@@ -43,7 +43,7 @@
       "ruleId": "pip.cache",
       "tier": "green",
       "desc": "pip wheel cache",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.cache/pip",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/pip",
       "bytes": 122880,
       "mtime": 1700000003000,
       "atime": 1700000006000,
@@ -56,7 +56,7 @@
       "ruleId": "bun.cache",
       "tier": "green",
       "desc": "Bun package cache",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.bun/install/cache",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.bun/install/cache",
       "bytes": 92160,
       "mtime": 1700000004000,
       "atime": 1700000008000,
@@ -69,7 +69,7 @@
       "ruleId": "gradle.wrapper",
       "tier": "yellow",
       "desc": "Gradle wrapper đã tải về, tự tải lại khi build",
-      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-rC0xOX/.gradle/wrapper/dists",
+      "path": "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.gradle/wrapper/dists",
       "bytes": 1,
       "mtime": 1700000005000,
       "atime": 1700000010000,
@@ -98,7 +98,192 @@
     }
   },
   "reclaimable": 3696641,
-  "freeBefore": 317558157312,
+  "freeBefore": 322754465792,
   "platform": "mac",
-  "scannedMs": 128
+  "scannedMs": 128,
+  "unscannable": [
+    {
+      "ruleId": "android.avd",
+      "tier": "yellow",
+      "desc": "Android emulator AVD, tốn hàng GB mỗi cái",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.android/avd/*.avd"
+      ]
+    },
+    {
+      "ruleId": "android.ndk",
+      "tier": "yellow",
+      "desc": "Android NDK, build native cần đúng phiên bản",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Android/sdk/ndk"
+      ]
+    },
+    {
+      "ruleId": "android.system_images",
+      "tier": "yellow",
+      "desc": "Ảnh hệ thống Android cho emulator",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Android/sdk/system-images"
+      ]
+    },
+    {
+      "ruleId": "browser.brave",
+      "tier": "green",
+      "desc": "Brave cache, không đụng profile",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/com.brave.Browser"
+      ]
+    },
+    {
+      "ruleId": "browser.brave_software",
+      "tier": "green",
+      "desc": "Brave Software cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/BraveSoftware"
+      ]
+    },
+    {
+      "ruleId": "browser.chrome",
+      "tier": "green",
+      "desc": "Chrome cache, không đụng profile",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Google/Chrome"
+      ]
+    },
+    {
+      "ruleId": "browser.edge",
+      "tier": "green",
+      "desc": "Edge cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Microsoft Edge"
+      ]
+    },
+    {
+      "ruleId": "browser.firefox",
+      "tier": "green",
+      "desc": "Firefox cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Firefox/Profiles"
+      ]
+    },
+    {
+      "ruleId": "cargo.registry",
+      "tier": "green",
+      "desc": "Cargo registry cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cargo/registry/cache"
+      ]
+    },
+    {
+      "ruleId": "container.colima",
+      "tier": "yellow",
+      "desc": "Colima VM disk, xoá là mất image và container",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.colima/_lima"
+      ]
+    },
+    {
+      "ruleId": "go.modcache",
+      "tier": "green",
+      "desc": "Go module cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/go/pkg/mod"
+      ]
+    },
+    {
+      "ruleId": "homebrew.cache",
+      "tier": "green",
+      "desc": "Homebrew download cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/opt/homebrew/var/homebrew/cache",
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/Caches/Homebrew"
+      ]
+    },
+    {
+      "ruleId": "npm.npx",
+      "tier": "green",
+      "desc": "Package tải tạm qua npx, tái tạo khi chạy lại",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.npm/_npx"
+      ]
+    },
+    {
+      "ruleId": "pnpm.store",
+      "tier": "green",
+      "desc": "pnpm content-addressable store",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/Library/pnpm/store"
+      ]
+    },
+    {
+      "ruleId": "project.build",
+      "tier": "yellow",
+      "desc": "Build output của project, tái tạo được nhưng build lâu",
+      "reason": "error",
+      "pathPatterns": []
+    },
+    {
+      "ruleId": "project.node_modules",
+      "tier": "yellow",
+      "desc": "node_modules của project, bỏ qua nếu git còn thay đổi chưa commit",
+      "reason": "error",
+      "pathPatterns": []
+    },
+    {
+      "ruleId": "pubcache.hosted",
+      "tier": "green",
+      "desc": "Dart pub cache, tái tạo bằng pub get",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.pub-cache/hosted"
+      ]
+    },
+    {
+      "ruleId": "test.puppeteer",
+      "tier": "green",
+      "desc": "Puppeteer browser tải về",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/puppeteer"
+      ]
+    },
+    {
+      "ruleId": "uv.cache",
+      "tier": "green",
+      "desc": "uv cache wheel và source build",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/uv"
+      ]
+    },
+    {
+      "ruleId": "yarn.cache",
+      "tier": "green",
+      "desc": "Yarn cache",
+      "reason": "absent",
+      "pathPatterns": [
+        "/var/folders/pm/sz62nc4n3vz_y63g1bpdsvq80000gn/T/dustless-e2e-capture-m4rhiF/.cache/yarn"
+      ]
+    }
+  ],
+  "unscannableSummary": {
+    "absent": 18,
+    "no_access": 0,
+    "not_supported": 0,
+    "error": 2
+  }
 }
