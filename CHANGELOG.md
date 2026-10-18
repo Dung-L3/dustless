@@ -35,4 +35,4 @@
 
 - `bun run typecheck` is green on the merged tree (unused imports, the generic `pick`).
 
-Measured on this branch: `bun test` → 322 pass / 0 fail across 23 files; `bun test tests/e2e` → 111 pass / 0 fail across 9 files; log .autopilot/logs/gate-pr72-g5.log.
+Measured on this branch: `bun test` → 322 pass / 0 fail / 5 skip across 23 files; `bun test tests/e2e` → 111 pass / 0 fail / 5 skip across 9 files; log .autopilot/logs/gate-pr72-g5.log.
