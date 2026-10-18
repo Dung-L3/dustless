@@ -320,7 +320,7 @@ describe("awdl clean refusal on non-macOS — Linux/Windows only", () => {
     await box.dispose();
   });
 
-  test.skipIf(process.platform === "darwin")("awdl status returns not-applicable with documented payload shape", async () => {
+  test.skipIf(process.platform === "darwin")("awdl status is a clean read with a null outcome", async () => {
     const run = await box.run(["awdl", "--json"]);
     expect(run.code).toBe(0);
     expect(run.stderr).toBe("");
@@ -330,7 +330,7 @@ describe("awdl clean refusal on non-macOS — Linux/Windows only", () => {
     expect(payload.interface).toBeNull();
     expect(payload.state).toBe("absent");
     expect(payload.changed).toBe(false);
-    expect(payload.outcome).toEqual({ status: "not-applicable", detail: "AWDL only exists on macOS" });
+    expect(payload.outcome).toBeNull();
   });
 
   test.skipIf(process.platform === "darwin")("awdl --off returns not-applicable with exit code 0", async () => {
@@ -357,14 +357,25 @@ describe("awdl clean refusal on non-macOS — Linux/Windows only", () => {
     expect(payload.outcome).toEqual({ status: "not-applicable", detail: "AWDL only exists on macOS" });
   });
 
-  test.skipIf(process.platform === "darwin")("awdl --print-privilege returns the privilege payload even on non-macOS", async () => {
-    const run = await box.run(["awdl", "--print-privilege", "--json"]);
+  test.skipIf(process.platform === "darwin")("awdl --print-privilege still returns the payload: the guard gates only the toggle", async () => {
+    const run = await exec(["awdl", "--print-privilege", "--json"], {
+      PATH: "/usr/bin:/bin",
+      HOME: box.home,
+      TMPDIR: box.home,
+      USER: "e2etester",
+      NO_COLOR: "1",
+    });
     expect(run.code).toBe(0);
     expect(run.stderr).toBe("");
     const payload = JSON.parse(run.stdout) as AwdlPrivilege;
     expect(Object.keys(payload).sort()).toEqual(["allowed", "path", "rule", "user"]);
     expect(payload.user).toBe("e2etester");
     expect(payload.path).toBe("/etc/sudoers.d/dustless-awdl");
-    expect(payload.allowed).toEqual(["/sbin/ifconfig awdl0 down", "/sbin/ifconfig awdl0 up"]);
+  });
+
+  test.skipIf(process.platform === "darwin")("awdl --print-privilege refuses cleanly when USER is unusable", async () => {
+    const run = await box.run(["awdl", "--print-privilege", "--json"]);
+    expect(run.code).toBe(1);
+    expect(JSON.parse(run.stdout)).toEqual({ error: 'không dùng được "" cho quy tắc sudoers' });
   });
 });
