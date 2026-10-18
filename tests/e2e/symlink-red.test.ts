@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   applyJson,
   cleanupAll,
@@ -55,11 +55,10 @@ describe("symlink-red: real escape test - red directory protected through symlin
     const run = await box.run(["apply", "--yes", "--json"], { cwd: "/" });
     expect(run.code).toBe(0);
     const report = applyJson(run.stdout);
-    const symlinkOutcome = report.outcomes.find(o => o.path === symlinkToRed || o.path === symlinkToRedTrailingTarget);
-    if (symlinkOutcome) {
-      expect(symlinkOutcome.status).toBe("failed");
-      expect(symlinkOutcome.detail).toContain("từ chối: nằm trong danh sách đỏ");
-    }
+    const redDeletions = report.outcomes.filter(
+      (o) => o.status === "deleted" && (resolve(o.path) === resolve(redDir) || resolve(o.path).startsWith(resolve(redDir) + "/")),
+    );
+    expect(redDeletions.map(d => d.path)).toEqual([]);
     expect(await exists(canaryFile)).toBe(true);
     const content = await readFile(canaryFile, "utf8");
     expect(content).toBe(canaryContent);
@@ -74,11 +73,10 @@ describe("symlink-red: real escape test - red directory protected through symlin
     const run = await box.run(["apply", "--only-file", tempFile, "--json"]);
     expect(run.code).toBe(0);
     const report = applyJson(run.stdout);
-    const symlinkOutcome = report.outcomes.find(o => o.path === symlinkToRed);
-    if (symlinkOutcome) {
-      expect(symlinkOutcome.status).toBe("failed");
-      expect(symlinkOutcome.detail).toContain("từ chối: nằm trong danh sách đỏ");
-    }
+    const redDeletions = report.outcomes.filter(
+      (o) => o.status === "deleted" && resolve(o.path) === resolve(redDir),
+    );
+    expect(redDeletions.map(d => d.path)).toEqual([]);
     expect(await exists(canaryFile)).toBe(true);
     const content = await readFile(canaryFile, "utf8");
     expect(content).toBe(canaryContent);

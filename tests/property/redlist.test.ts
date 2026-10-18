@@ -13,13 +13,15 @@ class XorShift32 {
     x ^= x >>> 17;
     x ^= x << 5;
     this.state = x >>> 0;
-    return this.state;
+    return x;
   }
   nextFloat(): number { return this.next() / 0x100000000; }
   pick<T>(arr: T[]): T { return arr[this.next() % arr.length] as T; }
   bool(p = 0.5): boolean { return this.nextFloat() < p; }
   int(min: number, max: number): number { return min + this.next() % (max - min + 1); }
 }
+
+const HOME_ROOT = "/Users/testuser";
 
 const ANYWHERE_CANONICAL = [
   "Documents", "Desktop", "Pictures", "Movies", "Music",
@@ -43,6 +45,13 @@ const SUFFIX_CANONICAL = [
 
 const ALL_CANONICAL = [...ANYWHERE_CANONICAL, ...SUFFIX_CANONICAL.map(c => c.path)];
 
+const TREE_CANONICAL: string[] = [
+  ...ANYWHERE_CANONICAL,
+  "Mail", "Mail.v2", ".git",
+];
+
+const SUFFIX_ONLY_CANONICAL: string[] = ["Preferences", "data-wal", "data-shm"];
+
 const SEGMENTS = [
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
   "cache", "logs", "tmp", "data", "config", "build", "dist", "node_modules",
@@ -61,17 +70,63 @@ function randomPath(rng: XorShift32, depth: number): string {
   return parts.join("/");
 }
 
-function withHomeRel(path: string): string[] {
-  return [`~/` + path, `$HOME/` + path, `/Users/testuser/` + path];
+function unixified(path: string): string {
+  return path.replace(/[\\/]+/g, "/");
 }
 
-function withTraversalNoise(path: string, rng: XorShift32): string {
-  let out = path;
-  if (rng.bool(0.3)) out = "./" + out;
-  if (rng.bool(0.3)) out = out.replace(/\//g, "//");
-  if (rng.bool(0.2)) out = out + "/";
-  if (rng.bool(0.2)) out = out.replace(/([^/]+)/g, "$1/..") + "/" + out.split("/").pop();
-  return out;
+function expandTesterHome(path: string): string {
+  if (path.startsWith("~/")) return HOME_ROOT + path.slice(1);
+  if (path.startsWith("$HOME/")) return HOME_ROOT + path.slice(6);
+  return path;
+}
+
+function redRoots(): { trees: string[]; exact: string[] } {
+  return {
+    trees: TREE_CANONICAL.map(canonical => resolve(HOME_ROOT + "/" + canonical)),
+    exact: SUFFIX_ONLY_CANONICAL.map(canonical => resolve(HOME_ROOT + "/" + canonical)),
+  };
+}
+
+function insideRoot(resolved: string, root: string): boolean {
+  return resolved === root || resolved.startsWith(root + "/");
+}
+
+function noiseSpecResolved(form: string): string {
+  return resolve(expandTesterHome(unixified(form)));
+}
+
+function expectsRed(form: string): boolean {
+  const resolved = noiseSpecResolved(form);
+  const { trees, exact } = redRoots();
+  return trees.some(root => insideRoot(resolved, root)) || exact.some(root => resolved === root);
+}
+
+function noisyForms(dir: string): string[] {
+  const backslashForm = dir.replace(/\//g, "\\");
+  const tripwireForm = dir.replace(/^\/Users\/testuser/, "/Users/testuser/..");
+  return [
+    dir,
+    "/." + dir,
+    dir.replace(/\//g, "//"),
+    backslashForm,
+    dir + "/",
+    dir + "//",
+    tripwireForm,
+    "~/" + dir.slice(HOME_ROOT.length + 1),
+    "$HOME/" + dir.slice(HOME_ROOT.length + 1),
+    "~/" + dir.slice(HOME_ROOT.length + 1).replace(/\//g, "//"),
+    "$HOME/" + dir.slice(HOME_ROOT.length + 1).replace(/\//g, "\\"),
+  ];
+}
+
+function noiseVariants(path: string): string[] {
+  return [
+    path + "/",
+    path + "//",
+    path.replace(/\//g, "//"),
+    path.replace(/\//g, "\\"),
+    "/." + path,
+  ];
 }
 
 function testPathVariants(base: string, rng: XorShift32, count: number): string[] {
@@ -82,11 +137,6 @@ function testPathVariants(base: string, rng: XorShift32, count: number): string[
     variants.push(`/Users/testuser/${prefix}/${base}/${suffix}`);
   }
   return variants;
-}
-
-function resolvesInsideRedDir(noisy: string, canonicalBase: string): boolean {
-  const resolved = resolve(noisy);
-  return isRed(resolved) && resolved.includes(canonicalBase.replace("/Users/testuser/", ""));
 }
 
 describe("redlist.property", () => {
@@ -110,7 +160,6 @@ describe("redlist.property", () => {
   });
 
   test("redlist.over-blocking-is-accepted", () => {
-    const overBlockingIsFailClosed = true;
     const decoyBases = [
       "DocumentsBackup", "MyDocuments", "Desktop2", "Pictures2",
       "Movies2", "Music2", "iCloudDrive", "KeychainBackup",
@@ -118,15 +167,16 @@ describe("redlist.property", () => {
     ];
     const failures: string[] = [];
     for (const decoy of decoyBases) {
-      const fullPath = `/Users/testuser/${decoy}`;
-      if (!isRed(fullPath)) {
-        failures.push(`seed=${SEED} input="${fullPath}" (decoy should be red due to substring match)`);
+      const base = `/Users/testuser/${decoy}`;
+      for (const probe of [base, `${base}/`, `${base}/nested/file.db`]) {
+        if (!isRed(probe)) {
+          failures.push(`seed=${SEED} input="${probe}" (over-protective substring decoy must be red, including nested depth)`);
+        }
       }
     }
     if (failures.length > 0) {
       throw new Error(failures.join("\n"));
     }
-    expect(overBlockingIsFailClosed).toBe(true);
   });
 
   test("redlist.subset-superset", () => {
@@ -201,22 +251,17 @@ describe("redlist.property", () => {
     const rng = new XorShift32(SEED + 4);
     const failures: string[] = [];
     for (const canonical of ALL_CANONICAL) {
-      const basePath = "/Users/testuser/" + canonical;
+      const root = HOME_ROOT + "/" + canonical;
       for (let i = 0; i < 12; i++) {
-        const base = basePath + "/" + randomPath(rng, rng.int(1, 3));
-        const noisy = withTraversalNoise(base, rng);
-        const resolvedNoisy = resolve(noisy);
-        if (resolvesInsideRedDir(noisy, basePath)) {
-          if (!isRed(resolvedNoisy)) {
-            failures.push(`seed=${SEED} input="${noisy}" resolved="${resolvedNoisy}" base="${basePath}" (should be red after resolve)`);
+        const dir = root + "/" + randomPath(rng, rng.int(1, 3));
+        for (const noisy of noisyForms(dir)) {
+          if (!expectsRed(noisy)) continue;
+          const specResolved = noiseSpecResolved(noisy);
+          if (!isRed(noisy)) {
+            failures.push(`seed=${SEED} input="${noisy}" base="${root}" (noisy form denotes a path inside a canonical red directory and must be red without any normalisation)`);
           }
-        }
-        for (const form of withHomeRel(canonical + "/" + randomPath(rng, rng.int(1, 3)))) {
-          const resolvedForm = resolve(form);
-          if (resolvesInsideRedDir(form, basePath)) {
-            if (!isRed(resolvedForm)) {
-              failures.push(`seed=${SEED} input="${resolvedForm}" original="${form}" base="${basePath}" (should be red after resolve)`);
-            }
+          if (!isRed(specResolved)) {
+            failures.push(`seed=${SEED} input="${noisy}" specResolved="${specResolved}" base="${root}" (unixify + node:path resolution lands inside a canonical red directory and must be red)`);
           }
         }
       }
@@ -246,18 +291,22 @@ describe("redlist.property", () => {
       corpus.push("/Users/testuser/" + decoy + "/" + randomPath(rng, 2));
     }
     const failures: string[] = [];
+    let noisyCompared = 0;
     for (const p of corpus) {
-      const r1 = isRed(p);
-      const r2 = isRed(p);
-      if (r1 !== r2) {
-        failures.push(`seed=${SEED} input="${p}" r1=${r1} r2=${r2}`);
-      }
-      const resolved = resolve(p);
-      const r3 = isRed(resolved);
-      if (r1 !== r3) {
-        failures.push(`seed=${SEED} input="${p}" resolved="${resolved}" r1=${r1} r3=${r3}`);
+      const baseline = isRed(p);
+      for (const variant of noiseVariants(p)) {
+        if (resolve(unixified(variant)) !== resolve(p)) {
+          failures.push(`seed=${SEED} variant "${variant}" independent of "${p}" (npm resolve mismatch, internal noise construction is wrong)`);
+          continue;
+        }
+        noisyCompared++;
+        const verdict = isRed(variant);
+        if (verdict !== baseline) {
+          failures.push(`seed=${SEED} input="${p}" variant="${variant}" baseline=${baseline} verdict=${verdict} (separator noise must not change the verdict)`);
+        }
       }
     }
+    expect(noisyCompared).toBeGreaterThanOrEqual(500);
     if (failures.length > 0) {
       throw new Error(failures.join("\n"));
     }

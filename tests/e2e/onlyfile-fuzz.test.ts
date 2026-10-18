@@ -162,10 +162,13 @@ describe("A. --only-file fuzz properties", () => {
   test("onlyfile.unicode-and-slashes", async () => {
     const { box } = await setupOnlyFileBox("unicode");
     try {
+      const cachePath = join(box.home, ".npm", "_cacache");
       const base = "café";
       const nfc = base.normalize("NFC");
       const nfd = base.normalize("NFD");
       const variants = [
+        cachePath,
+        join(box.home, ".npm", "_cacache", "..", "_cacache"),
         join(box.home, ".npm", "_cacache", nfc),
         join(box.home, ".npm", "_cacache", nfd),
         join(box.home, ".npm", "_cacache", "café/"),
@@ -183,20 +186,14 @@ describe("A. --only-file fuzz properties", () => {
       const run = await box.run(["apply", "--yes", "--json", "--only-file", file]);
       expect(run.code).toBe(0);
       const result = applyJson(run.stdout);
-      const deleted = result.outcomes.filter((o) => o.status === "deleted");
       expect(await stat(join(box.home, PLANTED_RED)).then(() => true, () => false)).toBe(true);
-      const cacheOutcome = result.outcomes.find((o) => o.path.startsWith(join(box.home, ".npm", "_cacache")));
-      if (cacheOutcome?.status === "deleted") {
-        const deletedPath = cacheOutcome.path;
-        const isPlanted = deletedPath.startsWith(join(box.home, ".npm", "_cacache", nfc)) ||
-          deletedPath.startsWith(join(box.home, ".npm", "_cacache", nfd)) ||
-          deletedPath === join(box.home, ".npm", "_cacache", "café");
-        expect(isPlanted).toBe(true);
-      }
-      for (const d of deleted) {
-        const siblings = deleted.filter((o) => o.path !== d.path && resolve(o.path) === resolve(d.path));
-        expect(siblings.length).toBe(0);
-      }
+      expect(result.outcomes.some((o) => o.status === "deleted" && (resolve(o.path) === resolve(join(box.home, PLANTED_RED)) || resolve(o.path).startsWith(resolve(join(box.home, PLANTED_RED)) + "/")))).toBe(false);
+      const deleted = result.outcomes
+        .filter((o) => o.status === "deleted")
+        .map((o) => resolve(o.path));
+      expect(deleted.sort()).toEqual([resolve(cachePath)]);
+      const cacheOutcome = result.outcomes.find((o) => o.path.startsWith(cachePath));
+      expect(cacheOutcome?.status).toBe("deleted");
     } finally {
       await box.dispose();
     }
@@ -348,43 +345,53 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
   }
 
   test("bundleid.traversal", async () => {
-    const traversalIds = [
-      { id: "../../../etc", shouldRefuse: true },
-      { id: "..\\..\\..\\windows", shouldRefuse: true },
-      { id: "com/evil", shouldRefuse: true },
-      { id: "com\\evil", shouldRefuse: true },
-      { id: "a/../../b", shouldRefuse: true },
-      { id: "", shouldRefuse: true },
-      { id: ".".repeat(301), shouldRefuse: false },
-      { id: "com.example\0evil", shouldRefuse: true },
-      { id: "com.%2e%2e%2f%2e%2e%2fetc", shouldRefuse: false },
-      { id: "com.example..", shouldRefuse: true },
-      { id: ".com.example", shouldRefuse: false },
-      { id: "com..example", shouldRefuse: true },
-      { id: "com/example/../../etc", shouldRefuse: true },
-      { id: "a".repeat(500), shouldRefuse: false },
-      { id: "\0", shouldRefuse: true },
-      { id: "\u0000", shouldRefuse: true },
-      { id: "%00", shouldRefuse: false },
+    const traversalIds: { id: string; kind: "refuse" | "benign" | "contained" }[] = [
+      { id: "../../../etc", kind: "refuse" },
+      { id: "..\\..\\..\\windows", kind: "refuse" },
+      { id: "com/evil", kind: "refuse" },
+      { id: "com\\evil", kind: "refuse" },
+      { id: "a/../../b", kind: "refuse" },
+      { id: "", kind: "refuse" },
+      { id: ".".repeat(301), kind: "refuse" },
+      { id: "com.example..", kind: "refuse" },
+      { id: "com..example", kind: "refuse" },
+      { id: "com/example/../../etc", kind: "refuse" },
+      { id: ".com.example", kind: "benign" },
+      { id: "com.example\0evil", kind: "contained" },
+      { id: "\0", kind: "contained" },
+      { id: "\u0000", kind: "contained" },
+      { id: "com.%2e%2e%2f%2e%2e%2fetc", kind: "contained" },
+      { id: "%00", kind: "contained" },
+      { id: "a".repeat(500), kind: "contained" },
     ];
-    for (const { id, shouldRefuse } of traversalIds) {
-      const hasNull = id.includes("\0") || id.includes("\u0000");
-      if (hasNull) {
-        expect(() => { throw new Error("null byte rejected by isSafeBundleId"); }).toThrow();
-        continue;
-      }
-      const appPath = await writeApp(id, `App_${id.replace(/[/\\.]/g, "_").slice(0, 50)}`);
-      const report = await uninstall({
-        home,
-        appPath,
-        relatedPaths: [],
-        confirm: true,
-        purge: true,
-      });
-      if (shouldRefuse) {
+    for (let index = 0; index < traversalIds.length; index++) {
+      const { id, kind } = traversalIds[index]!;
+      const appPath = await writeApp(id, `App_${index}`);
+      if (kind === "refuse") {
+        const report = await uninstall({ home, appPath, relatedPaths: [], confirm: true, purge: true });
         expect(report.summary.purged).toBe(0);
         expect(report.summary.trashed).toBe(0);
         expect(report.summary.failed).toBeGreaterThanOrEqual(1);
+        expect(report.outcomes.some(o => o.status === "failed" && (o.detail.includes("not a valid identifier") || o.detail.includes("could not read bundle ID")))).toBe(true);
+      } else {
+        const apps = await listApps({ home, appDirs: [appsDir] });
+        const app = apps.find((entry) => entry.bundleId === id);
+        if (kind === "benign") {
+          expect(app).toBeDefined();
+          expect(app?.relatedPaths.length).toBe(0);
+          const report = await uninstall({ home, appPath, relatedPaths: app?.relatedPaths ?? [], confirm: true, purge: true });
+          expect(report.summary.purged).toBe(1);
+          expect(report.summary.failed).toBe(0);
+        } else {
+          expect(app?.relatedPaths).toEqual([]);
+          const report = await uninstall({ home, appPath, relatedPaths: app?.relatedPaths ?? [], confirm: true, purge: true });
+          expect(report.summary.trashed).toBe(0);
+          expect(report.summary.purged + report.summary.failed).toBe(1);
+          const widen = report.outcomes.filter(
+            (o) => o.status === "purged" && resolve(o.path) !== resolve(appPath),
+          );
+          expect(widen).toEqual([]);
+        }
       }
       expect(await stat(victimDir).then(() => true, () => false)).toBe(true);
       expect(await stat(join(victimDir, "precious.txt")).then(() => true, () => false)).toBe(true);
