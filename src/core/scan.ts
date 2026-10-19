@@ -18,6 +18,10 @@ function reasonFromCode(code: string): UnscannableReason {
   return "error";
 }
 
+export function withinRoots(path: string, roots: string[]): boolean {
+  return roots.some((root) => path === root || path.startsWith(root.endsWith(sep) ? root : root + sep));
+}
+
 export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): Promise<ScanReport> {
   const started = Date.now();
   const freeBefore = await freeSpace(opts.roots?.[0]);
@@ -97,7 +101,7 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
     for (const path of hits) {
       if (seen.has(path) || isRedReal(path)) continue;
       if (!matchesBasename(path, rule.match)) continue;
-      if (prefixes && !prefixes.some((prefix) => path === prefix || path.startsWith(prefix.endsWith(sep) ? prefix : prefix + sep))) continue;
+      if (prefixes && !withinRoots(path, prefixes)) continue;
       seen.add(path);
       out.push({ rule, path });
     }

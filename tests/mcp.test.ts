@@ -164,8 +164,9 @@ describe("scan options", () => {
 
 describe("apply safety", () => {
   test("blocked findings are counted as blocked, not reclaimable", async () => {
-    const blocked = finding({ ruleId: "gradle.version_cache", tier: "yellow", blocked: true, bytes: GIB, note: "in use" });
-    const tools = createTools(fakeCore({ scan: async () => reportOf([finding(), blocked]) }));
+    const blockedYellow = finding({ ruleId: "gradle.version_cache", tier: "yellow", blocked: true, bytes: GIB, note: "in use" });
+    const blockedGreen = finding({ ruleId: "gradle.version_cache", tier: "green", blocked: true, bytes: GIB / 2, note: "in use" });
+    const tools = createTools(fakeCore({ scan: async () => reportOf([finding(), blockedYellow, blockedGreen]) }));
     const reply = await rpc(tools, {
       jsonrpc: "2.0", id: 99, method: "tools/call", params: { name: "scan", arguments: {} },
     });
@@ -173,7 +174,7 @@ describe("apply safety", () => {
     expect(structured?.["totals"]).toMatchObject({
       green: { count: 1, bytes: 2 * GIB },
       yellow: { count: 0, bytes: 0 },
-      blocked: { count: 1, bytes: GIB },
+      blocked: { count: 2, bytes: 1.5 * GIB },
     });
     expect(structured?.["reclaimable"]).toBe(2 * GIB);
   });

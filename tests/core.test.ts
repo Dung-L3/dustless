@@ -6,7 +6,7 @@ import type { Finding, ScanReport } from "../src/types.ts";
 import { HOME, isRed } from "../src/core/paths.ts";
 import { loadRules, userRulesPath } from "../src/core/rules.ts";
 import { freeSpace } from "../src/core/space.ts";
-import { scan } from "../src/core/scan.ts";
+import { scan, withinRoots } from "../src/core/scan.ts";
 import { apply } from "../src/core/apply.ts";
 
 const sandbox = await mkdtemp(join(tmpdir(), "dustless-"));
@@ -153,6 +153,7 @@ describe("space", () => {
 describe("scan", () => {
   const fixture = join(sandbox, "fixture");
   const outside = `${fixture}-outside`;
+  const exact = join(sandbox, "exact-root");
 
   beforeAll(async () => {
     await mkdir(join(fixture, "cache", "fresh"), { recursive: true });
@@ -160,6 +161,7 @@ describe("scan", () => {
     await mkdir(join(fixture, "tiny"), { recursive: true });
     await mkdir(join(fixture, "aged"), { recursive: true });
     await mkdir(join(outside, "cache"), { recursive: true });
+    await mkdir(exact, { recursive: true });
     await writeFile(join(fixture, "cache", "big.bin"), Buffer.alloc(4096, 7));
     await writeFile(join(fixture, "cache", "small.bin"), Buffer.alloc(10, 1));
     await writeFile(join(fixture, "cache", "fresh", "new.bin"), Buffer.alloc(1000, 2));
@@ -167,6 +169,7 @@ describe("scan", () => {
     await writeFile(join(fixture, "tiny", "one.bin"), Buffer.alloc(10, 4));
     await writeFile(join(fixture, "aged", "old.bin"), Buffer.alloc(2048, 5));
     await writeFile(join(outside, "cache", "other.bin"), Buffer.alloc(2048, 6));
+    await writeFile(join(exact, "root.bin"), Buffer.alloc(1024, 8));
     const old = new Date(Date.now() - 90 * 86_400_000);
     await utimes(join(fixture, "cache", "big.bin"), old, old);
     await utimes(join(fixture, "aged", "old.bin"), old, old);
@@ -176,7 +179,8 @@ describe("scan", () => {
         `- id: test.red\n  tier: green\n  desc: red test\n  paths: { all: "${fixture}/red/Keychains" }\n` +
         `- id: test.tiny\n  tier: green\n  desc: tiny test\n  paths: { all: "${fixture}/tiny" }\n` +
         `- id: test.aged\n  tier: green\n  desc: aged test\n  paths: { all: "${fixture}/aged" }\n` +
-        `- id: test.outside\n  tier: green\n  desc: sibling test\n  paths: { all: "${outside}/cache" }\n`,
+        `- id: test.outside\n  tier: green\n  desc: sibling test\n  paths: { all: "${outside}/cache" }\n` +
+        `- id: test.exact\n  tier: green\n  desc: exact root test\n  paths: { all: "${exact}" }\n`,
     );
   });
 
@@ -224,6 +228,16 @@ describe("scan", () => {
     const sibling = await scan({ roots: [outside] });
     expect(sibling.findings.some((f) => f.ruleId === "test.outside")).toBe(true);
     expect(sibling.findings.some((f) => f.ruleId === "test.cache")).toBe(false);
+  });
+
+  test("a root includes itself and the filesystem root keeps its separator", async () => {
+    expect(withinRoots(exact, [exact])).toBe(true);
+    expect(withinRoots(`${exact}/child`, [exact])).toBe(true);
+    expect(withinRoots(outside, [exact])).toBe(false);
+    expect(withinRoots("/tmp/x", ["/"])).toBe(true);
+    expect(withinRoots("/", ["/"])).toBe(true);
+    const report = await scan({ roots: [exact] });
+    expect(report.findings.some((f) => f.ruleId === "test.exact")).toBe(true);
   });
 });
 

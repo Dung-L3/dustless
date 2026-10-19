@@ -163,18 +163,38 @@ describe("rules schema", () => {
   });
 
   test("windows browser rules target cache leaves, never the profile root", async () => {
+    const cacheLeaf = /^(ShaderCache|GrShaderCache|GraphiteDawnCache|\*\/(Cache|Code Cache|GPUCache)|\*\/Service Worker\/CacheStorage)$/;
     const rules = await loadRules();
     for (const id of ["browser.chrome", "browser.edge"]) {
       const win = rules.find((rule) => rule.id === id)?.paths.win;
-      const patterns = Array.isArray(win) ? win : [win];
+      const patterns = (Array.isArray(win) ? win : [win]).map((pattern) => (pattern ?? "").replace(/\\/g, "/"));
       expect(patterns.length).toBeGreaterThan(0);
+      expect(patterns.some((pattern) => pattern.includes("/User Data"))).toBe(true);
+    }
+    for (const rule of rules.filter((rule) => rule.tier === "green")) {
+      const win = rule.paths.win;
+      const patterns = (Array.isArray(win) ? win : [win]).map((pattern) => (pattern ?? "").replace(/\\/g, "/"));
       for (const pattern of patterns) {
-        const leaf = (pattern ?? "").split("/").pop();
-        expect(leaf).not.toBe("User Data");
-        expect(leaf).not.toBe("Default");
-        expect(leaf).not.toBe("*");
-        expect(leaf).not.toMatch(/^Profile /);
+        const at = pattern.indexOf("/User Data");
+        if (at < 0) continue;
+        const suffix = pattern.slice(at + "/User Data".length).replace(/^\//, "");
+        expect(suffix.split("/")).not.toContain("..");
+        expect(suffix).toMatch(cacheLeaf);
       }
+    }
+  });
+
+  test("loadRules rejects invalid fields before a scan can use them", async () => {
+    const cases: Array<[string, RegExp]> = [
+      [`- id: test.loadmatch\n  tier: green\n  desc: d\n  paths: { all: "~/x" }\n  match: "["\n`, /test\.loadmatch.*match/],
+      [`- id: test.loadverify\n  tier: green\n  desc: d\n  paths: { all: "~/x" }\n  requireVerify: trust_me\n`, /test\.loadverify.*requireVerify/],
+      [`- id: test.loadage\n  tier: green\n  desc: d\n  paths: { all: "~/x" }\n  minAgeDays: -1\n`, /test\.loadage.*minAgeDays/],
+      [`- id: "bad id"\n  tier: green\n  desc: d\n  paths: { all: "~/x" }\n`, /bad id.*id/],
+      [`- id: test.loadtier\n  tier: [yellow]\n  desc: d\n  paths: { all: "~/x" }\n`, /test\.loadtier.*tier/],
+    ];
+    for (const [body, expected] of cases) {
+      const file = await writeRule(body);
+      await expect(loadRules(file)).rejects.toThrow(expected);
     }
   });
 
@@ -184,10 +204,15 @@ describe("rules schema", () => {
       .flatMap((rule) => Object.values(rule.paths))
       .flat()
       .flatMap((pattern) => [...(pattern ?? "").matchAll(/%([A-Za-z_][A-Za-z0-9_]*)%/g)].map((match) => match[1]));
-    expect([...new Set(variables)]).toEqual(["LOCALAPPDATA", "USERPROFILE"]);
+    expect(new Set(variables)).toEqual(new Set(["LOCALAPPDATA", "USERPROFILE"]));
   });
 
   test("a tier outside green and yellow is still rejected", () => {
     expect(defect({ id: "test.tier", tier: "red", desc: "d", paths: { all: "~/x" }, recoveryLabel: "download" }, true)).toContain("green");
+  });
+
+  test("a non-string tier cannot smuggle a yellow finding past the gate", () => {
+    expect(defect({ id: "test.tier", tier: ["yellow"], desc: "d", paths: { all: "~/x" } }, false)).toContain("tier");
+    expect(defect({ id: "test.tier", tier: true, desc: "d", paths: { all: "~/x" } }, false)).toContain("tier");
   });
 });

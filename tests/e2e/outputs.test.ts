@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyJson,
@@ -206,15 +206,23 @@ describe("11. rule subcommand", () => {
   });
 
   test("rule add validates the whole rule before writing anything", async () => {
-    const before = (await box.run(["rule", "list", "--json"])).stdout;
+    const rulesFile = join(box.home, ".config", "dustless", "rules.yaml");
+    const before = await readFile(rulesFile, "utf8");
     const badTier = await box.run(["rule", "add", "my.badtier", "purple", "desc", "download", join(box.home, ".bad")]);
     expect(badTier.code).toBe(1);
     expect(badTier.stderr).toContain("green|yellow");
     const badId = await box.run(["rule", "add", "my bad id", "green", "desc", "download", join(box.home, ".bad")]);
     expect(badId.code).toBe(1);
     expect(badId.stderr).toContain("id");
-    expect((await box.run(["rule", "list", "--json"])).stdout).toBe(before);
+    const injected = await box.run(["rule", "add", "my.rule\n- id: evil", "green", "desc", "download", join(box.home, ".bad")]);
+    expect(injected.code).toBe(1);
+    expect(injected.stderr).toContain("id");
+    expect(await readFile(rulesFile, "utf8")).toBe(before);
     expect((await box.run(["rule", "validate"])).code).toBe(0);
+    const reserved = await box.run(["rule", "add", "123", "green", "numeric id", "download", join(box.home, ".numeric")]);
+    expect(reserved.code).toBe(0);
+    const listed = JSON.parse((await box.run(["rule", "list", "--json"])).stdout) as { id: string }[];
+    expect(listed.some((rule) => rule.id === "123")).toBe(true);
   });
 
   test("rule show prints one rule as JSON and rejects an unknown id", async () => {

@@ -48,8 +48,9 @@
   green cache; they target only the regenerable cache leaves (`ShaderCache`, `GrShaderCache`,
   `GraphiteDawnCache`, per-profile `Cache`, `Code Cache`, `GPUCache`, `Service Worker/CacheStorage`),
   so a green delete cannot remove passwords, cookies, bookmarks or history.
-- `scan --roots` matches on a path boundary, not a string prefix: `/home/u/cache-evil` is not inside
-  `--roots /home/u/cache` (`src/core/scan.ts`, `candidates`).
+- The scan `roots` filter matches on a path boundary, not a string prefix: `/home/u/cache-evil` is not
+  inside a root of `/home/u/cache`, and the root itself and `/` stay included (`src/core/scan.ts`,
+  `withinRoots`).
 - The MCP `scan` summary counts a blocked finding in the `blocked` bucket and excludes it from
   `reclaimable`, matching the engine report instead of presenting it as reclaimable green/yellow
   bytes (`src/mcp/tools.ts`, `tally`).
@@ -73,9 +74,11 @@
   path separator or its value contains shell metacharacters (`src/core/rules.ts`, `defect`). Every
   bundled rule carries a `recoveryLabel`.
 - `match` must be a string that compiles as a regular expression, `requireVerify` must name one of
-  the implemented verifiers, `minAgeDays` must be a non-negative integer, and a rule id is restricted
-  to `[A-Za-z0-9][A-Za-z0-9._-]*`; `rule add` runs this validation before appending, so invalid
-  input no longer leaves a broken user rules file behind (`src/core/rules.ts`, `src/cli/rule.ts`).
+  the implemented verifiers, `minAgeDays` must be a non-negative integer, `tier` must be a string,
+  and a rule id is restricted to `[A-Za-z0-9][A-Za-z0-9._-]*`; `rule add` runs this validation before
+  appending and quotes the id in the generated YAML, so invalid input leaves the file untouched and
+  a reserved-looking id such as `123` or `true` still loads as a string (`src/core/rules.ts`,
+  `src/cli/rule.ts`).
 - Two Windows paths used the nonexistent `%USERPRO%` variable; they now use `%USERPROFILE%`.
 
 ### Coverage
@@ -87,4 +90,4 @@
 
 - `bun run typecheck` is green on the merged tree (unused imports, the generic `pick`).
 
-Measured on this branch: `bun test` → 364 pass / 0 fail / 5 skip across 26 files, 2665 expects; `bun run typecheck` clean.
+Measured on this branch: `bun test` → 367 pass / 0 fail / 5 skip across 26 files, 2656 expects; `bun run typecheck` clean.

@@ -57,7 +57,7 @@ export function defect(rule: Record<string, unknown>, requireRecovery: boolean):
   if (typeof rule["id"] !== "string" || !rule["id"]) return "thiếu id";
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(rule["id"])) return "id chỉ được chứa chữ, số, dấu chấm, gạch dưới và gạch ngang";
   if (typeof rule["desc"] !== "string" || !rule["desc"]) return "thiếu desc";
-  if (!TIERS.includes(String(rule["tier"]))) {
+  if (typeof rule["tier"] !== "string" || !TIERS.includes(rule["tier"])) {
     return `tier phải là ${TIERS.join("|")} (đang là ${JSON.stringify(rule["tier"])})`;
   }
   const paths = rule["paths"];
