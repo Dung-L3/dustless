@@ -27,6 +27,16 @@
   when the target changed or resolves into a red directory, and `assertPathDeletable`
   (`src/mcp/safety.ts`) uses `realGuard` for its red test. Locked by `tests/race-delete-apply.test.ts`,
   whose `beforeDelete` hook performs the swap.
+- `realGuard` now also refuses the resolved HOME, every ancestor of HOME and the filesystem root
+  (`protected`) and any path reached through a symlinked directory (`symlinked`); a leaf symlink stays
+  removable without following it. The MCP guard reports each refusal separately. This closes the
+  symlinked-parent case where a cache-shaped finding was deleted at its real target.
+- `isSafeBundleId` refuses the bundle id `"."` and control characters. `"."` collapsed every leftover
+  template onto its parent, so `apps --uninstall --purge` could delete `~/Library/Caches` or
+  `~/Library/Preferences`; a `Library/Caches` canary now locks it (`tests/apps.test.ts`).
+- `apply` keeps a finding's own `yellow` tier even when the per-rule choice says `green`, and the CLI
+  and MCP tier maps choose the strictest tier for a rule that yields both tiers.
+- A declared `busyProcesses` list now gates the delete; previously only `nativeCommand` was consulted.
 
 ### Honesty
 
@@ -35,6 +45,8 @@
   (`src/core/scan.ts`, `scan`). The macOS app models both fields and ships the localized reason
   wording (`UnscannableRule`, `UnscannableSummary`, `UnscannableText` in
   `apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift`).
+- A finding whose path disappeared before `apply` reached it is reported `skipped` instead of
+  `deleted`, because `rm` with `force` succeeds silently on a missing path.
 
 ### Rules
 

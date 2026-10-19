@@ -1,7 +1,7 @@
 import { homedir, tmpdir } from "node:os";
 import { readdir } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { lstatSync, realpathSync } from "node:fs";
+import { join, parse, resolve, sep } from "node:path";
 import type { Platform, Rule } from "../types.ts";
 
 export const platform: Platform =
@@ -132,21 +132,57 @@ export function isRedReal(path: string): boolean {
   }
 }
 
-export type RealGuard = { real: string } | { refused: "red" | "unresolvable" };
+export type RealRefusal = "red" | "unresolvable" | "protected" | "symlinked" | "changed";
+export type RealGuard = { real: string } | { refused: RealRefusal };
+
+function canonicalReal(path: string): string {
+  const mac = platform === "mac" ? path.replace(/^\/private\/(var|tmp|etc)(?=\/|$)/, "/$1") : path;
+  return platform === "win" ? mac.toLowerCase() : mac;
+}
+
+function homeReal(): string {
+  try {
+    return realpathSync(HOME);
+  } catch {
+    return HOME;
+  }
+}
+
+function isProtectedReal(real: string): boolean {
+  const target = canonicalReal(real);
+  const home = canonicalReal(homeReal());
+  if (target === parse(target).root) return true;
+  return target === home || home.startsWith(target.endsWith(sep) ? target : target + sep);
+}
+
+function goesThroughSymlink(full: string, real: string): boolean {
+  try {
+    if (lstatSync(full).isSymbolicLink()) return false;
+  } catch {
+    return false;
+  }
+  return canonicalReal(real) !== canonicalReal(full);
+}
 
 export function realGuard(path: string): RealGuard {
   const full = resolve(path);
   if (isRed(full)) return { refused: "red" };
+  let real: string;
   try {
-    const real = realpathSync(full);
-    return isRed(real) ? { refused: "red" } : { real };
+    real = realpathSync(full);
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === "ENOENT" ? { real: full } : { refused: "unresolvable" };
   }
+  if (isRed(real)) return { refused: "red" };
+  if (isProtectedReal(real)) return { refused: "protected" };
+  if (goesThroughSymlink(full, real)) return { refused: "symlinked" };
+  return { real };
 }
 
-export function refusalText(reason: "red" | "unresolvable" | "changed"): string {
+export function refusalText(reason: RealRefusal): string {
   if (reason === "red") return "từ chối: nằm trong danh sách đỏ";
   if (reason === "unresolvable") return "từ chối: không xác minh được đường dẫn thực";
+  if (reason === "protected") return "từ chối: là HOME, thư mục cha của HOME hoặc gốc hệ thống";
+  if (reason === "symlinked") return "từ chối: đường dẫn đi qua liên kết tượng trưng";
   return "từ chối: đường dẫn thay đổi trong lúc chờ xoá";
 }

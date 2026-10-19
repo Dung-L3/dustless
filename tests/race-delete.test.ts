@@ -80,6 +80,17 @@ describe("delete race", () => {
     expect(await readFile(join(src, "data.txt"), "utf8")).toBe("payload");
   });
 
+  test("a source reached through a symlinked parent is refused and its target survives", async () => {
+    const root = await box();
+    const victim = await cache(root, "victim");
+    const link = join(root, "link");
+    await symlink(victim, link);
+    const result = await moveToTrash(join(link, "data.txt"), join(root, "Trash"));
+    expect(result.status).toBe("failed");
+    expect(result.detail).toContain("liên kết tượng trưng");
+    expect(await readFile(join(victim, "data.txt"), "utf8")).toBe("payload");
+  });
+
   test("realGuard accepts a clean path and refuses a red-resolving one", async () => {
     const root = await box();
     const src = await cache(root);

@@ -341,6 +341,8 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
     const victim = join(root, "victim");
     await mkdir(victim, { recursive: true });
     await writeFile(join(victim, "precious.txt"), "not yours to delete");
+    await mkdir(join(home, "Library", "Caches"), { recursive: true });
+    await writeFile(join(home, "Library", "Caches", "precious.txt"), "cache contents");
     const appPath = await createTestApp(TRAVERSAL, "Evil", join(home, "Applications"));
     box = { home, victim, appPath };
   });
@@ -388,6 +390,20 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
       const report = await uninstall({ home: box.home, appPath, relatedPaths: [], confirm: true, purge: true });
       expect({ id, purged: report.summary.purged, trashed: report.summary.trashed }).toEqual({ id, purged: 0, trashed: 0 });
       expect(await stat(appPath).then(() => true, () => false)).toBe(true);
+    }
+    expect(await survives()).toBe(true);
+  });
+
+  test("a '.' or control-character bundle id cannot collapse leftovers onto Library directories", async () => {
+    const caches = join(box.home, "Library", "Caches");
+    for (const [id, name] of [[".", "Dot"], ["com.example\u0000evil", "Nul"]] as const) {
+      const appPath = await createTestApp(id, name, join(box.home, "Applications"));
+      const report = await uninstall({ home: box.home, appPath, relatedPaths: [caches], confirm: true, purge: true });
+      expect({ id, purged: report.summary.purged, trashed: report.summary.trashed }).toEqual({ id, purged: 0, trashed: 0 });
+      expect(report.outcomes[0]!.detail).toMatch(/bundle id/);
+      expect(await stat(join(caches, "precious.txt")).then(() => true, () => false)).toBe(true);
+      expect(await stat(appPath).then(() => true, () => false)).toBe(true);
+      await rm(appPath, { recursive: true, force: true });
     }
     expect(await survives()).toBe(true);
   });

@@ -27,14 +27,17 @@ network stack, the browser, or any other software on the machine.
 - **Asset:** documents and media outside `$HOME`, and any path derived from a crafted identifier.
 - **Attack:** an app whose `CFBundleIdentifier` contains `/`, `\` or `..` is uninstalled, and the
   leftover templates (`join(home, "{id}/…")`) collapse to a path outside `$HOME`; `--purge` then
-  removes it permanently.
-- **Mitigation:** `isSafeBundleId` (`src/core/apps/index.ts`) rejects an empty id and any id
-  containing `/`, `\` or `..`. `deriveRelatedPaths` returns nothing for an unsafe id, and `uninstall`
-  refuses the whole operation rather than removing the bundle and leaving unknown leftovers. Every
-  derived path is re-checked with `isUnder(HOME)` and against the exact set of this id's own template
-  expansions before it is touched (`uninstall` in `src/core/apps/index.ts`). The caller is never
-  trusted for a derived path: `apps --uninstall` takes the `.app` path, and the id is read from its
-  `Info.plist`.
+  removes it permanently. The id `"."` is the same attack one level down: every template keeps its
+  parent (`~/Library/Caches`, `~/Library/Preferences`, …) instead of a child.
+- **Mitigation:** `isSafeBundleId` (`src/core/apps/index.ts`) rejects an empty id, the id `"."`,
+  any id containing `/`, `\` or `..`, and any control character (U+0000–U+001F, U+007F).
+  `deriveRelatedPaths` returns nothing for an unsafe id, and `uninstall` refuses the whole
+  operation rather than removing the bundle and leaving unknown leftovers. Every derived path is
+  re-checked with `isUnder(HOME)` and against the exact set of this id's own template expansions
+  before it is touched (`uninstall` in `src/core/apps/index.ts`). The caller is never trusted for a
+  derived path: `apps --uninstall` takes the `.app` path, and the id is read from its `Info.plist`.
+  The delete paths then re-resolve the real target with `realGuard` (section 2), so a leftover that
+  is itself a symlink into a protected directory is refused rather than followed.
 - **Residual risk:** the id check and the path check are lexical (`resolve`, not `realpath`). A
   hostile bundle is not the trust boundary — the user chose to uninstall that app — so this guards a
   malformed plist and a mistake, not a local attacker who can already write into `$HOME`.
@@ -44,21 +47,29 @@ network stack, the browser, or any other software on the machine.
 - **Asset:** whatever a red path or a refusal was meant to protect.
 - **Attack:** a path is a harmless cache directory when `scan` reads it and a link to `~/Documents`
   (or `~/Library/Mail`) when `apply` removes it.
-- **Mitigation:** `refusal` (`src/core/apply.ts`) rejects red paths, `$HOME`, any parent
-  of `$HOME` and the filesystem root immediately before the delete, and `isRed` (`src/core/paths.ts`)
-  normalises the path (duplicate separators, backslashes, trailing separator) before matching. The
-  large-files delete refuses a symlink outright (`deleteLargeFile` in `src/core/largefiles/index.ts`,
-  via `lstat`) and the walk never follows one. The escape cases are locked end to end by
-  `tests/e2e/symlink-red.test.ts`.
-- **Residual risk (current gap):** every check is on the path *string*, resolved lexically.
-  `refusal` does not `lstat` the target and never compares a `realpath`, and `remove` calls `rm` with
-  no symlink guard, so a name re-pointed after the scan is acted on by its spelling, not its target.
-  The e2e cases cover a link whose own path text contains a red word; they do not cover a symlinked
-  *parent* directory whose name is not red (a cache reached through a link to `~/Documents`), which
-  is the case a lexical match cannot see. **What would close it:** `realpath` the finding at delete
-  time, re-run `isRed`/`refusal` on the resolved target, and refuse when it differs from the scanned
-  path; or open with `O_NOFOLLOW` and operate on the descriptor so no name can be re-pointed between
-  the check and the delete.
+- **Mitigation:** every delete resolves the real target at removal time with `realGuard`
+  (`src/core/paths.ts`). It refuses a target that is red-listed (`red`), cannot be resolved
+  (`unresolvable`), is the resolved `$HOME`, any ancestor of `$HOME` or the filesystem root
+  (`protected`), or is reached through a symlinked directory component (`symlinked`). A leaf symlink
+  is allowed: `rename`/`rm` act on the link itself, never on its target. The guard is read twice —
+  once before the target is sized or a trash slot is chosen, and again immediately before the
+  `rename`/`rm` — and a second reading that differs from the first is refused (`changed`). It is
+  called from `remove` (`src/core/apply.ts`), `moveToTrash`/`purgePath` (`src/core/apps/index.ts`),
+  `deleteLargeFile` (`src/core/largefiles/index.ts`) and `assertPathDeletable`
+  (`src/mcp/safety.ts`). `isRed` (`src/core/paths.ts`) normalises duplicate separators, backslashes
+  and trailing separators before matching, and `isRedReal` applies that test to the resolved path
+  during the scan, so links into a red directory are never reported as reclaimable. The lexical
+  `refusal` gate in `apply` remains in front of the real-path gate as a second, independent check.
+  macOS `/private/{var,tmp,etc}` aliases and Windows case are canonicalised before the real-path
+  comparison so ordinary temp paths are not misread as links. The symlinked-parent data-loss case is
+  locked by `tests/race-delete.test.ts` and `tests/race-delete-apply.test.ts`, and the e2e
+  `tests/e2e/edges.test.ts` cases keep a symlinked cache root from being deleted through.
+- **Residual risk:** the real-path check and the path-based `rename`/`rm` are not one atomic
+  operation. A component swapped between the second `realpathSync` and the syscall can still be
+  followed; the true close is `O_NOFOLLOW`/`unlinkat` by file descriptor, which `node:fs` does not
+  expose. The busy-process gate is also fail-open when `ps` cannot be run (the set is empty), and a
+  path spelled with different letter case on a case-insensitive filesystem can be refused as
+  `symlinked`; both err in the direction of refusing a delete, not of performing one.
 
 ## 3. A tampered rule file
 

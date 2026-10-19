@@ -102,7 +102,9 @@ async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name
 }
 
 function isSafeBundleId(bundleId: string): boolean {
-  return bundleId.length > 0 && !bundleId.includes("/") && !bundleId.includes("\\") && !bundleId.includes("..");
+  if (bundleId.length === 0 || bundleId === ".") return false;
+  if (bundleId.includes("/") || bundleId.includes("\\") || bundleId.includes("..")) return false;
+  return !/[\u0000-\u001f\u007f]/.test(bundleId);
 }
 
 function deriveRelatedPaths(home: string, bundleId: string): string[] {

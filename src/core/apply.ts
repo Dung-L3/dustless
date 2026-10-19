@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { lstat, rm } from "node:fs/promises";
 import { basename, parse, resolve, sep } from "node:path";
 import type { ApplyOutcome, ApplyReport, Finding, Rule, ScanReport, TierChoice } from "../types.ts";
 import { HOME, isRed, realGuard, refusalText, platform } from "./paths.ts";
@@ -69,12 +69,19 @@ async function run(
   }
   const rule = rules.get(finding.ruleId);
   const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
-  const watchers = (BUSY_NAMES[native] ?? [native]).filter((name) => busy.has(name));
-  if (native && watchers.length > 0) {
+  const declared = rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : []);
+  const watchers = declared.filter((name) => busy.has(name));
+  if (watchers.length > 0) {
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
   }
-  const action = opts.tiers?.[finding.ruleId] ?? "skip";
+  const present = await lstat(finding.path).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
+  if (!present) {
+    outcome.detail = "bỏ qua: đường dẫn không còn tồn tại";
+    return outcome;
+  }
+  const requested = opts.tiers?.[finding.ruleId] ?? "skip";
+  const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
   if (action === "skip") {
     outcome.detail = opts.tiers?.[finding.ruleId] ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
     return outcome;
