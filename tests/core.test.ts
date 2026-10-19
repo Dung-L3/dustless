@@ -307,26 +307,109 @@ describe("apply", () => {
     const fakePs = join(bin, "ps");
     await writeFile(fakePs, "#!/bin/sh\necho Bun\necho npm\n");
     await chmod(fakePs, 0o755);
+    await writeFile(join(bin, "tasklist"), '#!/bin/sh\necho \'"other.exe","1","Console","1","1 K"\'\n');
+    await chmod(join(bin, "tasklist"), 0o755);
     const busyVictim = join(sandbox, "busy-declared");
     const nativeVictim = join(sandbox, "busy-native");
+    const winVictim = join(sandbox, "busy-win");
     await mkdir(busyVictim, { recursive: true });
     await mkdir(nativeVictim, { recursive: true });
+    await mkdir(winVictim, { recursive: true });
     const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
     const priorPath = process.env["PATH"];
     await writeRules(
       `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${busyVictim}" }\n  busyProcesses: [" /opt/homebrew/bin/Bun "]\n` +
-        `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: npm cache verify\n`,
+        `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: " npm cache verify"\n` +
+        `- id: test.win\n  tier: green\n  desc: win\n  paths: { all: "${winVictim}" }\n  busyProcesses: ['C:\\Tools\\Bun.exe']\n`,
     );
     process.env["PATH"] = `${bin}:${priorPath ?? ""}`;
     try {
       const result = await apply(
-        report([{ ...finding(busyVictim), ruleId: "test.busy" }, { ...finding(nativeVictim), ruleId: "test.native" }]),
-        { assumeYes: true, tiers: { "test.busy": "green", "test.native": "green" } },
+        report([
+          { ...finding(busyVictim), ruleId: "test.busy" },
+          { ...finding(nativeVictim), ruleId: "test.native" },
+          { ...finding(winVictim), ruleId: "test.win" },
+        ]),
+        { assumeYes: true, tiers: { "test.busy": "green", "test.native": "green", "test.win": "green" } },
       );
-      expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped"]);
+      expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped", "skipped"]);
       for (const outcome of result.outcomes) expect(outcome.detail).toMatch(/đang chạy/);
       expect(await exists(busyVictim)).toBe(true);
       expect(await exists(nativeVictim)).toBe(true);
+      expect(await exists(winVictim)).toBe(true);
+    } finally {
+      if (priorPath === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = priorPath;
+      if (priorRules === null) await rm(userRulesPath(), { force: true });
+      else await writeFile(userRulesPath(), priorRules);
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("a failed ps listing falls back to tasklist before deciding a busy process is absent", async () => {
+    const bin = join(sandbox, "bin-fallback");
+    await mkdir(bin, { recursive: true });
+    await writeFile(join(bin, "ps"), "#!/bin/sh\nexit 1\n");
+    await chmod(join(bin, "ps"), 0o755);
+    await writeFile(join(bin, "tasklist"), '#!/bin/sh\necho \'"UV.EXE","1234","Console","1","1 K"\'\n');
+    await chmod(join(bin, "tasklist"), 0o755);
+    const victim = join(sandbox, "busy-fallback");
+    await mkdir(victim, { recursive: true });
+    const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
+    const priorPath = process.env["PATH"];
+    await writeRules(`- id: test.fallback\n  tier: green\n  desc: f\n  paths: { all: "${victim}" }\n  nativeCommand: uv cache clean\n`);
+    process.env["PATH"] = `${bin}:${priorPath ?? ""}`;
+    try {
+      const result = await apply(report([{ ...finding(victim), ruleId: "test.fallback" }]), {
+        assumeYes: true,
+        tiers: { "test.fallback": "green" },
+      });
+      expect(result.outcomes[0]?.status).toBe("skipped");
+      expect(result.outcomes[0]?.detail).toBe("uv đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng");
+      expect(await exists(victim)).toBe(true);
+    } finally {
+      if (priorPath === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = priorPath;
+      if (priorRules === null) await rm(userRulesPath(), { force: true });
+      else await writeFile(userRulesPath(), priorRules);
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("a finding whose rule declares a busy process is skipped when no process listing is available", async () => {
+    const bin = join(sandbox, "bin-unknown");
+    await mkdir(bin, { recursive: true });
+    await writeFile(join(bin, "ps"), "#!/bin/sh\nexit 1\n");
+    await chmod(join(bin, "ps"), 0o755);
+    await writeFile(join(bin, "tasklist"), "#!/bin/sh\nexit 1\n");
+    await chmod(join(bin, "tasklist"), 0o755);
+    const victim = join(sandbox, "busy-unknown");
+    const nativeVictim = join(sandbox, "busy-unknown-native");
+    const freeVictim = join(sandbox, "busy-unknown-free");
+    await mkdir(victim, { recursive: true });
+    await mkdir(nativeVictim, { recursive: true });
+    await mkdir(freeVictim, { recursive: true });
+    const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
+    const priorPath = process.env["PATH"];
+    await writeRules(
+      `- id: test.unknown\n  tier: green\n  desc: u\n  paths: { all: "${victim}" }\n  busyProcesses: [npm]\n` +
+        `- id: test.unknownnative\n  tier: green\n  desc: un\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: uv cache clean\n` +
+        `- id: test.unknownfree\n  tier: green\n  desc: uf\n  paths: { all: "${freeVictim}" }\n`,
+    );
+    process.env["PATH"] = `${bin}:${priorPath ?? ""}`;
+    try {
+      const result = await apply(
+        report([
+          { ...finding(victim), ruleId: "test.unknown" },
+          { ...finding(nativeVictim), ruleId: "test.unknownnative" },
+          { ...finding(freeVictim), ruleId: "test.unknownfree" },
+        ]),
+        { assumeYes: true, tiers: { "test.unknown": "green", "test.unknownnative": "green", "test.unknownfree": "green" } },
+      );
+      expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped", "deleted"]);
+      expect(result.outcomes[0]?.detail).toMatch(/không liệt kê được/);
+      expect(result.outcomes[1]?.detail).toMatch(/không liệt kê được/);
+      expect(await exists(victim)).toBe(true);
+      expect(await exists(nativeVictim)).toBe(true);
+      expect(await exists(freeVictim)).toBe(false);
     } finally {
       if (priorPath === undefined) delete process.env["PATH"];
       else process.env["PATH"] = priorPath;

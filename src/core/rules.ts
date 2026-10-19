@@ -94,8 +94,8 @@ export function defect(rule: Record<string, unknown>, requireRecovery: boolean):
   }
   const busy = rule["busyProcesses"];
   if (busy !== undefined) {
-    if (!Array.isArray(busy) || !busy.length || busy.some((p) => typeof p !== "string" || !p.trim())) {
-      return "busyProcesses phải là list string không rỗng";
+    if (!Array.isArray(busy) || !busy.length || busy.some((p) => typeof p !== "string" || !p.replace(/[/\\\s]/g, ""))) {
+      return "busyProcesses phải là list string nêu tên tiến trình";
     }
   }
   const stale = rule["staleDays"];
