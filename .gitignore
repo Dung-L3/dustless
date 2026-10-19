@@ -13,6 +13,9 @@ dist/
 build/
 out/
 
+# Retired autopilot infrastructure
+.autopilot/
+
 # Dustless runtime data (quarantine + local state)
 .quarantine/
 .dustless/
