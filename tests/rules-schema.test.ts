@@ -90,6 +90,11 @@ describe("rules schema", () => {
     expect(defect(raw({ busyProcesses: ["", "x"] }), false)).toContain("busyProcesses");
   });
 
+  test("busyProcesses names that are only separators are rejected", () => {
+    expect(defect(raw({ busyProcesses: ["/"] }), false)).toContain("busyProcesses");
+    expect(defect(raw({ busyProcesses: [" \\\\ "] }), false)).toContain("busyProcesses");
+  });
+
   test("a bare-string busyProcesses is rejected", () => {
     expect(defect(raw({ busyProcesses: "docker" }), false)).toContain("busyProcesses");
   });
