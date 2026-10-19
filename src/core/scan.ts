@@ -1,5 +1,5 @@
 import { lstat, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { Finding, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
 import { isRedReal, matchesBasename, pathsForRule, platform, resolvePattern } from "./paths.ts";
 import { loadRules } from "./rules.ts";
@@ -97,7 +97,7 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
     for (const path of hits) {
       if (seen.has(path) || isRedReal(path)) continue;
       if (!matchesBasename(path, rule.match)) continue;
-      if (prefixes && !prefixes.some((prefix) => path.startsWith(prefix))) continue;
+      if (prefixes && !prefixes.some((prefix) => path === prefix || path.startsWith(prefix.endsWith(sep) ? prefix : prefix + sep))) continue;
       seen.add(path);
       out.push({ rule, path });
     }

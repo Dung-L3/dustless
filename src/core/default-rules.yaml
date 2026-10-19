@@ -85,7 +85,7 @@
   desc: Go module cache
   paths:
     mac: "~/go/pkg/mod"
-    win: "%USERPRO%/go/pkg/mod"
+    win: "%USERPROFILE%/go/pkg/mod"
     linux: "~/go/pkg/mod"
   recoveryLabel: download
 
@@ -113,7 +113,14 @@
   desc: Chrome cache, không đụng profile
   paths:
     mac: "~/Library/Caches/Google/Chrome"
-    win: "%LOCALAPPDATA%/Google/Chrome/User Data"
+    win:
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/ShaderCache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/GrShaderCache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/GraphiteDawnCache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/*/Cache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/*/Code Cache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/*/GPUCache"
+      - "%LOCALAPPDATA%/Google/Chrome/User Data/*/Service Worker/CacheStorage"
     linux: "~/.cache/google-chrome"
   recoveryLabel: download
 
@@ -128,7 +135,14 @@
   desc: Edge cache
   paths:
     mac: "~/Library/Caches/Microsoft Edge"
-    win: "%LOCALAPPDATA%/Microsoft/Edge/User Data"
+    win:
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/ShaderCache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/GrShaderCache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/GraphiteDawnCache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/Cache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/Code Cache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/GPUCache"
+      - "%LOCALAPPDATA%/Microsoft/Edge/User Data/*/Service Worker/CacheStorage"
   recoveryLabel: download
 
 - id: test.puppeteer
@@ -136,7 +150,7 @@
   desc: Puppeteer browser tải về
   paths:
     mac: "~/.cache/puppeteer"
-    win: "%USERPRO%/.cache/puppeteer"
+    win: "%USERPROFILE%/.cache/puppeteer"
     linux: "~/.cache/puppeteer"
   recoveryLabel: download
 

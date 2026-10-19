@@ -133,6 +133,60 @@ describe("rules schema", () => {
     expect(defect(raw({ turbo: true }), false)).toContain("trường");
   });
 
+  test("match must be a string that compiles as a regular expression", () => {
+    expect(defect(raw({ match: "^(Cache|Code Cache)$" }), false)).toBeNull();
+    expect(defect(raw({ match: "[" }), false)).toContain("match");
+    expect(defect(raw({ match: 7 }), false)).toContain("match");
+  });
+
+  test("requireVerify must be a known verifier", () => {
+    for (const name of ["gradle_version_unused", "git_clean", "not_in_gitignore"]) {
+      expect(defect(raw({ requireVerify: name }), false)).toBeNull();
+    }
+    expect(defect(raw({ requireVerify: "trust_me" }), false)).toContain("requireVerify");
+    expect(defect(raw({ requireVerify: true }), false)).toContain("requireVerify");
+  });
+
+  test("minAgeDays must be a non-negative integer", () => {
+    expect(defect(raw({ minAgeDays: 0 }), false)).toBeNull();
+    expect(defect(raw({ minAgeDays: 30 }), false)).toBeNull();
+    expect(defect(raw({ minAgeDays: -1 }), false)).toContain("minAgeDays");
+    expect(defect(raw({ minAgeDays: 1.5 }), false)).toContain("minAgeDays");
+    expect(defect(raw({ minAgeDays: "30" }), false)).toContain("minAgeDays");
+  });
+
+  test("rule ids cannot carry YAML or path syntax", () => {
+    expect(defect(raw({ id: "ok.rule-1_2" }), false)).toBeNull();
+    expect(defect(raw({ id: "bad id" }), false)).toContain("id");
+    expect(defect(raw({ id: "bad\nrule" }), false)).toContain("id");
+    expect(defect(raw({ id: "../escape" }), false)).toContain("id");
+  });
+
+  test("windows browser rules target cache leaves, never the profile root", async () => {
+    const rules = await loadRules();
+    for (const id of ["browser.chrome", "browser.edge"]) {
+      const win = rules.find((rule) => rule.id === id)?.paths.win;
+      const patterns = Array.isArray(win) ? win : [win];
+      expect(patterns.length).toBeGreaterThan(0);
+      for (const pattern of patterns) {
+        const leaf = (pattern ?? "").split("/").pop();
+        expect(leaf).not.toBe("User Data");
+        expect(leaf).not.toBe("Default");
+        expect(leaf).not.toBe("*");
+        expect(leaf).not.toMatch(/^Profile /);
+      }
+    }
+  });
+
+  test("shipped windows paths only reference environment variables that exist", async () => {
+    const rules = await loadRules();
+    const variables = rules
+      .flatMap((rule) => Object.values(rule.paths))
+      .flat()
+      .flatMap((pattern) => [...(pattern ?? "").matchAll(/%([A-Za-z_][A-Za-z0-9_]*)%/g)].map((match) => match[1]));
+    expect([...new Set(variables)]).toEqual(["LOCALAPPDATA", "USERPROFILE"]);
+  });
+
   test("a tier outside green and yellow is still rejected", () => {
     expect(defect({ id: "test.tier", tier: "red", desc: "d", paths: { all: "~/x" }, recoveryLabel: "download" }, true)).toContain("green");
   });
