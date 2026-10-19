@@ -7,6 +7,7 @@ import { exists } from "./paths.ts";
 const PLATFORM_KEYS = ["all", "mac", "win", "linux"];
 const TIERS = ["green", "yellow"];
 const RECOVERY_LABELS = ["download", "rebuild"];
+const VERIFY_NAMES = ["gradle_version_unused", "git_clean", "not_in_gitignore"];
 const RULE_FIELDS = ["id", "tier", "desc", "paths", "match", "requireVerify", "minAgeDays", "nativeCommand", "recoveryLabel", "busyProcesses", "staleDays", "gitClean"];
 
 export function configDir(): string {
@@ -54,8 +55,9 @@ function normalize(raw: unknown, file: string, requireRecovery: boolean): Rule[]
 
 export function defect(rule: Record<string, unknown>, requireRecovery: boolean): string | null {
   if (typeof rule["id"] !== "string" || !rule["id"]) return "thiếu id";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(rule["id"])) return "id chỉ được chứa chữ, số, dấu chấm, gạch dưới và gạch ngang";
   if (typeof rule["desc"] !== "string" || !rule["desc"]) return "thiếu desc";
-  if (!TIERS.includes(String(rule["tier"]))) {
+  if (typeof rule["tier"] !== "string" || !TIERS.includes(rule["tier"])) {
     return `tier phải là ${TIERS.join("|")} (đang là ${JSON.stringify(rule["tier"])})`;
   }
   const paths = rule["paths"];
@@ -66,6 +68,23 @@ export function defect(rule: Record<string, unknown>, requireRecovery: boolean):
     if (!list.length || list.some((entry) => typeof entry !== "string" || !entry.trim())) {
       return `paths.${key} phải là string hoặc list string không rỗng`;
     }
+  }
+  const match = rule["match"];
+  if (match !== undefined) {
+    if (typeof match !== "string") return `match phải là string (đang là ${JSON.stringify(match)})`;
+    try {
+      new RegExp(match);
+    } catch {
+      return `match không phải regex hợp lệ (đang là ${JSON.stringify(match)})`;
+    }
+  }
+  const requireVerify = rule["requireVerify"];
+  if (requireVerify !== undefined && (typeof requireVerify !== "string" || !VERIFY_NAMES.includes(requireVerify))) {
+    return `requireVerify phải là ${VERIFY_NAMES.join("|")} (đang là ${JSON.stringify(requireVerify)})`;
+  }
+  const minAgeDays = rule["minAgeDays"];
+  if (minAgeDays !== undefined && (typeof minAgeDays !== "number" || !Number.isInteger(minAgeDays) || minAgeDays < 0)) {
+    return `minAgeDays phải là số nguyên >= 0 (đang là ${JSON.stringify(minAgeDays)})`;
   }
   const recovery = rule["recoveryLabel"];
   if (recovery === undefined) {

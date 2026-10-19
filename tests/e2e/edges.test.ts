@@ -24,11 +24,12 @@ afterAll(cleanupAll);
 describe("spaces and non-ASCII in a cache path", () => {
   let box: Sandbox;
   const weird = "hé lô wörld 缓存 🚀";
+  const cache = (): string => join(box.home, ".unicode-cache");
 
   beforeAll(async () => {
     box = await sandbox("unicode");
-    await plant(join(box.home, ".npm", "_cacache", weird), 3 * MB, 3);
-    await userRules(box.home, `- id: test.unicode\n  tier: green\n  desc: unicode\n  paths: { all: "${join(box.home, ".npm", "_cacache", weird)}" }\n`);
+    await plant(join(cache(), weird), 3 * MB, 3);
+    await userRules(box.home, `- id: test.unicode\n  tier: green\n  desc: unicode\n  paths: { all: "${join(cache(), weird)}" }\n`);
   });
 
   afterAll(async () => {
@@ -48,7 +49,7 @@ describe("spaces and non-ASCII in a cache path", () => {
     const outcome = result.outcomes.find((o) => o.ruleId === "test.unicode");
     expect(outcome?.status).toBe("deleted");
     expect(outcome?.path).toContain(weird);
-    expect(await exists(join(box.home, ".npm", "_cacache", weird))).toBe(false);
+    expect(await exists(join(cache(), weird))).toBe(false);
     expect(result.freed).toBe(measuredFreed(result));
   });
 });

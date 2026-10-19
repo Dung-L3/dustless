@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
 import { HOME, isRed } from "../src/core/paths.ts";
 import { loadRules, userRulesPath } from "../src/core/rules.ts";
 import { freeSpace } from "../src/core/space.ts";
-import { scan } from "../src/core/scan.ts";
+import { scan, withinRoots } from "../src/core/scan.ts";
 import { apply } from "../src/core/apply.ts";
 
 const sandbox = await mkdtemp(join(tmpdir(), "dustless-"));
@@ -152,18 +152,24 @@ describe("space", () => {
 
 describe("scan", () => {
   const fixture = join(sandbox, "fixture");
+  const outside = `${fixture}-outside`;
+  const exact = join(sandbox, "exact-root");
 
   beforeAll(async () => {
     await mkdir(join(fixture, "cache", "fresh"), { recursive: true });
     await mkdir(join(fixture, "red", "Keychains"), { recursive: true });
     await mkdir(join(fixture, "tiny"), { recursive: true });
     await mkdir(join(fixture, "aged"), { recursive: true });
+    await mkdir(join(outside, "cache"), { recursive: true });
+    await mkdir(exact, { recursive: true });
     await writeFile(join(fixture, "cache", "big.bin"), Buffer.alloc(4096, 7));
     await writeFile(join(fixture, "cache", "small.bin"), Buffer.alloc(10, 1));
     await writeFile(join(fixture, "cache", "fresh", "new.bin"), Buffer.alloc(1000, 2));
     await writeFile(join(fixture, "red", "Keychains", "secret.bin"), Buffer.alloc(5000, 3));
     await writeFile(join(fixture, "tiny", "one.bin"), Buffer.alloc(10, 4));
     await writeFile(join(fixture, "aged", "old.bin"), Buffer.alloc(2048, 5));
+    await writeFile(join(outside, "cache", "other.bin"), Buffer.alloc(2048, 6));
+    await writeFile(join(exact, "root.bin"), Buffer.alloc(1024, 8));
     const old = new Date(Date.now() - 90 * 86_400_000);
     await utimes(join(fixture, "cache", "big.bin"), old, old);
     await utimes(join(fixture, "aged", "old.bin"), old, old);
@@ -172,7 +178,9 @@ describe("scan", () => {
       `- id: test.cache\n  tier: green\n  desc: cache test\n  paths: { all: "${fixture}/cache" }\n  minAgeDays: 30\n` +
         `- id: test.red\n  tier: green\n  desc: red test\n  paths: { all: "${fixture}/red/Keychains" }\n` +
         `- id: test.tiny\n  tier: green\n  desc: tiny test\n  paths: { all: "${fixture}/tiny" }\n` +
-        `- id: test.aged\n  tier: green\n  desc: aged test\n  paths: { all: "${fixture}/aged" }\n`,
+        `- id: test.aged\n  tier: green\n  desc: aged test\n  paths: { all: "${fixture}/aged" }\n` +
+        `- id: test.outside\n  tier: green\n  desc: sibling test\n  paths: { all: "${outside}/cache" }\n` +
+        `- id: test.exact\n  tier: green\n  desc: exact root test\n  paths: { all: "${exact}" }\n`,
     );
   });
 
@@ -212,6 +220,25 @@ describe("scan", () => {
     expect(report.findings.some((f) => f.ruleId === "test.tiny")).toBe(false);
     expect(report.findings.some((f) => f.ruleId === "test.cache")).toBe(true);
     expect(report.findings.every((f) => f.bytes >= 1000)).toBe(true);
+  });
+
+  test("roots match on a path boundary, not a string prefix", async () => {
+    const inside = await scan({ roots: [fixture] });
+    expect(inside.findings.some((f) => f.ruleId === "test.outside")).toBe(false);
+    const sibling = await scan({ roots: [outside] });
+    expect(sibling.findings.some((f) => f.ruleId === "test.outside")).toBe(true);
+    expect(sibling.findings.some((f) => f.ruleId === "test.cache")).toBe(false);
+  });
+
+  test("a root includes itself and the filesystem root keeps its separator", async () => {
+    const root = parse(exact).root;
+    expect(withinRoots(exact, [exact])).toBe(true);
+    expect(withinRoots(join(exact, "child"), [exact])).toBe(true);
+    expect(withinRoots(outside, [exact])).toBe(false);
+    expect(withinRoots(join(root, "tmp", "x"), [root])).toBe(true);
+    expect(withinRoots(root, [root])).toBe(true);
+    const report = await scan({ roots: [exact] });
+    expect(report.findings.some((f) => f.ruleId === "test.exact")).toBe(true);
   });
 });
 

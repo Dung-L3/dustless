@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { writeOut } from "../core/output.ts";
 import { exists } from "../core/paths.ts";
-import { configDir, loadRules, userRulesPath } from "../core/rules.ts";
+import { configDir, defect, loadRules, userRulesPath } from "../core/rules.ts";
 import { flag, say, tierBadge } from "./context.ts";
 
 export async function runRule(sub: string, rest: string[]): Promise<number> {
@@ -31,9 +31,11 @@ export async function runRule(sub: string, rest: string[]): Promise<number> {
     if (recovery !== "download" && recovery !== "rebuild") {
       throw new Error("recovery phải là download hoặc rebuild");
     }
+    const problem = defect({ id, tier, desc, recoveryLabel: recovery, paths: { all: patterns } }, false);
+    if (problem) throw new Error(`rule không hợp lệ: ${problem}`);
     await mkdir(configDir(), { recursive: true });
     const paths = patterns.map((path) => `    all: ${JSON.stringify(path)}`).join("\n");
-    await appendFile(userRulesPath(), `\n- id: ${id}\n  tier: ${tier}\n  desc: ${JSON.stringify(desc)}\n  recoveryLabel: ${recovery}\n  paths:\n${paths}\n`);
+    await appendFile(userRulesPath(), `\n- id: ${JSON.stringify(id)}\n  tier: ${tier}\n  desc: ${JSON.stringify(desc)}\n  recoveryLabel: ${recovery}\n  paths:\n${paths}\n`);
     say(`đã thêm ${id} vào ${userRulesPath()} (${(await loadRules()).length} rule hợp lệ)`);
     return 0;
   }

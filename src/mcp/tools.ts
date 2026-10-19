@@ -117,7 +117,8 @@ function tally(seed: Totals, findings: Finding[]): Totals {
   const totals = {} as Totals;
   for (const tier of Object.keys(seed) as Tier[]) totals[tier] = { count: 0, bytes: 0 };
   for (const finding of findings) {
-    const bucket = (totals[finding.tier] ??= { count: 0, bytes: 0 });
+    const key = finding.blocked ? "blocked" : finding.tier;
+    const bucket = (totals[key] ??= { count: 0, bytes: 0 });
     bucket.count += 1;
     bucket.bytes += finding.bytes;
   }
@@ -137,7 +138,7 @@ async function scanTool(core: Core, args: Record<string, unknown>): Promise<Tool
   }
   const summaries = summarize(findings);
   const totals = tally(report.totals, findings);
-  const reclaimable = sumOf(findings.filter((finding) => finding.tier === "green" || finding.tier === "yellow"));
+  const reclaimable = sumOf(findings.filter((finding) => !finding.blocked && (finding.tier === "green" || finding.tier === "yellow")));
   const body = [
     `Dustless scan - ${report.platform}, ${report.scannedMs}ms, ${findings.length} of ${report.findings.length} findings. Nothing was deleted.`,
     table(["rule_id", "tier", "items", "size", "path"], summaries.map(summaryRow)),
