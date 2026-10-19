@@ -25,6 +25,7 @@ import {
 const built = await ensureBinary();
 
 const exists = async (path: string): Promise<boolean> => await stat(path).then(() => true, () => false);
+const at = (path: string, tail: string): boolean => path.replaceAll("\\", "/").endsWith(tail);
 
 afterAll(cleanupAll);
 
@@ -157,7 +158,7 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
 
   test("the pinned cache is BLOCKED and yellow, never green", async () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
-    const hit = report.findings.find((f) => f.path.endsWith("/.gradle/caches/8.14"));
+    const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.14"));
     expect(hit?.blocked).toBe(true);
     expect(hit?.verified).toBe(false);
     expect(hit?.tier).toBe("yellow");
@@ -168,10 +169,10 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
 
   test("the block cannot be explained by age: the cache is older than minAgeDays", async () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
-    const hit = report.findings.find((f) => f.path.endsWith("/.gradle/caches/8.14"));
+    const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.14"));
     expect(hit?.ageDays ?? 0).toBeGreaterThan(30);
     expect(hit?.note).not.toContain("rule yêu cầu");
-    expect(report.findings.find((f) => f.path.endsWith("/.gradle/caches/8.12"))?.tier).toBe("green");
+    expect(report.findings.find((f) => at(f.path, "/.gradle/caches/8.12"))?.tier).toBe("green");
   });
 
   test("apply --yes leaves the blocked cache byte-for-byte intact and deletes only the spare", async () => {
@@ -179,11 +180,11 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
     const run = await box.run(["apply", "--yes", "--json"]);
     expect(run.code).toBe(0);
     const result = applyJson(run.stdout);
-    expect(result.outcomes.find((o) => o.path.endsWith("/.gradle/caches/8.14"))?.status).toBe("skipped");
-    expect(result.outcomes.find((o) => o.path.endsWith("/.gradle/caches/8.14"))?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.status).toBe("skipped");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.detail).toContain("KIỆM SOÁT CHẶN");
     expect(await digest(used())).toBe(before);
     expect(await treeBytes(used())).toBe(2 * MB);
-    expect(result.outcomes.find((o) => o.path.endsWith("/.gradle/caches/8.12"))?.status).toBe("deleted");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.12"))?.status).toBe("deleted");
     expect(await exists(spare())).toBe(false);
   });
 
@@ -216,7 +217,7 @@ describe("5. vendored copies do not pin a gradle version", () => {
 
   test("the vendored 8.12 reference does not keep the 8.12 cache alive", async () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
-    const hit = report.findings.find((f) => f.path.endsWith("/.gradle/caches/8.12"));
+    const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.12"));
     expect(hit?.blocked).toBe(false);
     expect(hit?.verified).toBe(true);
     expect(hit?.tier).toBe("green");
@@ -224,7 +225,7 @@ describe("5. vendored copies do not pin a gradle version", () => {
 
   test("the real 8.14 project still holds the 8.14 cache", async () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
-    const hit = report.findings.find((f) => f.path.endsWith("/.gradle/caches/8.14"));
+    const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.14"));
     expect(hit?.blocked).toBe(true);
     expect(hit?.note).toContain("8.14");
   });
@@ -232,8 +233,8 @@ describe("5. vendored copies do not pin a gradle version", () => {
   test("apply --yes deletes only the genuinely unused cache", async () => {
     const before = await digest(join(box.home, ".gradle", "caches", "8.14"));
     const result = applyJson((await box.run(["apply", "--yes", "--json"])).stdout);
-    expect(result.outcomes.find((o) => o.path.endsWith("/.gradle/caches/8.12"))?.status).toBe("deleted");
-    expect(result.outcomes.find((o) => o.path.endsWith("/.gradle/caches/8.14"))?.status).toBe("skipped");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.12"))?.status).toBe("deleted");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.status).toBe("skipped");
     expect(await digest(join(box.home, ".gradle", "caches", "8.14"))).toBe(before);
     expect(await exists(join(box.home, ".gradle", "caches", "8.12"))).toBe(false);
   });

@@ -29,7 +29,7 @@ describe("spaces and non-ASCII in a cache path", () => {
   beforeAll(async () => {
     box = await sandbox("unicode");
     await plant(join(cache(), weird), 3 * MB, 3);
-    await userRules(box.home, `- id: test.unicode\n  tier: green\n  desc: unicode\n  paths: { all: "${join(cache(), weird)}" }\n`);
+    await userRules(box.home, `- id: test.unicode\n  tier: green\n  desc: unicode\n  paths: { all: ${JSON.stringify(join(cache(), weird))} }\n`);
   });
 
   afterAll(async () => {
@@ -121,7 +121,7 @@ describe("a wildcard cache rule must not delete through a leaf symlink", () => {
     await mkdir(cacheDir(), { recursive: true });
     await plant(box.outside, 4 * MB, 1);
     await symlink(box.outside, join(cacheDir(), "entry"));
-    await userRules(box.home, `- id: test.wild\n  tier: green\n  desc: wild\n  paths: { all: "${cacheDir()}/*//" }\n  recoveryLabel: download\n`);
+    await userRules(box.home, `- id: test.wild\n  tier: green\n  desc: wild\n  paths: { all: ${JSON.stringify(cacheDir() + "/*//")} }\n  recoveryLabel: download\n`);
   });
 
   afterAll(async () => {
@@ -147,7 +147,7 @@ describe("a wildcard cache rule must not delete through a leaf symlink", () => {
   });
 });
 
-describe("a read-only cache directory", () => {
+describe.skipIf(process.platform === "win32")("a read-only cache directory", () => {
   let box: Sandbox;
   const locked = (): string => join(box.home, ".npm", "_cacache", "locked");
 

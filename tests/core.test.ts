@@ -175,12 +175,12 @@ describe("scan", () => {
     await utimes(join(fixture, "aged", "old.bin"), old, old);
     await utimes(join(fixture, "aged"), old, old);
     await writeRules(
-      `- id: test.cache\n  tier: green\n  desc: cache test\n  paths: { all: "${fixture}/cache" }\n  minAgeDays: 30\n` +
-        `- id: test.red\n  tier: green\n  desc: red test\n  paths: { all: "${fixture}/red/Keychains" }\n` +
-        `- id: test.tiny\n  tier: green\n  desc: tiny test\n  paths: { all: "${fixture}/tiny" }\n` +
-        `- id: test.aged\n  tier: green\n  desc: aged test\n  paths: { all: "${fixture}/aged" }\n` +
-        `- id: test.outside\n  tier: green\n  desc: sibling test\n  paths: { all: "${outside}/cache" }\n` +
-        `- id: test.exact\n  tier: green\n  desc: exact root test\n  paths: { all: "${exact}" }\n`,
+      `- id: test.cache\n  tier: green\n  desc: cache test\n  paths: { all: ${JSON.stringify(fixture + "/cache")} }\n  minAgeDays: 30\n` +
+        `- id: test.red\n  tier: green\n  desc: red test\n  paths: { all: ${JSON.stringify(fixture + "/red/Keychains")} }\n` +
+        `- id: test.tiny\n  tier: green\n  desc: tiny test\n  paths: { all: ${JSON.stringify(fixture + "/tiny")} }\n` +
+        `- id: test.aged\n  tier: green\n  desc: aged test\n  paths: { all: ${JSON.stringify(fixture + "/aged")} }\n` +
+        `- id: test.outside\n  tier: green\n  desc: sibling test\n  paths: { all: ${JSON.stringify(outside + "/cache")} }\n` +
+        `- id: test.exact\n  tier: green\n  desc: exact root test\n  paths: { all: ${JSON.stringify(exact)} }\n`,
     );
   });
 
@@ -318,9 +318,9 @@ describe("apply", () => {
     const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
     const priorPath = process.env["PATH"];
     await writeRules(
-      `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${busyVictim}" }\n  busyProcesses: [" /opt/homebrew/bin/Bun "]\n` +
-        `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: " npm cache verify"\n` +
-        `- id: test.win\n  tier: green\n  desc: win\n  paths: { all: "${winVictim}" }\n  busyProcesses: ['C:\\Tools\\Bun.exe']\n`,
+      `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: ${JSON.stringify(busyVictim)} }\n  busyProcesses: [" /opt/homebrew/bin/Bun "]\n` +
+        `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: ${JSON.stringify(nativeVictim)} }\n  nativeCommand: " npm cache verify"\n` +
+        `- id: test.win\n  tier: green\n  desc: win\n  paths: { all: ${JSON.stringify(winVictim)} }\n  busyProcesses: ['C:\\Tools\\Bun.exe']\n`,
     );
     process.env["PATH"] = `${bin}:${priorPath ?? ""}`;
     try {

@@ -71,7 +71,7 @@ async function setupOnlyFileBox(label: string): Promise<{ box: Sandbox; seed: nu
   await writeFile(join(box.home, PLANTED_RED), Buffer.alloc(1 * MB, 0x55));
   await userRules(
     box.home,
-    `- id: test.planted\n  tier: green\n  desc: planted\n  paths: { all: ["${join(box.home, PLANTED_CACHE)}", "${join(box.home, PLANTED_RED)}"] }\n`,
+    `- id: test.planted\n  tier: green\n  desc: planted\n  paths: { all: [${JSON.stringify(join(box.home, PLANTED_CACHE))}, ${JSON.stringify(join(box.home, PLANTED_RED))}] }\n`,
   );
   return { box, seed, rng };
 }
@@ -262,7 +262,7 @@ describe("A. --only-file fuzz properties", () => {
       await plant(join(box.home, ".npm", "_cacache"), 2 * MB, 2);
       await userRules(
         box.home,
-        `- id: test.cache\n  tier: green\n  desc: planted\n  paths: { all: ["${join(box.home, ".npm", "_cacache")}"] }\n- id: test.home\n  tier: green\n  desc: planted\n  paths: { all: ["~"] }\n`,
+        `- id: test.cache\n  tier: green\n  desc: planted\n  paths: { all: [${JSON.stringify(join(box.home, ".npm", "_cacache"))}] }\n- id: test.home\n  tier: green\n  desc: planted\n  paths: { all: ["~"] }\n`,
       );
       const scan = scanJson((await box.run(["scan", "--json"])).stdout);
       expect(scan.findings.some((f) => f.ruleId === "test.home")).toBe(true);

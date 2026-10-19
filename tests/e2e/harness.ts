@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { join, isAbsolute, relative, resolve, sep } from "node:path";
 
 export const REPO = resolve(import.meta.dir, "..", "..");
 export const BINARY = join(REPO, "dist", process.platform === "win32" ? "dustless.exe" : "dustless");
@@ -185,8 +185,9 @@ export async function sandbox(label: string): Promise<Sandbox> {
   const home = assertTempRoot(await mkdtemp(join(TMP, `dustless-e2e-${label}-`)));
   const outside = assertTempRoot(await mkdtemp(join(TMP, `dustless-outside-${label}-`)));
   const env: Record<string, string> = {
-    PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+    PATH: process.platform === "win32" ? process.env["PATH"] ?? "" : "/usr/bin:/bin:/usr/sbin:/sbin",
     HOME: home,
+    USERPROFILE: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     NO_COLOR: "1",
     TMPDIR: TMP,
@@ -194,7 +195,7 @@ export async function sandbox(label: string): Promise<Sandbox> {
   const run = (args: string[], opts: { cwd?: string } = {}): Promise<Result> => {
     assertTempRoot(env["HOME"] as string);
     for (const arg of args) {
-      if (arg.startsWith("/")) assertSandboxed(arg, home);
+      if (isAbsolute(arg)) assertSandboxed(arg, home);
     }
     return exec(args, env, opts.cwd ?? "/");
   };

@@ -34,7 +34,13 @@ const pathExists = async (path: string): Promise<boolean> => await stat(path).th
 
 function startServer(home: string): Client {
   const child = spawn(BINARY, ["mcp"], {
-    env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: home, NO_COLOR: "1", TMPDIR: tmpdir() },
+    env: {
+      PATH: process.platform === "win32" ? process.env["PATH"] ?? "" : "/usr/bin:/bin:/usr/sbin:/sbin",
+      HOME: home,
+      USERPROFILE: home,
+      NO_COLOR: "1",
+      TMPDIR: tmpdir(),
+    },
     cwd: "/",
     stdio: ["pipe", "pipe", "pipe"],
   });

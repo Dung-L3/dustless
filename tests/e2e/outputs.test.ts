@@ -28,7 +28,7 @@ describe("8. red paths are never deleted, even with --yes", () => {
     await userRules(
       box.home,
       `- id: test.red\n  tier: green\n  desc: red probe\n  paths:\n    all:\n` +
-        victims.map((v) => `      - "${join(box.home, v)}"`).join("\n"),
+        victims.map((v) => `      - ${JSON.stringify(join(box.home, v))}`).join("\n"),
     );
   });
 

@@ -8,6 +8,9 @@ import { createTools, type Core, type Tool } from "../src/mcp/tools.ts";
 import { AgentRefusal, assertAgentCanDelete, assertPathDeletable, assertWithinAgentCap, isRed, MAX_AGENT_DELETE_BYTES } from "../src/mcp/safety.ts";
 
 const GIB = 1024 ** 3;
+const CACHE = join(tmpdir(), "npm-cache");
+const CACHE_YELLOW = join(tmpdir(), "npm-cache-yellow");
+const PROTO = join(tmpdir(), "proto-cache");
 const RULES: Rule[] = [
   { id: "npm.cacache", tier: "green", desc: "npm cache tarball", paths: { all: "~/.npm/_cacache" } },
   { id: "gradle.version_cache", tier: "green", desc: "gradle cache", paths: { all: "~/.gradle/caches/*" } },
@@ -16,7 +19,7 @@ const RULES: Rule[] = [
 
 function finding(over: Partial<Finding> = {}): Finding {
   return {
-    ruleId: "npm.cacache", tier: "green", desc: "npm cache tarball", path: "/tmp/npm-cache",
+    ruleId: "npm.cacache", tier: "green", desc: "npm cache tarball", path: CACHE,
     bytes: 2 * GIB, mtime: 0, atime: 0, ageDays: 40, verified: true, blocked: false, note: "", ...over,
   };
 }
@@ -192,7 +195,7 @@ describe("apply safety", () => {
     const core = fakeCore();
     const reply = await applyCall(createTools(core), 9, { rule_ids: ["npm.cacache"], confirm: true });
     expect(reply.result?.isError).toBeFalsy();
-    expect(core.deleted).toEqual([["/tmp/npm-cache"]]);
+    expect(core.deleted).toEqual([[CACHE]]);
   });
 
   test("an unknown rule id refuses the whole batch by name", async () => {
@@ -222,13 +225,13 @@ describe("apply safety", () => {
     expect(core.deleted).toEqual([]);
     const allowed = await applyCall(tools, 13, { rule_ids: ["npm.cacache"], tier: "yellow", confirm: true });
     expect(allowed.result?.isError).toBeFalsy();
-    expect(core.deleted).toEqual([["/tmp/npm-cache"]]);
+    expect(core.deleted).toEqual([[CACHE]]);
   });
 
   test("a rule that yields green and yellow findings is sent to the engine as yellow", async () => {
     const seen: unknown[] = [];
     const core = fakeCore({
-      scan: async () => reportOf([finding({ tier: "yellow", path: "/tmp/npm-cache-yellow" }), finding({ path: "/tmp/npm-cache" })]),
+      scan: async () => reportOf([finding({ tier: "yellow", path: CACHE_YELLOW }), finding({ path: CACHE })]),
       apply: async (report, opts) => {
         seen.push(opts?.tiers);
         return {
@@ -245,7 +248,7 @@ describe("apply safety", () => {
   test("a rule id inherited from Object.prototype is sent with its own green tier", async () => {
     const seen: unknown[] = [];
     const core = fakeCore({
-      scan: async () => reportOf([finding({ ruleId: "constructor", path: "/tmp/proto-cache" })]),
+      scan: async () => reportOf([finding({ ruleId: "constructor", path: PROTO })]),
       apply: async (report, opts) => {
         seen.push(opts?.tiers);
         return {
@@ -287,7 +290,7 @@ describe("safety guards", () => {
     expect(isRed("/Users/me/Library/Mail/V10")).toBe(true);
     expect(isRed("/Users/me/project/.git/objects")).toBe(true);
     expect(() => assertPathDeletable(finding({ path: "/Users/me/Pictures/x" }))).toThrow(/red blocklist/);
-    expect(() => assertPathDeletable(finding({ path: "/tmp/npm-cache" }))).not.toThrow();
+    expect(() => assertPathDeletable(finding({ path: CACHE }))).not.toThrow();
   });
 
   test("bad argument types give a correctable message, not a stack trace", async () => {

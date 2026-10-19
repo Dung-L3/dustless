@@ -36,7 +36,7 @@ describe("scan red-resolving path", () => {
     const target = join(home, "Documents", "redtarget");
     await plant(target, bytes);
     await symlink(target, cp);
-    await userRules(home, `- id: test.redreal\n  tier: green\n  desc: red real\n  paths: { all: "${cp}" }\n`);
+    await userRules(home, `- id: test.redreal\n  tier: green\n  desc: red real\n  paths: { all: ${JSON.stringify(cp)} }\n`);
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     expect(report.findings.some((f) => f.path === cp)).toBe(false);
     expect(report.reclaimable).toBe(0);
@@ -51,7 +51,7 @@ describe("scan red-resolving path", () => {
     const cp = cachePath(home);
     await rm(cp, { recursive: true, force: true });
     await plant(cp, bytes);
-    await userRules(home, `- id: test.redrealctrl\n  tier: green\n  desc: red real ctrl\n  paths: { all: "${cp}" }\n`);
+    await userRules(home, `- id: test.redrealctrl\n  tier: green\n  desc: red real ctrl\n  paths: { all: ${JSON.stringify(cp)} }\n`);
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     const hit = report.findings.find((f) => f.ruleId === "test.redrealctrl");
     expect(hit).toBeDefined();
@@ -69,7 +69,7 @@ describe("scan red-resolving path", () => {
     await symlink(target, cp);
     expect(isRed(cp)).toBe(false);
     expect(isRedReal(cp)).toBe(true);
-    await userRules(home, `- id: test.redreal2\n  tier: green\n  desc: red real2\n  paths: { all: "${cp}" }\n`);
+    await userRules(home, `- id: test.redreal2\n  tier: green\n  desc: red real2\n  paths: { all: ${JSON.stringify(cp)} }\n`);
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     expect(report.findings.some((f) => f.path === cp)).toBe(false);
     expect(report.unscannableSummary.red).toBeGreaterThanOrEqual(1);
