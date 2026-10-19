@@ -287,7 +287,7 @@ describe("apply", () => {
     const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
     const priorPath = process.env["PATH"];
     await writeRules(
-      `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${busyVictim}" }\n  busyProcesses: [Bun]\n` +
+      `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${busyVictim}" }\n  busyProcesses: [" /opt/homebrew/bin/Bun "]\n` +
         `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: npm cache verify\n`,
     );
     process.env["PATH"] = `${bin}:${priorPath ?? ""}`;

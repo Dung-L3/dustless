@@ -58,7 +58,7 @@ network stack, the browser, or any other software on the machine.
   again immediately before the `rename`/`rm` — and a second reading that differs from the first is
   refused (`changed`); the Windows retry loop re-reads it before every attempt. A missing path checks
   its parent's real path, so `link/missing` where `link` points into HOME or a red directory is
-  refused rather than waved through as unresolved. It is
+  refused rather than waved through as unresolved; a dangling parent symlink is refused too. It is
   called from `remove` (`src/core/apply.ts`), `moveToTrash`/`purgePath` (`src/core/apps/index.ts`),
   `deleteLargeFile` (`src/core/largefiles/index.ts`) and `assertPathDeletable`
   (`src/mcp/safety.ts`). `isRed` (`src/core/paths.ts`) normalises duplicate separators, backslashes

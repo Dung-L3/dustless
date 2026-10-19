@@ -11,6 +11,7 @@ const GIB = 1024 ** 3;
 const RULES: Rule[] = [
   { id: "npm.cacache", tier: "green", desc: "npm cache tarball", paths: { all: "~/.npm/_cacache" } },
   { id: "gradle.version_cache", tier: "green", desc: "gradle cache", paths: { all: "~/.gradle/caches/*" } },
+  { id: "constructor", tier: "green", desc: "prototype-shaped id", paths: { all: "~/.cache/constructor" } },
 ];
 
 function finding(over: Partial<Finding> = {}): Finding {
@@ -223,6 +224,23 @@ describe("apply safety", () => {
     const reply = await applyCall(createTools(core), 15, { rule_ids: ["npm.cacache"], tier: "yellow", confirm: true });
     expect(reply.result?.isError).toBeFalsy();
     expect(seen).toEqual([{ "npm.cacache": "yellow" }]);
+  });
+
+  test("a rule id inherited from Object.prototype is sent with its own green tier", async () => {
+    const seen: unknown[] = [];
+    const core = fakeCore({
+      scan: async () => reportOf([finding({ ruleId: "constructor", path: "/tmp/proto-cache" })]),
+      apply: async (report, opts) => {
+        seen.push(opts?.tiers);
+        return {
+          outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: "" })),
+          freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+        };
+      },
+    });
+    const reply = await applyCall(createTools(core), 16, { rule_ids: ["constructor"], confirm: true });
+    expect(reply.result?.isError).toBeFalsy();
+    expect(seen).toEqual([{ constructor: "green" }]);
   });
 });
 

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyJson,
@@ -120,7 +120,7 @@ describe("a wildcard cache rule must not delete through a leaf symlink", () => {
     await mkdir(cacheDir(), { recursive: true });
     await plant(box.outside, 4 * MB, 1);
     await symlink(box.outside, join(cacheDir(), "entry"));
-    await userRules(box.home, `- id: test.wild\n  tier: green\n  desc: wild\n  paths: { all: "${cacheDir()}/*" }\n  recoveryLabel: download\n`);
+    await userRules(box.home, `- id: test.wild\n  tier: green\n  desc: wild\n  paths: { all: "${cacheDir()}/*//" }\n  recoveryLabel: download\n`);
   });
 
   afterAll(async () => {
@@ -131,6 +131,7 @@ describe("a wildcard cache rule must not delete through a leaf symlink", () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     const hit = report.findings.find((f) => f.ruleId === "test.wild");
     expect(hit?.path).toBe(join(cacheDir(), "entry"));
+    expect(hit?.bytes).toBe((await lstat(join(cacheDir(), "entry"))).size);
   });
 
   test("apply removes the link and leaves the target intact", async () => {

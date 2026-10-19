@@ -45,15 +45,16 @@ async function run(
   rules: Map<string, Rule>,
   busy: Set<string>,
 ): Promise<ApplyOutcome> {
+  const target = resolve(finding.path);
   const outcome: ApplyOutcome = {
     ruleId: finding.ruleId,
     tier: finding.tier,
-    path: finding.path,
+    path: target,
     status: "skipped",
     bytes: finding.bytes,
     detail: "",
   };
-  const guard = refusal(finding.path);
+  const guard = refusal(target);
   if (guard) {
     outcome.status = "failed";
     outcome.detail = guard;
@@ -63,7 +64,7 @@ async function run(
     outcome.detail = `KIỆM SOÁT CHẶN: ${finding.note || "kiểm chứng thất bại"}`;
     return outcome;
   }
-  if (opts.only && !opts.only.has(resolve(finding.path))) {
+  if (opts.only && !opts.only.has(target)) {
     outcome.detail = "không được chọn: ngoài danh sách --only-file";
     return outcome;
   }
@@ -75,7 +76,7 @@ async function run(
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
   }
-  const present = await lstat(finding.path).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
+  const present = await lstat(target).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
   if (!present) {
     outcome.detail = "bỏ qua: đường dẫn không còn tồn tại";
     return outcome;
@@ -91,7 +92,7 @@ async function run(
     outcome.detail = opts.onPrompt ? "người dùng từ chối" : "cần xác nhận, chạy lại với --yes";
     return outcome;
   }
-  const failure = await remove(finding.path, opts.beforeDelete);
+  const failure = await remove(target, opts.beforeDelete);
   outcome.status = failure ? "failed" : "deleted";
   outcome.detail = failure;
   return outcome;

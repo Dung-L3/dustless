@@ -177,7 +177,13 @@ export function realGuard(path: string): RealGuard {
       const realParent = realpathSync(parent);
       if (isRed(realParent)) return { refused: "red" };
       if (canonicalReal(realParent) !== canonicalReal(parent)) return { refused: "symlinked" };
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") return { refused: "unresolvable" };
+      try {
+        if (lstatSync(parent).isSymbolicLink()) return { refused: "symlinked" };
+      } catch {
+        return { refused: "unresolvable" };
+      }
     }
     return { real: full };
   }

@@ -169,6 +169,26 @@ describe("largefiles --delete", () => {
     expect(await exists(target)).toBe(true);
   });
 
+  test.skipIf(process.platform === "win32")("names a protected target instead of calling it unresolvable", async () => {
+    const link = join(box.home, "Downloads", "home-link");
+    await symlink(box.home, link);
+    const run = await box.run(["largefiles", "--delete", link, "--confirm", "--json"]);
+    const report = JSON.parse(run.stdout) as Report;
+    expect(run.code).toBe(1);
+    expect(report.outcomes[0]?.detail).toMatch(/HOME/);
+    expect(await exists(box.home)).toBe(true);
+  });
+
+  test.skipIf(process.platform === "win32")("names a symlinked parent instead of calling it unresolvable", async () => {
+    const alias = join(box.home, "downloads-alias");
+    await symlink(join(box.home, "Downloads"), alias);
+    const run = await box.run(["largefiles", "--delete", join(alias, "backup.tar"), "--confirm", "--json"]);
+    const report = JSON.parse(run.stdout) as Report;
+    expect(run.code).toBe(1);
+    expect(report.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
+    expect(await exists(join(box.home, "Downloads", "backup.tar"))).toBe(true);
+  });
+
   test("refuses a directory, never deleting a tree", async () => {
     const dir = join(box.home, "Downloads");
     const run = await box.run(["largefiles", "--delete", dir, "--confirm", "--json"]);

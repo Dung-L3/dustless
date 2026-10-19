@@ -96,8 +96,10 @@ describe("delete race", () => {
     const target = await cache(root, "target");
     const link = join(root, "link");
     await symlink(target, link);
+    const linkSize = (await lstat(link)).size;
     const result = await moveToTrash(`${link}/`, join(root, "Trash"));
     expect(result.status).toBe("trashed");
+    expect(result.bytes).toBe(linkSize);
     expect(await readFile(join(target, "data.txt"), "utf8")).toBe("payload");
     expect(await lstat(link).then(() => false, () => true)).toBe(true);
     expect(await lstat(join(root, "Trash", "link")).then(() => true, () => false)).toBe(true);

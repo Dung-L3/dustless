@@ -147,6 +147,25 @@ describe("race delete apply", () => {
     expect(realGuard(join(link, "missing"))).toEqual({ refused: "symlinked" });
   });
 
+  test("a missing path below a dangling symlink is refused", async () => {
+    const root = await box();
+    const dangling = join(root, "dangling");
+    await symlink(join(root, "never-existed"), dangling);
+    expect(realGuard(join(dangling, "missing"))).toEqual({ refused: "symlinked" });
+  });
+
+  test("the outcome path is the resolved target, not the raw spelling", async () => {
+    const root = await box();
+    const dir = join(root, "dir");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "data.txt"), "payload");
+    const raw = join(root, "dir", "..", "dir", "data.txt");
+    const result = await apply(report([finding(raw)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(result.outcomes[0]?.path).toBe(join(dir, "data.txt"));
+    expect(await exists(join(dir, "data.txt"))).toBe(false);
+  });
+
   test("mcp guard: a protected target throws the protected message", () => {
     expect(() => assertPathDeletable(finding("/"))).toThrow(/HOME, a parent of HOME or the filesystem root/);
   });
