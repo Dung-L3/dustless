@@ -33,33 +33,34 @@ Dustless 不会仅仅因为一个缓存位于缓存目录里就删掉它。它�
 | 等级 | 含义 | `apply` 的行为 |
 | --- | --- | --- |
 | 🟢 **GREEN** | 纯可重建缓存。若规则要求交叉验证，验证已通过。 | 你确认汇总后自动删除 |
-| 🟡 **YELLOW** | 可能仍在使用中 —— VM 磁盘、模拟器 AVD、构建产物 —— 或因未达到 `minAgeDays` 而被降级的规则（`src/core/scan.ts:72`）。 | 逐条询问 |
-| ⛔ **BLOCKED** | 规则要求验证，而验证失败（`src/core/scan.ts:76`）。记在 `totals.blocked` 下，且不计入 `reclaimable`（`src/core/scan.ts:28`）。 | **永不删除。** `--yes` 也不行，任何标志都不行 |
-| 🔴 **RED** | 硬编码的受保护路径清单：Keychain、Mail、iCloud、`*-wal`/`*-shm`、`Preferences`、`.git`、Documents、Desktop、Pictures、Movies、Music、Contacts、Reminders、Calendar、Finance、Passes、Keynotes、Messages、`Application Support/com.apple.{Photos,MobileSync,Notes,Trial}`（`src/core/paths.ts:81`） | 永远不会成为 finding（`src/core/scan.ts:42`）。删除前会再检查一次（`src/core/apply.ts:54`） |
+| 🟡 **YELLOW** | 可能仍在使用中 —— VM 磁盘、模拟器 AVD、构建产物 —— 或因未达到 `minAgeDays` 而被降级的规则（`src/core/scan.ts:132`）。 | 逐条询问 |
+| ⛔ **BLOCKED** | 规则要求验证，而验证失败（`src/core/scan.ts:136`）。记在 `totals.blocked` 下，且不计入 `reclaimable`（`src/core/scan.ts:200`）。 | **永不删除。** `--yes` 也不行，任何标志都不行 |
+| 🔴 **RED** | 硬编码的受保护路径清单：Keychain、Mail、iCloud、`*-wal`/`*-shm`、`Preferences`、`.git`、Documents、Desktop、Pictures、Movies、Music、Contacts、Reminders、Calendar、Finance、Passes、Keynotes、Messages、`Application Support/com.apple.{Photos,MobileSync,Notes,Trial}`（`src/core/paths.ts:97`） | 永远不会成为 finding（`src/core/scan.ts:87`）。删除前会对解析后的真实路径再检查一次（`src/core/paths.ts:167`） |
 
 BLOCKED 不是弱化版的 RED。RED 是一份静态路径清单，任何东西都删不掉它。BLOCKED 是一个实时判定：Dustless 试图证明某个缓存已无人使用，但没能证明。
 
 ### `apply` 采用 fail-closed
 
-每一次删除都以 rule id 为键，而缺失的键会解析为 `skip`（`src/core/apply.ts:71`）：
+每一次删除都以 rule id 为键，而缺失的键会解析为 `skip`（`src/core/apply.ts:84`）：
 
 ```ts
-const action = opts.tiers?.[finding.ruleId] ?? "skip";
+const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
+const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
 ```
 
 拼错的 id、payload 漏掉的 id、scan 根本没产出的 rule —— 全部解析为 skip，绝不会变成该规则自己的 tier。早期版本默认取规则自身的 tier，于是漏掉一个键就等于静默地说“删除”；那正是从一台真实机器上带走约 36 GB 的原因。
 
-这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli/scan.ts`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:188`）。
+这个默认值是兜底，而不是机制。每个调用方都自己构造映射：CLI 从正在运行的 scan 构造（`src/cli/scan.ts`），MCP 从它事先校验过的 rule id 构造（`src/mcp/tools.ts:189`）。
 
 ### 为什么 BLOCKED 无法被覆盖
 
-封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli/scan.ts`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:60`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:88`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。
+封锁在四个互相独立的位置被强制执行：scan 打上标记，apply 的汇总阶段把这些 finding 排除出待删集合（`src/cli/scan.ts`），`apply()` 在碰文件系统之前再查一次（`src/core/apply.ts:63`），MCP 安全层直接拒绝整个调用（`src/mcp/safety.ts:98`）。`--yes` 跳过的是提问。它无法伪造一次通过的验证，也无法解除封锁。RED 同理：它是一组编译进二进制文件的正则。没有任何标志、规则文件或 MCP 参数能触及它。
 
 ## 安装
 
 ### Release 二进制文件
 
-推送一个 `v*` tag，build 工作流会编译四个目标并附到 release 上：`dustless-macos-arm64`、`dustless-macos-x64`、`dustless-linux-x64`、`dustless-windows-x64.exe`（`.github/workflows/release.yml:21`）。下载对应你机器的那个，放到 `PATH` 下的任意位置即可。
+推送一个 `v*` tag，build 工作流会编译四个目标并附到 release 上：`dustless-macos-arm64`、`dustless-macos-x64`、`dustless-linux-x64`、`dustless-windows-x64.exe`（`.github/workflows/release.yml:20-32`）。下载对应你机器的那个，放到 `PATH` 下的任意位置即可。Windows 还会得到 `Dustless-<version>-setup.exe`：一个按用户安装的安装程序，CI 会在附到 release 之前静默安装并卸载它进行验证。
 
 ```sh
 dustless doctor     # 确认它能运行且能读取你的缓存
@@ -143,6 +144,17 @@ Xóa? [y/N]
 
 `y` 删除该条目。其他任何字符都会跳过它并继续。没有任何东西会在你不知情的情况下被批量处理。
 
+## 完全磁盘访问权限与无法扫描的规则
+
+macOS 的 TCC 会对所有没有完全磁盘访问权限的进程隐藏某些目录，而且它的隐藏方式是让这些目录看起来是空的或不存在，而不是指出受保护的父目录。`dustless doctor` 正是为此探测 `~/Library/Mail`（`src/cli/doctor.ts`，`runDoctor`），并在探测返回 `EPERM` 或 `EACCES` 时**以 1 退出**。这是设计使然，不是崩溃：一个连自己的缓存都读不了的环境，不能信任它报告缓存里有什么，所以退出状态如实说明这一点。这也是为什么一次扫描可能发现比数据库更少的规则 —— 路径全都不可读的规则什么也贡献不了。
+
+现在扫描会说明它没能看到什么，而不是保持沉默。`scan --json` 在 `findings` 和 `totals` 之外多带两个键（`src/types.ts`，`ScanReport`）：
+
+- `unscannable` —— 每个未产出任何可扫描路径的规则一条记录，包含 `ruleId`、`tier`、`desc`、失败的 `pathPatterns`，以及 `reason`：`absent`（路径不存在）、`no_access`（EACCES/EPERM —— 通常是缺少完全磁盘访问权限）、`not_supported`（该规则在当前平台没有路径）、`red`（路径命中永久封锁清单）或 `error`（`src/core/scan.ts`，`scan`）。
+- `unscannableSummary` —— 每种 reason 的数量，五个键始终存在。
+
+这些规则不计入 `totals`、`reclaimable` 和 `freed`：这个字段只会增加信息，绝不会增加数字。macOS 应用为这两个字段建模，并对 reason 的措辞做了本地化（`apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift` 中的 `UnscannableRule`、`UnscannableSummary` 和 `UnscannableText`）。
+
 ## CLI 参考
 
 下面每个命令都在 `src/cli.ts` 中实现。
@@ -150,7 +162,7 @@ Xóa? [y/N]
 | 命令 | 行为 |
 | --- | --- |
 | `dustless scan` | 交叉扫描所有规则，按大小排序列出 finding，并给出各等级汇总和可回收字节数。只读。 |
-| `dustless apply` | Scan，打印汇总，询问 `Xóa? [y/N]`，然后删除 GREEN 并逐条询问 YELLOW。若有任何条目失败，退出码为 `1`。 |
+| `dustless apply` | Scan，打印汇总，询问 `Xóa? [y/N]`，然后删除 GREEN 并逐条询问 YELLOW。若有任何条目失败，退出码为 `1`。带 `--only-file <selection.json>` 时只删除该数组中的确切路径。 |
 | `dustless rule list` | 打印规则数据库及其等级和描述，并说明加载来源。 |
 | `dustless rule show <id>` | 以 JSON 打印单条规则。 |
 | `dustless rule add <id> <green\|yellow> <desc> <path> [path…]` | 以 `paths.all` 向 `~/.config/dustless/rules.yaml` 追加一条新规则。 |
@@ -166,29 +178,41 @@ Xóa? [y/N]
 | `--json` | 为 `scan`、`apply`、`rule list`、`doctor`、`version` 在 stdout 输出一个 JSON 对象。对 `apply` 它同时意味着取消：没有 `--yes` 就没有提问，所以什么都不会删（`src/cli/scan.ts`）。 |
 | `--quiet` | 抑制面向人类阅读的输出行。 |
 | `--yes` | 跳过确认。既跳过汇总提问，**也**跳过每条 YELLOW 的提问。它不跳过验证，也无法解除 BLOCKED 或 RED。 |
-| `--help` | 用法说明，但仅当它是唯一参数时 —— `dustless --help`。在另一个命令词之后，命令本身优先：`dustless scan --help` 会执行一次 scan。 |
+| `--only-file <selection.json>` | 只应用这个 JSON 字符串数组中列出的绝对路径；其他所有 finding 都以未选中为由记为 `skipped`。省略它则 `apply` 保持原有行为。文件不可读、或不是字符串数组时，退出 `1` 且不删除任何东西。 |
+| `--help` | 只要出现就打印用法说明 —— `dustless scan --help` 打印用法，不会执行 scan。直接运行 `dustless` 或 `dustless help` 输出相同内容。 |
 
 ### `apply --json`
 
-`apply --json` 在 stdout 上恰好打印一个 JSON 对象，在每一条走到它的路径上 —— 已删除、无可删除、已取消 —— 键为 `outcomes`、`freed`、`freeBefore`、`freeAfter`、`elapsedMs`（`src/types.ts:56`）。`freed` 是 `max(0, freeAfter - freeBefore)`：整个卷上剩余空间的差值，不是被删条目之和，所以如果期间有别的东西占满了磁盘，一次真实删除之后它也可能读出 `0`（`src/core/apply.ts:33`）。硬错误 —— 比如格式错误的 `~/.config/dustless/rules.yaml` —— 仍然以 `1` 退出，消息在 stderr 上，stdout 上什么都没有（`src/cli.ts`）。
+`apply --json` 在 stdout 上恰好打印一个 JSON 对象，在每一条走到它的路径上 —— 已删除、无可删除、已取消 —— 键为 `outcomes`、`freed`、`freeBefore`、`freeAfter`、`elapsedMs`（`src/types.ts:72`）。`freed` 是 `max(0, freeAfter - freeBefore)`：整个卷上剩余空间的差值，不是被删条目之和，所以如果期间有别的东西占满了磁盘，一次真实删除之后它也可能读出 `0`（`src/core/apply.ts:35`）。
+
+### 错误
+
+每一个参数或校验错误 —— 未知命令、缺少取值的标志、无法解析的规则文件、不可用的 `--only-file` —— 都只有一种形态和一个退出状态：
+
+| | stdout | stderr | exit |
+| --- | --- | --- | --- |
+| 带 `--json` | 一个 JSON 对象，`{"error":"…"}` | 空 | `1` |
+| 不带 `--json` | 空 | `✖ …` | `1` |
+
+`--quiet` 绝不吞掉错误：它只减少面向人类阅读的结果行，不会隐藏命令以非零退出的原因。缺失的值就是缺失，绝不会顺延到下一个标志：`dustless apps --uninstall --confirm` 是关于 `--uninstall` 的用法错误，而不是要卸载一个名为 `--confirm` 的应用。
 
 ## macOS app
 
-`apps/dustless-mac` 是内嵌 Dustless 引擎的原生 SwiftUI 应用。支持 macOS 14+，作为菜单栏额外项 (`LSUIElement`) 运行，并拥有一个主窗口。
+`apps/dustless-mac` 是内嵌 Dustless 引擎的原生 SwiftUI 应用。支持 macOS 14+，作为普通应用运行 —— 有 Dock 图标、应用菜单栏、⌘Tab —— 并带一个主窗口和一个菜单栏项。设置 → 通用 → **在 Dock 中显示** 可以关掉 Dock 图标，切成纯菜单栏形态（`NSApp.setActivationPolicy`），启动时和运行时都即时生效。
 
-**窗口** — `NavigationSplitView` 侧边栏 + 详情 (`DustlessApp.swift:125-140`)。侧边栏 (`SidebarView.swift`) 显示剩余空间、可回收字节，以及三个等级标签：**GREEN**、**YELLOW**、**LOCKED**（BLOCKED）。每个标签显示数量与字节数。详情视图 (`DetailView.swift`) 包含搜索/过滤框，**全部 / 无** 按钮（针对 GREEN 与 YELLOW），底部操作栏显示已选字节与 **复核并删除** (Cmd-Return)。LOCKED 条目会被列出但处于禁用状态，永不删除。一次扫描以空选择开始 —— 绝不预选任何内容。
+**窗口** — `NavigationSplitView` 侧边栏 + 详情 (`DustlessApp.swift:161-167`)。侧边栏 (`SidebarView.swift`) 列出各个模块（Overview、Cleanup、Storage、Memory、Network），并在 **Cleanup** 下给出三个等级行：**GREEN**、**YELLOW**、**LOCKED**（BLOCKED）。每个等级行显示数量与字节数。Cleanup 的详情视图 (`DetailView.swift`) 包含搜索/过滤框，**全部 / 无** 按钮（针对 GREEN 与 YELLOW），底部操作栏显示已选字节与 **复核并删除** (Cmd-Return)。LOCKED 条目会被列出但处于禁用状态，永不删除。一次扫描以空选择开始 —— 绝不预选任何内容。
 
-**Finding 行** (`FindingRow.swift:85-93`) — 上下文菜单：**在访达中显示**、**复制路径**。
+**Finding 行** (`FindingRow.swift:86`) — 上下文菜单：**在访达中显示**、**复制路径**。
 
-**确认弹窗** (`ConfirmDeleteSheet.swift:14-70`) — 列出每个已选项目的路径、规则 id、描述、大小，以及逐项的来源说明行（`note` 字段：例如 "rule requires ≥90 days, newest file is 0 days old" 或 "BLOCKED, pinned by /Users/x/repo"）。每行同样带上下文菜单。
+**确认弹窗** (`ConfirmDeleteSheet.swift:17-63`) — 列出每个已选项目的路径、规则 id、描述、大小，以及逐项的来源说明行（`note` 字段：例如 "rule requires ≥90 days, newest file is 0 days old" 或 "BLOCKED, pinned by /Users/x/repo"）。每行同样带上下文菜单。
 
-**设置** (`SettingsView.swift`，通过工具栏齿轮图标或 Cmd-, 打开) — 语言 (vi/en/zh)、主题 (跟随系统/浅色/深色)、**登录时启动**。语言与主题即时生效，无需重启。登录时启动放在设置里，不在侧边栏（依据 R8，`docs/RESEARCH-CLEANER-APPS.md:127-131`）。
+**设置** (`SettingsView.swift`，通过工具栏齿轮图标或 Cmd-, 打开) — 语言 (vi/en/zh)、主题 (跟随系统/浅色/深色)、**在 Dock 中显示**（关闭 = 纯菜单栏：无 Dock 图标、无 ⌘Tab；`SettingsView.swift:28`）、**登录时启动**。语言、主题和 Dock 策略即时生效，无需重启。登录时启动放在设置里，不在侧边栏（依据 R8，`docs/RESEARCH-CLEANER-APPS.md:127-131`）。
 
-**菜单栏额外项** (`DustlessApp.swift:44-50`) — 显示剩余空间与可回收字节；操作：**重新扫描**、**打开窗口**、**设置**、**退出**。
+**菜单栏弹出面板** (`MenuBarContent.swift`，由 `DustlessApp.swift` 以 `.menuBarExtraStyle(.window)` 呈现) — 上次扫描的来源信息（时间、规则数、耗时），一张实时网格（剩余空间、可回收字节、内存压力、网络接口/网关），上次读取失败时的数据过期警告，**立即扫描** / **复核并清理**，每个模块一行（Overview、Cleanup、Storage、Memory、Network），AirDrop (AWDL) 开关，以及 **打开 Dustless**、**设置**、**退出**。它打开时会通过 store 的过期窗口重新读取实时数字，绝不自行启动完整扫描。没有评分也没有圆环：未测量的值显示 `—`，扫描失败会如实说明，而不是把旧数字当当前值展示。
 
-**键盘快捷键** (`DustlessApp.swift:25-35`、`DetailView.swift:142`) — Cmd-R：重新扫描；Cmd-1/2/3：GREEN/YELLOW/LOCKED 标签；Cmd-,：设置；Cmd-Return：复核并删除。
+**键盘快捷键** (`DustlessApp.swift:28-40`、`DetailView.swift:206`) — Cmd-R：重新扫描；Cmd-1/2/3/4/5：Overview、Cleanup、Storage、Memory、Network；Cmd-,：设置；Cmd-Return：复核并删除。
 
-**构建与运行** — `bun run build` 产出 `dist/dustless`（引擎）。随后 `bun run bundle:mac` 组装 `dist/Dustless.app`，引擎内嵌于 `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`)。脚本执行 `swift build -c release`，复制二进制与引擎，写入 `Info.plist`，并对 bundle 进行 ad-hoc 签名。最低 macOS 14.0 (`Info.plist:24`)
+**构建与运行** — `bun run build` 产出 `dist/dustless`（引擎）。随后 `bun run bundle:mac` 组装 `dist/Dustless.app`，引擎内嵌于 `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7,33-35,51-59`)。脚本执行 `swift build -c release`，复制二进制与引擎，写入 `Info.plist`，并对 bundle 进行 ad-hoc 签名。最低 macOS 14.0 (`scripts/bundle-macos.ts:24`)。
 
 **设计依据** — 以等级（而非工具链分类）为主导航轴，因为安全判定才是阻挡破坏性操作的闸门 (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`)。标题显示扫描的可回收总量；底部操作栏显示实时的 *已选* 总量 (R2)。被锁定条目获得完整视图并展示验证失败原因 (R3)。确认弹窗逐项给出决定性理由 (R5)。无预选 —— 设计上即 fail-closed (R4 第 3 点)。设置移出主导航 (R8)。
 
@@ -206,7 +230,7 @@ agent 绝不能自作主张地设置 `confirm: true`。这里的判断标准不�
 
 内置数据库是 `src/core/default-rules.yaml`，自带 26 条规则，覆盖 Gradle、npm、pnpm、bun、uv、pub-cache、Homebrew、Yarn、pip、Go、Cargo、Brave、Chrome、Firefox、Edge、Puppeteer、Android、Colima、Docker，以及项目的 `node_modules`/`build` 产物。
 
-把文件放在 `~/.config/dustless/rules.yaml`（或 `$XDG_CONFIG_HOME/dustless/rules.yaml`），它会覆盖式合并到内置数据库上：`id` 相同的规则**替换**原有规则，新的 `id` 则**追加**进去（`src/core/rules.ts:18`）。没有办法删除内置规则 —— 如果想让某条规则失效，就用一条什么都匹配不上的规则去替换它。
+把文件放在 `~/.config/dustless/rules.yaml`（或 `$XDG_CONFIG_HOME/dustless/rules.yaml`），它会覆盖式合并到内置数据库上：`id` 相同的规则**替换**原有规则，新的 `id` 则**追加**进去（`src/core/rules.ts:28`）。没有办法删除内置规则 —— 如果想让某条规则失效，就用一条什么都匹配不上的规则去替换它。
 
 一条真实的规则：
 
@@ -224,13 +248,13 @@ agent 绝不能自作主张地设置 `confirm: true`。这里的判断标准不�
 | 字段 | 含义 |
 | --- | --- |
 | `id` | 唯一。替换同 `id` 的内置规则。 |
-| `tier` | `green` 或 `yellow`。其他值在加载时被拒绝（`src/core/rules.ts:56`）。`red` 和 `blocked` 无法赋值：RED 是一份路径清单，BLOCKED 是一个判定。 |
+| `tier` | `green` 或 `yellow`。其他值在加载时被拒绝（`src/core/rules.ts:60`）。`red` 和 `blocked` 无法赋值：RED 是一份路径清单，BLOCKED 是一个判定。 |
 | `desc` | 一行说明，显示在 `rule list` 中。 |
-| `paths` | key 为 `mac`、`win`、`linux` 或 `all`（`src/core/rules.ts:7`）。`~` 展开为你的主目录；在 Windows 上 `%VAR%` 从环境变量展开（`src/core/paths.ts:13`）。每个值是一个字符串或字符串列表。`*` 展开为它父目录下的各个子目录。 |
-| `match` | 可选正则，作用于该 path 产生的每个目录的 basename（`src/core/paths.ts:72`）。 |
-| `minAgeDays` | 如果其中最新的文件比这个时间更年轻，finding 会从 GREEN 降级为 YELLOW（`src/core/scan.ts:72`）。 |
-| `requireVerify` | 一项交叉验证的名称：`gradle_version_unused`、`git_clean` 或 `not_in_gitignore`。若失败，finding 会降级为 YELLOW **并且**被标记为 BLOCKED（`src/core/scan.ts:76`）。 |
-| `nativeCommand` | 可选。标明拥有该缓存的工具名。如果 `apply` 运行时该工具出现在进程表里，该缓存会被跳过，以免破坏正在进行的安装（`src/core/apply.ts:66`）。 |
+| `paths` | key 为 `mac`、`win`、`linux` 或 `all`（`src/core/rules.ts:7`）。`~` 展开为你的主目录；在 Windows 上 `%VAR%` 从环境变量展开（`src/core/paths.ts:14`）。每个值是一个字符串或字符串列表。`*` 展开为它父目录下的各个子目录。 |
+| `match` | 可选正则，作用于该 path 产生的每个目录的 basename（`src/core/paths.ts:90`）。 |
+| `minAgeDays` | 如果其中最新的文件比这个时间更年轻，finding 会从 GREEN 降级为 YELLOW（`src/core/scan.ts:132`）。 |
+| `requireVerify` | 一项交叉验证的名称：`gradle_version_unused`、`git_clean` 或 `not_in_gitignore`。若失败，finding 会降级为 YELLOW **并且**被标记为 BLOCKED（`src/core/scan.ts:136`）。 |
+| `nativeCommand` | 可选。标明拥有该缓存的工具名。如果 `apply` 运行时该工具出现在进程表里，该缓存会被跳过，以免破坏正在进行的安装（`src/core/apply.ts:72`）。 |
 
 按照 CONTRIBUTING 的说法，一条没有验证的新规则是 bug，不是功能；如果你无法验证它，就把它标为 `yellow`。信任它之前先校验：
 
@@ -245,17 +269,17 @@ dustless rule list
 TCC 在对进程隐藏目录。请在 系统设置 › 隐私与安全性 › 完全磁盘访问权限 中授权，然后退出并重新打开终端。`doctor` 会打印这个诊断，并在 `~/Library/Mail` 返回 `EPERM` 时以 `1` 退出（`src/cli/doctor.ts`）。注意这个陷阱：缺少授权会让 `~/Library/Caches` 看起来比实际*更小*，于是某些缓存根本不会出现在 scan 结果里。
 
 **Windows：删除时报 `EBUSY` 或 `EPERM`。**
-杀毒软件和 Windows 搜索索引器会持有短暂的锁。在 Windows 上 `remove()` 最多重试 4 次，采用指数退避，之后放弃（`src/core/apply.ts:98`）。关闭索引器或把该目录加入排除列表，然后重跑。
+杀毒软件和 Windows 搜索索引器会持有短暂的锁。在 Windows 上 `remove()` 最多重试 4 次，采用指数退避，之后放弃（`src/core/apply.ts:118`）。关闭索引器或把该目录加入排除列表，然后重跑。
 
 **什么都没有被删除。** 读 `detail` 列。常见原因，按你实际会遇到的顺序排列：
 - 规则未达到 `minAgeDays`。一个 3 天大的 Android system image 配 `minAgeDays: 90`，成为 YELLOW 是设计如此，不是故障。
-- 拥有它的工具正在运行。如果一条规则声明了 `nativeCommand` 且该工具出现在进程表里，它的缓存会被跳过，以免破坏正在进行的安装（`src/core/apply.ts:9`）。
+- 拥有它的工具正在运行。如果一条规则声明了 `nativeCommand` 且该工具出现在进程表里，它的缓存会被跳过，以免破坏正在进行的安装（`src/core/apply.ts:73`）。
 - 验证失败。该条目是 BLOCKED，`--yes` 也无法改变。
-- 路径命中红色清单、是 `$HOME` 或它的父目录、或是文件系统根目录（`src/core/apply.ts:86`）。
+- 路径命中红色清单、是 `$HOME` 或它的父目录、是文件系统根目录、或经过一个符号链接目录（`src/core/apply.ts:104`、`src/core/paths.ts:167`）。
 
 **`apply` 取消了而什么也没删。** 没有 `--yes` 时它会先问，而且只在 stdin 是 TTY 时才问：在 CI 任务、管道或包装脚本里，它打印完汇总就停（`src/cli/scan.ts`）。带 `--json` 时同样如此，因为它无法提问。请在真正的终端里运行，或者改用 MCP server，它有自己显式的确认闸门。
 
-**`freed` 显示 `0` 但文件确实被删了。** `freed` 是整个卷上剩余空间的变化量。如果运行期间有别的进程往磁盘写数据，这个差值会被压到 `0`（`src/core/apply.ts:33`）。请改看每条 outcome 的 `status`。
+**`freed` 显示 `0` 但文件确实被删了。** `freed` 是整个卷上剩余空间的变化量。如果运行期间有别的进程往磁盘写数据，这个差值会被压到 `0`（`src/core/apply.ts:35`）。请改看每条 outcome 的 `status`。
 
 **我写的某条规则一直是 YELLOW。** 要么 `minAgeDays` 没达到，要么 `requireVerify` 正在失败。`scan` 会在路径下方的 `note` 列里打印原因。解决根本原因 —— 未提交的改动、某个项目仍然锁定的工具版本 —— 然后重新 scan。
 

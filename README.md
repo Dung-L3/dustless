@@ -33,33 +33,34 @@ The walk is bounded: 12 levels and 200,000 directory entries in total, so it can
 | Tier | What it is | What `apply` does |
 | --- | --- | --- |
 | 🟢 **GREEN** | Pure regenerable cache. Cross-verification, where the rule requires it, passed. | Deletes automatically, once you confirm the summary |
-| 🟡 **YELLOW** | May still be in use — VM disks, emulator AVDs, build output — or a rule demoted because `minAgeDays` is not met (`src/core/scan.ts:72`). | Asks about each item, one at a time |
-| ⛔ **BLOCKED** | The rule required verification and verification failed (`src/core/scan.ts:76`). Booked under `totals.blocked` and excluded from `reclaimable` (`src/core/scan.ts:28`). | **Never deleted.** Not by `--yes`, not by any flag |
-| 🔴 **RED** | The hard-coded protected-path list: Keychain, Mail, iCloud, `*-wal`/`*-shm`, `Preferences`, `.git`, Documents, Desktop, Pictures, Movies, Music, Contacts, Reminders, Calendar, Finance, Passes, Keynotes, Messages, `Application Support/com.apple.{Photos,MobileSync,Notes,Trial}` (`src/core/paths.ts:81`) | Never becomes a finding (`src/core/scan.ts:42`). Checked again immediately before deletion (`src/core/apply.ts:54`) |
+| 🟡 **YELLOW** | May still be in use — VM disks, emulator AVDs, build output — or a rule demoted because `minAgeDays` is not met (`src/core/scan.ts:132`). | Asks about each item, one at a time |
+| ⛔ **BLOCKED** | The rule required verification and verification failed (`src/core/scan.ts:136`). Booked under `totals.blocked` and excluded from `reclaimable` (`src/core/scan.ts:200`). | **Never deleted.** Not by `--yes`, not by any flag |
+| 🔴 **RED** | The hard-coded protected-path list: Keychain, Mail, iCloud, `*-wal`/`*-shm`, `Preferences`, `.git`, Documents, Desktop, Pictures, Movies, Music, Contacts, Reminders, Calendar, Finance, Passes, Keynotes, Messages, `Application Support/com.apple.{Photos,MobileSync,Notes,Trial}` (`src/core/paths.ts:97`) | Never becomes a finding (`src/core/scan.ts:87`). Rechecked against the resolved path immediately before deletion (`src/core/paths.ts:167`) |
 
 BLOCKED is not a softer RED. RED is a static list of paths that can never be deleted by anything. BLOCKED is a live verdict: Dustless tried to prove a cache unused and could not.
 
 ### `apply` is fail-closed
 
-Every deletion is keyed by rule id, and a key that is missing resolves to `skip` (`src/core/apply.ts:71`):
+Every deletion is keyed by rule id, and a key that is missing resolves to `skip` (`src/core/apply.ts:84`):
 
 ```ts
-const action = opts.tiers?.[finding.ruleId] ?? "skip";
+const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
+const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
 ```
 
 A misspelled id, an id the payload forgot, a rule the scan never produced — all resolve to skip, never to the rule's own tier. An earlier version defaulted to the rule's tier instead, and an omitted key silently meant "delete"; that is what took roughly 36 GB off a real machine.
 
-The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli/scan.ts`), MCP from the rule ids it verified first (`src/mcp/tools.ts:188`).
+The default is the backstop, not the mechanism. Every caller builds its own map: the CLI from the live scan (`src/cli/scan.ts`), MCP from the rule ids it verified first (`src/mcp/tools.ts:189`).
 
 ### Why BLOCKED cannot be overridden
 
-The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli/scan.ts`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:60`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:88`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it.
+The block is enforced at four independent points: the scan sets the flag, the apply summary excludes those findings from the delete set (`src/cli/scan.ts`), `apply()` re-checks it before touching the filesystem (`src/core/apply.ts:63`), and the MCP safety layer refuses the whole call (`src/mcp/safety.ts:98`). `--yes` skips the question. It cannot manufacture a passing verification, and it cannot clear the block. RED is the same: a regex list compiled into the binary. No flag, no rule file, no MCP parameter reaches it.
 
 ## Install
 
 ### Release binary
 
-Push a `v*` tag and the build workflow compiles four targets and attaches them to the release: `dustless-macos-arm64`, `dustless-macos-x64`, `dustless-linux-x64`, `dustless-windows-x64.exe` (`.github/workflows/release.yml:21`). Download the one for your machine, drop it somewhere on your `PATH`, done.
+Push a `v*` tag and the build workflow compiles four targets and attaches them to the release: `dustless-macos-arm64`, `dustless-macos-x64`, `dustless-linux-x64`, `dustless-windows-x64.exe` (`.github/workflows/release.yml:20-32`). Download the one for your machine, drop it somewhere on your `PATH`, done. Windows also gets `Dustless-<version>-setup.exe`, a per-user installer that is installed and uninstalled silently in CI before it is attached.
 
 ```sh
 dustless doctor     # confirm it runs and can read your caches
@@ -159,8 +160,9 @@ keys beside `findings` and `totals` (`src/types.ts`, `ScanReport`):
 - `unscannable` — one entry per rule that produced no scannable path, each with `ruleId`, `tier`,
   `desc`, the `pathPatterns` that failed, and a `reason` of `absent` (the path does not exist),
   `no_access` (EACCES/EPERM — usually the missing Full Disk Access), `not_supported` (the rule has no
-  path for this platform) or `error` (`src/core/scan.ts`, `scan`).
-- `unscannableSummary` — the count per reason, with all four keys always present.
+  path for this platform), `red` (the path matched the permanent blocklist) or `error`
+  (`src/core/scan.ts`, `scan`).
+- `unscannableSummary` — the count per reason, with all five keys always present.
 
 Those rules are excluded from `totals`, `reclaimable` and `freed`: the field can only ever add
 information, never a number. The macOS app models both fields and localizes the reason wording
@@ -191,11 +193,11 @@ Every command below is implemented in `src/cli.ts`.
 | `--quiet` | Suppress the human-readable lines. |
 | `--yes` | Skip the confirmation. Skips the summary question **and** the per-item YELLOW questions. It does not skip verification, and it does not unblock BLOCKED or RED. |
 | `--only-file <selection.json>` | Apply only the exact paths in this JSON array of absolute paths; every other finding is `skipped` as not selected. Omit it and `apply` keeps its behaviour of offering every green/yellow finding. An unreadable file, or one that is not an array of strings, exits `1` and deletes nothing. |
-| `--help` | Usage, only when it is the argument on its own — `dustless --help`. After another command word the command wins: `dustless scan --help` runs a scan. |
+| `--help` | Usage, printed whenever it appears — `dustless scan --help` prints usage, not a scan. A bare `dustless` or `dustless help` prints the same. |
 
 ### `apply --json`
 
-`apply --json` prints exactly one JSON object on stdout, on every path that reaches it — deleted, nothing deletable, cancelled — with the keys `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:56`). `freed` is `max(0, freeAfter - freeBefore)`: a delta of free space on the volume, not a sum of the deleted items, so it can read `0` after a real deletion if something else filled the disk in between (`src/core/apply.ts:33`).
+`apply --json` prints exactly one JSON object on stdout, on every path that reaches it — deleted, nothing deletable, cancelled — with the keys `outcomes`, `freed`, `freeBefore`, `freeAfter`, `elapsedMs` (`src/types.ts:72`). `freed` is `max(0, freeAfter - freeBefore)`: a delta of free space on the volume, not a sum of the deleted items, so it can read `0` after a real deletion if something else filled the disk in between (`src/core/apply.ts:35`).
 
 ### Errors
 
@@ -212,19 +214,19 @@ Every argument or validation error — an unknown command, a flag with no value,
 
 `apps/dustless-mac` is a native SwiftUI app that embeds the Dustless engine. It runs on macOS 14+ as a normal app — Dock icon, app menu bar, ⌘Tab — with a main window and a menu-bar item. Settings → General → **Show in Dock** turns the Dock icon off for a menu-bar-only shape (`NSApp.setActivationPolicy`), applied at launch and live.
 
-**Window** — `NavigationSplitView` sidebar + detail (`DustlessApp.swift:125-140`). The sidebar (`SidebarView.swift`) shows free space, reclaimable bytes, and three tier tabs: **GREEN**, **YELLOW**, **LOCKED** (BLOCKED). Each tab shows count and bytes. The detail view (`DetailView.swift`) has a search/filter field, **All / None** buttons for GREEN and YELLOW, and a bottom action bar with selected bytes and **Review & Delete** (Cmd-Return). LOCKED items are listed but disabled and never deleted. A scan starts with an empty selection — nothing is pre-selected.
+**Window** — `NavigationSplitView` sidebar + detail (`DustlessApp.swift:161-167`). The sidebar (`SidebarView.swift`) lists the modules (Overview, Cleanup, Storage, Memory, Network) and, under **Cleanup**, three tier rows: **GREEN**, **YELLOW**, **LOCKED** (BLOCKED). Each tier row shows count and bytes. The Cleanup detail view (`DetailView.swift`) has a search/filter field, **All / None** buttons for GREEN and YELLOW, and a bottom action bar with selected bytes and **Review & Delete** (Cmd-Return). LOCKED items are listed but disabled and never deleted. A scan starts with an empty selection — nothing is pre-selected.
 
-**Finding row** (`FindingRow.swift:85-93`) — context menu: **Reveal in Finder**, **Copy Path**.
+**Finding row** (`FindingRow.swift:86`) — context menu: **Reveal in Finder**, **Copy Path**.
 
-**Confirm sheet** (`ConfirmDeleteSheet.swift:14-70`) — lists every selected item with path, rule id, description, size, and a per-item provenance line (the `note` field: e.g. "rule requires ≥90 days, newest file is 0 days old" or "BLOCKED, pinned by /Users/x/repo"). Same context menu on each row.
+**Confirm sheet** (`ConfirmDeleteSheet.swift:17-63`) — lists every selected item with path, rule id, description, size, and a per-item provenance line (the `note` field: e.g. "rule requires ≥90 days, newest file is 0 days old" or "BLOCKED, pinned by /Users/x/repo"). Same context menu on each row.
 
-**Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Show in Dock** (off = menu-bar-only: no Dock icon, no ⌘Tab), **Launch at login**. Language, theme and the Dock policy apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
+**Settings** (`SettingsView.swift`, opened via toolbar gear or Cmd-,) — Language (vi/en/zh), Theme (System/Light/Dark), **Show in Dock** (off = menu-bar-only: no Dock icon, no ⌘Tab; `SettingsView.swift:28`), **Launch at login**. Language, theme and the Dock policy apply live, no relaunch. Launch at login lives in Settings, not the sidebar (per R8 in `docs/RESEARCH-CLEANER-APPS.md:127-131`).
 
 **Menu bar popover** (`MenuBarContent.swift`, presented by `DustlessApp.swift` with `.menuBarExtraStyle(.window)`) — the last scan's provenance (age, rules, duration), a live grid of free space, reclaimable bytes, memory pressure and network interface/gateway, a stale-scan warning when the last read failed, **Scan now** / **Review & Clean**, a row per module (Overview, Cleanup, Storage, Memory, Network), the AirDrop (AWDL) toggle, and **Open Dustless**, **Settings**, **Quit**. It re-reads the live numbers when it opens, through the store's staleness windows, and never starts a full scan on its own. No score and no ring: an unmeasured value shows `—`, and a failed scan says so rather than presenting old numbers as current.
 
-**Keyboard shortcuts** (`DustlessApp.swift:25-35`, `DetailView.swift:142`) — Cmd-R: rescan; Cmd-1/2/3: GREEN/YELLOW/LOCKED tabs; Cmd-,: Settings; Cmd-Return: Review & Delete.
+**Keyboard shortcuts** (`DustlessApp.swift:28-40`, `DetailView.swift:206`) — Cmd-R: rescan; Cmd-1/2/3/4/5: Overview, Cleanup, Storage, Memory, Network; Cmd-,: Settings; Cmd-Return: Review & Delete.
 
-**Build & run** — `bun run build` produces `dist/dustless` (the engine). Then `bun run bundle:mac` assembles `dist/Dustless.app` with the engine embedded at `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7-8,34,53`). The script runs `swift build -c release`, copies the binary and engine, writes `Info.plist`, and ad-hoc signs the bundle. Minimum macOS 14.0 (`Info.plist:24`).
+**Build & run** — `bun run build` produces `dist/dustless` (the engine). Then `bun run bundle:mac` assembles `dist/Dustless.app` with the engine embedded at `Contents/Resources/dustless` (`scripts/bundle-macos.ts:7,33-35,51-59`). The script runs `swift build -c release`, copies the binary and engine, writes `Info.plist`, and ad-hoc signs the bundle. Minimum macOS 14.0 (`scripts/bundle-macos.ts:24`).
 
 **Design rationale** — The tier axis (not toolchain category) is the primary navigation because the safety verdict gates the destructive act (R1, `docs/RESEARCH-CLEANER-APPS.md:79-85`). The header shows the scan's total reclaimable bytes; the action bar shows the live *selected* total (R2). Locked items get a full view with the failed verification reason (R3). The confirm sheet shows the deciding reason per item (R5). No pre-selection — fail-closed by design (R4 item 3). Settings off the main nav (R8).
 
@@ -242,7 +244,7 @@ On top of that: RED paths refuse the whole call, BLOCKED findings refuse the who
 
 The bundled database is `src/core/default-rules.yaml`. It ships 26 rules covering Gradle, npm, pnpm, bun, uv, pub-cache, Homebrew, Yarn, pip, Go, Cargo, Brave, Chrome, Firefox, Edge, Puppeteer, Android, Colima, Docker and project `node_modules`/`build` output.
 
-Put a file at `~/.config/dustless/rules.yaml` (or `$XDG_CONFIG_HOME/dustless/rules.yaml`) and it is merged over the bundle: a rule with a matching `id` **replaces** the bundled one, and any id that is new is **added** (`src/core/rules.ts:18`). There is no way to remove a bundled rule — replace it with a rule that matches nothing if you want it inert.
+Put a file at `~/.config/dustless/rules.yaml` (or `$XDG_CONFIG_HOME/dustless/rules.yaml`) and it is merged over the bundle: a rule with a matching `id` **replaces** the bundled one, and any id that is new is **added** (`src/core/rules.ts:28`). There is no way to remove a bundled rule — replace it with a rule that matches nothing if you want it inert.
 
 A real rule:
 
@@ -260,13 +262,13 @@ A real rule:
 | Field | Meaning |
 | --- | --- |
 | `id` | Unique. Replaces a bundled rule with the same id. |
-| `tier` | `green` or `yellow`. Any other value is rejected at load (`src/core/rules.ts:56`). `red` and `blocked` are not assignable: RED is a path list, BLOCKED is a verdict. |
+| `tier` | `green` or `yellow`. Any other value is rejected at load (`src/core/rules.ts:60`). `red` and `blocked` are not assignable: RED is a path list, BLOCKED is a verdict. |
 | `desc` | One line, shown in `rule list`. |
-| `paths` | Keys are `mac`, `win`, `linux` or `all` (`src/core/rules.ts:7`). `~` expands to your home directory; on Windows `%VAR%` expands from the environment (`src/core/paths.ts:13`). Each value is a string or a list of strings. A `*` expands to the directories directly under its parent. |
-| `match` | Optional regex tested against the basename of each directory the path produced (`src/core/paths.ts:72`). |
-| `minAgeDays` | If the newest file inside is younger than this, the finding is demoted from GREEN to YELLOW (`src/core/scan.ts:72`). |
-| `requireVerify` | Name of a cross-check: `gradle_version_unused`, `git_clean`, or `not_in_gitignore`. If it fails, the finding is demoted to YELLOW **and** marked BLOCKED (`src/core/scan.ts:76`). |
-| `nativeCommand` | Optional. Names the tool that owns the cache. If that tool is in the process table when `apply` runs, the cache is skipped so a live install is not broken underneath you (`src/core/apply.ts:66`). |
+| `paths` | Keys are `mac`, `win`, `linux` or `all` (`src/core/rules.ts:7`). `~` expands to your home directory; on Windows `%VAR%` expands from the environment (`src/core/paths.ts:14`). Each value is a string or a list of strings. A `*` expands to the directories directly under its parent. |
+| `match` | Optional regex tested against the basename of each directory the path produced (`src/core/paths.ts:90`). |
+| `minAgeDays` | If the newest file inside is younger than this, the finding is demoted from GREEN to YELLOW (`src/core/scan.ts:132`). |
+| `requireVerify` | Name of a cross-check: `gradle_version_unused`, `git_clean`, or `not_in_gitignore`. If it fails, the finding is demoted to YELLOW **and** marked BLOCKED (`src/core/scan.ts:136`). |
+| `nativeCommand` | Optional. Names the tool that owns the cache. If that tool is in the process table when `apply` runs, the cache is skipped so a live install is not broken underneath you (`src/core/apply.ts:72`). |
 
 Per CONTRIBUTING, a new rule without a verification is a bug, not a feature; if you cannot verify it, mark it `yellow`. Validate before you trust it:
 
@@ -281,17 +283,17 @@ dustless rule list
 TCC is hiding directories from the process. Grant Full Disk Access in System Settings › Privacy & Security › Full Disk Access, then quit and reopen the terminal. `doctor` prints this diagnosis and exits `1` when `~/Library/Mail` comes back `EPERM` (`src/cli/doctor.ts`). Note the trap: a missing grant makes `~/Library/Caches` look *smaller* than it is, so some caches never appear in a scan at all.
 
 **Windows: `EBUSY` or `EPERM` on delete.**
-Antivirus and the Windows Search indexer hold transient locks. `remove()` retries up to 4 attempts on Windows with exponential backoff, and gives up after that (`src/core/apply.ts:98`). Close the indexer or exclude the directory, then re-run.
+Antivirus and the Windows Search indexer hold transient locks. `remove()` retries up to 4 attempts on Windows with exponential backoff, and gives up after that (`src/core/apply.ts:118`). Close the indexer or exclude the directory, then re-run.
 
 **Nothing was deleted.** Read the `detail` column. The common causes, in the order you will hit them:
 - The rule's `minAgeDays` is not met. A 3-day-old Android system image with `minAgeDays: 90` is YELLOW by design, not a failure.
-- The owning tool is running. If a rule declares `nativeCommand` and that tool is in the process table, its cache is skipped so it cannot break a live install (`src/core/apply.ts:9`).
+- The owning tool is running. If a rule declares `nativeCommand` and that tool is in the process table, its cache is skipped so it cannot break a live install (`src/core/apply.ts:73`).
 - Verification failed. That item is BLOCKED and `--yes` will not change it.
-- The path hit the red blocklist, is `$HOME` or a parent of it, or is the filesystem root (`src/core/apply.ts:86`).
+- The path hit the red blocklist, is `$HOME` or a parent of it, is the filesystem root, or is reached through a symlinked directory (`src/core/apply.ts:104`, `src/core/paths.ts:167`).
 
 **`apply` cancels without deleting anything.** With no `--yes` it asks first, and it only asks on a TTY stdin: in a CI job, a pipe or a wrapper script it prints the summary and stops (`src/cli/scan.ts`). The same happens with `--json`, which cannot prompt. Run it in a real terminal, or use the MCP server, which has its own explicit-confirmation gate.
 
-**`freed` says `0` but files were deleted.** `freed` is the change in free space on the whole volume. If another process wrote to the disk during the run, the delta clamps to `0` (`src/core/apply.ts:33`). Read the per-outcome `status` instead.
+**`freed` says `0` but files were deleted.** `freed` is the change in free space on the whole volume. If another process wrote to the disk during the run, the delta clamps to `0` (`src/core/apply.ts:35`). Read the per-outcome `status` instead.
 
 **A rule I wrote stays YELLOW.** Either `minAgeDays` is not met, or `requireVerify` is failing. `scan` prints the reason under the path in the `note` column. Fix the underlying cause — an uncommitted change, a tool version a project still pins — then scan again.
 
