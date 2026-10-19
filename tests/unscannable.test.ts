@@ -29,7 +29,7 @@ describe("unscannable tracking", () => {
   test("absent path yields reason absent", async () => {
     const missing = join(sandbox, "missing-cache");
     await writeRules(
-      `- id: test.absent\n  tier: green\n  desc: absent cache\n  paths: { all: "${missing}" }\n`,
+      `- id: test.absent\n  tier: green\n  desc: absent cache\n  paths: { all: ${JSON.stringify(missing)} }\n`,
     );
     const report = await scan({ roots: [sandbox] });
     const u = report.unscannable.find((r) => r.ruleId === "test.absent");
@@ -45,7 +45,7 @@ describe("unscannable tracking", () => {
     await writeFile(join(unreadable, "data.bin"), Buffer.alloc(1024, 7));
     await chmod(unreadable, 0o000);
     await writeRules(
-      `- id: test.noaccess\n  tier: green\n  desc: no access cache\n  paths: { all: "${unreadable}" }\n`,
+      `- id: test.noaccess\n  tier: green\n  desc: no access cache\n  paths: { all: ${JSON.stringify(unreadable)} }\n`,
     );
     const report = await scan({ roots: [sandbox] });
     const u = report.unscannable.find((r) => r.ruleId === "test.noaccess");
@@ -72,7 +72,7 @@ describe("unscannable tracking", () => {
     const empty = join(sandbox, "empty-cache");
     await mkdir(empty, { recursive: true });
     await writeRules(
-      `- id: test.empty\n  tier: green\n  desc: empty cache\n  paths: { all: "${empty}" }\n`,
+      `- id: test.empty\n  tier: green\n  desc: empty cache\n  paths: { all: ${JSON.stringify(empty)} }\n`,
     );
     const report = await scan({ roots: [sandbox] });
     const u = report.unscannable.find((r) => r.ruleId === "test.empty");
