@@ -1,8 +1,8 @@
 # Testing
 
 ```sh
-bun run typecheck     # tsc --noEmit over src and tests
-bun test              # everything: 360 tests, about 30s on this laptop
+bun run typecheck     # tsc --noEmit over src, tests and scripts
+bun test              # everything: 372 tests, about 30s on this laptop
 ```
 
 No build step is needed. `tests/e2e` runs the compiled binary in
@@ -58,20 +58,15 @@ sandbox.
 
 Nothing, in `tests/e2e/`.
 
-Two checks in the full suite are worth knowing about before you file a bug against them. Both
-assert on `freed`, which is `max(0, freeAfter - freeBefore)` — the change in free space on the **whole
-volume** (`src/core/apply.ts:33`), not a sum of the deleted items. When the rest of the suite is
-planting and deleting hundreds of megabytes at the same time, that delta moves on its own:
-
-- `tests/core.test.ts` "reports actual freed bytes, not the estimate" expects `freed > 0` after a real
-  16 MB deletion, and fails when another test consumed the space in between.
-- `tests/e2e/outputs.test.ts` "apply --json reports outcomes and freed bytes" expects `freed > 0` for
-  the same reason.
-
-Measured on the reference machine over six full `bun test` runs: between 0 and 2 failures, always
-from that list, and never the same pair twice. They pass consistently when their own file is run
-alone. If you touch `freed`, assert on the per-outcome `status` instead, or take the delta against a
-filesystem the test owns.
+`freed` is `max(0, freeAfter - freeBefore)` — the change in free space on the **whole volume**
+(`src/core/apply.ts:35`), not a sum of the deleted items. Two checks assert on it:
+`tests/core.test.ts` "reports freed as the measured disk delta between freeBefore and freeAfter" and
+`tests/e2e/outputs.test.ts` "apply --json reports outcomes and freed bytes". Both compare `freed`
+against the same delta they measure around the call, so they only fail if another process fills or
+frees the disk between the two reads. An earlier version asserted `freed > 0` and did flake under the
+rest of the suite planting and deleting hundreds of megabytes in parallel; that is why the check is
+now self-measured. If you touch `freed`, keep asserting on the per-outcome `status` as well, or take
+the delta against a filesystem the test owns.
 
 ## Documentation audit
 
@@ -119,16 +114,16 @@ a native app now.
   and they say so.
 - No claim that the `freed` byte count equals the bytes of the deleted items. It does not, and the
   suite proves it (see above).
-- No claim about `src/system/`. It implements startup-item and toolchain inspection but nothing
-  imports it: no command, tool or route reaches it.
+- No claim that `src/system/` is dead code. `doctor` calls `inspectSystem()` and reports startup
+  items and toolchain roots, both in the human output and under the `hygiene` key of `doctor --json`.
 
-### Open questions for the next contributor
+### Resolved since the audit
 
-- `src/mcp/server.ts:10` hardcodes `serverInfo.version` to `"0.1.0"` while the CLI reports `0.1.2`
-  from `package.json`. One line, but it needs a product decision, so it is documented as a wart in
-  `docs/MCP.md` rather than silently fixed here.
-- `src/core/verify/node.ts` exports `npmOrPnpmLinked`, `installAgeDays` and `isLiveDependencyTree`,
-  and `verify/index.ts` calls none of them. The intent was evidently to spare a `node_modules` with
-  live symlinks; today only `git_clean` guards that rule.
-- `--version` prints usage rather than the version, and CI depends on that quirk
-  (`.github/workflows/ci.yml:25`). Worth making explicit one way or the other.
+- `src/mcp/server.ts:12` now reports `package.json`'s version through `SERVER_INFO`, so
+  `serverInfo.version` tracks `dustless version`. The wart paragraph is gone from `docs/MCP.md`.
+- `src/core/verify/node.ts`'s `isLiveDependencyTree` is wired into `verify/index.ts:11` for every
+  `node_modules` finding. `npmOrPnpmLinked` is still only used by tests; that one is a candidate for
+  deletion rather than wiring.
+- `--version` prints the version, and CI checks it (`.github/workflows/ci.yml:40`). `--help` now
+  prints usage wherever it appears, so the old "the command wins after the command word" quirk is
+  gone and the READMEs say so.

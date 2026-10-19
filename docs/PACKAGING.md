@@ -2,9 +2,10 @@
 
 Build installers for the Dustless CLI and the macOS app from a single machine.
 
-Everything is scripted under `scripts/` and wired into `package.json`. All steps
-are idempotent — safe to run twice — and every script leaves behind one
-self-check so a broken build fails loudly instead of silently shipping.
+Everything is scripted under `scripts/`; the build steps are wired into
+`package.json`. All steps are idempotent — safe to run twice — and every script
+leaves behind one self-check so a broken build fails loudly instead of silently
+shipping.
 
 ## Prerequisites
 
@@ -17,30 +18,38 @@ All four are present on a stock macOS machine with CommandLineTools installed.
 ## Commands
 
 ```sh
+bun scripts/icons.ts  # icon set -> dist/icons/ (run once on a clean checkout)
 bun run build        # CLI engine -> dist/dustless (macOS arm64)
 bun run bundle:mac   # SwiftUI app -> dist/Dustless.app
 bun run dmg          # drag-to-install image -> dist/Dustless-<version>.dmg
 bun run package:win  # portable zip -> dist/dustless-<version>-windows-x64.zip
-bun run package      # runs all four of the above, best-effort
+bun run installer:win # NSIS setup -> dist/Dustless-<version>-setup.exe (needs makensis)
+bun run package      # runs the four build steps, best-effort
 ```
 
-`bun run package` runs every step even if one fails and prints a pass/fail
+`bun scripts/icons.ts` is not wired into `package.json` and is deliberately
+explicit: `dist/` is gitignored, so a clean checkout has no `dist/icons`, and
+`bundle:mac` fails loudly rather than shipping an app with no icon.
+
+`bun run package` runs every build step even if one fails and prints a pass/fail
 summary; it exits non-zero only if a step failed.
 
-## Artifacts (measured on macOS 26.5.1, arm64, Bun 1.3.13, Swift 6.3.2)
+## Artifacts (measured on macOS 26.5.1, arm64, Bun 1.3.13, Swift 6.3.3 on 2026-10-19, at version 0.5.0)
 
 | Artifact | Path | Size | Command | Time |
 | --- | --- | --- | --- | --- |
-| Engine (macOS) | `dist/dustless` | 62,820,080 B (60 MB) | `bun run build` | ~1 s |
-| Engine (Windows) | `dist/dustless.exe` | 117,773,824 B (112 MB) | `bun run package:win` | ~4 s |
-| App bundle | `dist/Dustless.app` | 61 MB total | `bun run bundle:mac` | 39.6 s first / 1.6 s cached |
-| Disk image | `dist/Dustless-0.1.3.dmg` | 26,526,836 B (25 MB) | `bun run dmg` | ~8–9 s |
-| Windows zip | `dist/dustless-0.1.3-windows-x64.zip` | 42,147,920 B (40 MB) | `bun run package:win` | ~4 s |
+| Engine (macOS) | `dist/dustless` | 62,787,248 B (60 MB) | `bun run build` | ~1 s |
+| Engine (Windows) | `dist/dustless.exe` | 117,741,056 B (112 MB) | `bun run package:win` | ~4 s |
+| App bundle | `dist/Dustless.app` | 64 MB total | `bun run bundle:mac` | 17.2 s first / 1.1 s cached |
+| Disk image | `dist/Dustless-<version>.dmg` | 27,380,529 B (26 MB) | `bun run dmg` | ~7 s |
+| Windows zip | `dist/dustless-<version>-windows-x64.zip` | 42,141,795 B (40 MB) | `bun run package:win` | ~4 s |
 
-Times are wall-clock. `bundle:mac` is dominated by the Swift release build
-(37.8 s on first build); later runs are incremental (~0.1 s). `package:win` is
-dominated by the Bun `--compile` cross-target step (~0.2 s once the runtime is
-cached) plus zip compression of a 112 MB binary.
+Sizes are for version 0.5.0 and move with the code; the paths take the current
+`package.json` version. Times are wall-clock. `bundle:mac` is dominated by the
+Swift release build (14.9 s on first build); later runs are incremental
+(~1 s). `package:win` is dominated by the Bun `--compile` cross-target step
+(~0.2 s once the runtime is cached) plus zip compression of a 112 MB binary;
+the very first run also downloads the cross-target runtime (~2 minutes here).
 
 ## What each script does
 
@@ -139,23 +148,26 @@ Unblock-File .\dustless.exe
 Eliminating the prompt requires an Authenticode code-signing certificate, which
 the project does not hold.
 
-## Windows installer route investigation
+## Windows installer
 
-The preferred routes were checked in order and neither is available on this
-machine:
+`bun run installer:win` builds `dist/Dustless-<version>-setup.exe` with NSIS
+from `packaging/windows/installer.nsi`, the compiled `dist/dustless.exe` and the
+icon at `dist/icons/dustless.ico` (falling back to the committed
+`brand/generated/dustless.ico`). It shells out to `makensis`, so run
+`bun run package:win` first on a machine without the Windows engine.
 
-1. **electron-builder → NSIS `.exe`** — not applicable. This is a native
-   Bun-compiled binary, not an Electron app; packaging it with electron-builder
-   would mean adding Electron plus a large dependency tree for no benefit. Not
-   attempted for that reason.
-2. **Inno Setup / NSIS via Wine** — not installed (`wine` and `makensis` are
-   absent). Installing them is a large system-level dependency and not warranted
-   for a single-file portable binary.
+The installer is per-user (`$LOCALAPPDATA\Programs\Dustless`), refuses anything
+older than Windows 10, and ships an uninstaller.
+`.github/workflows/windows-installer.yml` builds and verifies it on
+`windows-latest` (NSIS is preinstalled there, with a Chocolatey fallback) on
+every `v*` tag and on pull requests that touch `packaging/windows/`. That
+workflow checks the MZ header and size, silently installs, runs
+`dustless.exe version` and `scan --json`, uninstalls, and asserts the engine is
+gone, then attaches the setup exe to the release next to the portable zip.
 
-Therefore the portable `.zip` is the implemented, verified route. A `.zip` with
-`dustless.exe` and a `README.txt` is also exactly what the project's release
-workflow already ships (raw per-platform binaries), so it is consistent with
-the existing distribution model.
+The portable `.zip` remains the no-installer route. There is no
+electron-builder path: this is a Bun-compiled binary, not an Electron app, and
+the NSIS script runs natively on Windows rather than under Wine.
 
 ## Notes
 
