@@ -186,7 +186,10 @@ async function applyTool(core: Core, args: Record<string, unknown>): Promise<Too
     ].join("\n\n"), plan, true);
   }
   const tiers: TierChoice = {};
-  for (const finding of selected) tiers[finding.ruleId] = finding.tier === "yellow" ? "yellow" : "green";
+  for (const finding of selected) {
+    if (finding.tier === "yellow") tiers[finding.ruleId] = "yellow";
+    else if (!Object.hasOwn(tiers, finding.ruleId)) tiers[finding.ruleId] = "green";
+  }
   const result = await core.apply({ ...report, findings: selected }, { tiers, assumeYes: true });
   const notDeleted = result.outcomes.filter((outcome) => outcome.status !== "deleted");
   const body = [

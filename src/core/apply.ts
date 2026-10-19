@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { lstat, rm } from "node:fs/promises";
 import { basename, parse, resolve, sep } from "node:path";
 import type { ApplyOutcome, ApplyReport, Finding, Rule, ScanReport, TierChoice } from "../types.ts";
 import { HOME, isRed, realGuard, refusalText, platform } from "./paths.ts";
@@ -45,15 +45,16 @@ async function run(
   rules: Map<string, Rule>,
   busy: Set<string>,
 ): Promise<ApplyOutcome> {
+  const target = resolve(finding.path);
   const outcome: ApplyOutcome = {
     ruleId: finding.ruleId,
     tier: finding.tier,
-    path: finding.path,
+    path: target,
     status: "skipped",
     bytes: finding.bytes,
     detail: "",
   };
-  const guard = refusal(finding.path);
+  const guard = refusal(target);
   if (guard) {
     outcome.status = "failed";
     outcome.detail = guard;
@@ -63,27 +64,35 @@ async function run(
     outcome.detail = `KIỆM SOÁT CHẶN: ${finding.note || "kiểm chứng thất bại"}`;
     return outcome;
   }
-  if (opts.only && !opts.only.has(resolve(finding.path))) {
+  if (opts.only && !opts.only.has(target)) {
     outcome.detail = "không được chọn: ngoài danh sách --only-file";
     return outcome;
   }
   const rule = rules.get(finding.ruleId);
   const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
-  const watchers = (BUSY_NAMES[native] ?? [native]).filter((name) => busy.has(name));
-  if (native && watchers.length > 0) {
+  const declared = (rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map((name) => basename(name.trim()).toLowerCase());
+  const watchers = declared.filter((name) => busy.has(name));
+  if (watchers.length > 0) {
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
   }
-  const action = opts.tiers?.[finding.ruleId] ?? "skip";
+  const present = await lstat(target).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
+  if (!present) {
+    outcome.detail = "bỏ qua: đường dẫn không còn tồn tại";
+    return outcome;
+  }
+  const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
+  const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
+  const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
   if (action === "skip") {
-    outcome.detail = opts.tiers?.[finding.ruleId] ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
+    outcome.detail = chosen ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
     return outcome;
   }
   if (action === "yellow" && !opts.assumeYes && !(await confirm(finding, opts))) {
     outcome.detail = opts.onPrompt ? "người dùng từ chối" : "cần xác nhận, chạy lại với --yes";
     return outcome;
   }
-  const failure = await remove(finding.path, opts.beforeDelete);
+  const failure = await remove(target, opts.beforeDelete);
   outcome.status = failure ? "failed" : "deleted";
   outcome.detail = failure;
   return outcome;
@@ -102,16 +111,17 @@ async function confirm(finding: Finding, opts: Options): Promise<boolean> {
 }
 
 async function remove(path: string, beforeDelete?: () => void | Promise<void>): Promise<string> {
-  const first = realGuard(path);
+  const target = resolve(path);
+  const first = realGuard(target);
   if ("refused" in first) return refusalText(first.refused);
   await beforeDelete?.();
-  const again = realGuard(path);
-  if ("refused" in again) return refusalText(again.refused);
-  if (again.real !== first.real) return refusalText("changed");
   const attempts = platform === "win" ? 4 : 1;
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    const again = realGuard(target);
+    if ("refused" in again) return refusalText(again.refused);
+    if (again.real !== first.real) return refusalText("changed");
     try {
-      await rm(path, { recursive: true, force: true });
+      await rm(target, { recursive: true, force: true });
       return "";
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? "EUNKNOWN";

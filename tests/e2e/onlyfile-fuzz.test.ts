@@ -391,14 +391,17 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
       { id: "com\\evil", kind: "refuse" },
       { id: "a/../../b", kind: "refuse" },
       { id: "", kind: "refuse" },
+      { id: ".", kind: "refuse" },
+      { id: "..", kind: "refuse" },
       { id: ".".repeat(301), kind: "refuse" },
       { id: "com.example..", kind: "refuse" },
       { id: "com..example", kind: "refuse" },
       { id: "com/example/../../etc", kind: "refuse" },
       { id: ".com.example", kind: "benign" },
-      { id: "com.example\0evil", kind: "contained" },
-      { id: "\0", kind: "contained" },
-      { id: "\u0000", kind: "contained" },
+      { id: "com.example\0evil", kind: "refuse" },
+      { id: "\0", kind: "refuse" },
+      { id: "\u0000", kind: "refuse" },
+      { id: "com.example\u0001evil", kind: "refuse" },
       { id: "com.%2e%2e%2f%2e%2e%2fetc", kind: "contained" },
       { id: "%00", kind: "contained" },
       { id: "a".repeat(500), kind: "contained" },
@@ -417,7 +420,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
           expect(report.summary.purged).toBe(0);
           expect(report.summary.trashed).toBe(0);
           expect(report.summary.failed).toBeGreaterThanOrEqual(1);
-          expect(report.outcomes.some(o => o.status === "failed" && (o.detail.includes("not a valid identifier") || o.detail.includes("could not read bundle ID")))).toBe(true);
+          expect(report.outcomes.some(o => o.status === "failed" && o.detail.includes("not a valid identifier"))).toBe(true);
         }
       } else if (kind === "benign") {
         const apps = await appsViaCli();

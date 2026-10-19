@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmod, mkdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyJson,
@@ -108,6 +108,41 @@ describe("a symlinked cache root must not be deleted through", () => {
     expect(await digest(box.outside)).toBe(before);
     expect(await treeBytes(box.outside)).toBe(4 * MB);
     expect(await Bun.$`test -e ${box.outside}`.quiet().nothrow().then((r) => r.exitCode)).toBe(0);
+  });
+});
+
+describe("a wildcard cache rule must not delete through a leaf symlink", () => {
+  let box: Sandbox;
+  const cacheDir = (): string => join(box.home, ".cache");
+
+  beforeAll(async () => {
+    box = await sandbox("wildsym");
+    await mkdir(cacheDir(), { recursive: true });
+    await plant(box.outside, 4 * MB, 1);
+    await symlink(box.outside, join(cacheDir(), "entry"));
+    await userRules(box.home, `- id: test.wild\n  tier: green\n  desc: wild\n  paths: { all: "${cacheDir()}/*//" }\n  recoveryLabel: download\n`);
+  });
+
+  afterAll(async () => {
+    await box.dispose();
+  });
+
+  test("scan reports the link itself, without a trailing separator", async () => {
+    const report = scanJson((await box.run(["scan", "--json"])).stdout);
+    const hit = report.findings.find((f) => f.ruleId === "test.wild");
+    expect(hit?.path).toBe(join(cacheDir(), "entry"));
+    expect(hit?.bytes).toBe((await lstat(join(cacheDir(), "entry"))).size);
+  });
+
+  test("apply removes the link and leaves the target intact", async () => {
+    const before = await digest(box.outside);
+    const run = await box.run(["apply", "--yes", "--json"]);
+    expect(run.code).toBe(0);
+    const outcome = applyJson(run.stdout).outcomes.find((o) => o.ruleId === "test.wild");
+    expect(outcome?.status).toBe("deleted");
+    expect(await digest(box.outside)).toBe(before);
+    expect(await treeBytes(box.outside)).toBe(4 * MB);
+    expect(await exists(join(cacheDir(), "entry"))).toBe(false);
   });
 });
 

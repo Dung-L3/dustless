@@ -2,11 +2,11 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src and tests
-bun test              # everything: 253 tests, about 7s on a laptop
+bun test              # everything: 360 tests, about 30s on this laptop
 ```
 
 No build step is needed. `tests/e2e` runs the compiled binary in
-`dist/`, and `tests/e2e/cli.test.ts:23` builds it itself before the first assertion, so you do not
+`dist/`, and the e2e harness builds it before the first assertion, so you do not
 have to remember `bun run build` first.
 
 ## Browser-driven testing is deliberately not automated

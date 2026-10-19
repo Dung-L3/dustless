@@ -72,10 +72,19 @@ export function assertTierPermitted(finding: Finding, tier: "green" | "yellow"):
 export function assertPathDeletable(finding: Finding): void {
   const guard = realGuard(finding.path);
   if ("refused" in guard) {
-    throw new AgentRefusal(
-      `${finding.path} matches the permanent red blocklist (Keychain, Mail, iCloud, git internals, Documents, Desktop, Pictures, SQLite WAL). ` +
-        "This guard is hard-coded and cannot be disabled by any parameter.",
-    );
+    if (guard.refused === "red") {
+      throw new AgentRefusal(
+        `${finding.path} matches the permanent red blocklist (Keychain, Mail, iCloud, git internals, Documents, Desktop, Pictures, SQLite WAL). ` +
+          "This guard is hard-coded and cannot be disabled by any parameter.",
+      );
+    }
+    if (guard.refused === "protected") {
+      throw new AgentRefusal(`${finding.path} is HOME, a parent of HOME or the filesystem root.`);
+    }
+    if (guard.refused === "symlinked") {
+      throw new AgentRefusal(`${finding.path} is reached through a symlinked directory, so its real target cannot be trusted.`);
+    }
+    throw new AgentRefusal(`${finding.path} could not be resolved to a real path.`);
   }
   const full = resolve(finding.path);
   if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) {

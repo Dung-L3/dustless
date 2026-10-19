@@ -27,14 +27,35 @@
   when the target changed or resolves into a red directory, and `assertPathDeletable`
   (`src/mcp/safety.ts`) uses `realGuard` for its red test. Locked by `tests/race-delete-apply.test.ts`,
   whose `beforeDelete` hook performs the swap.
+- `realGuard` now also refuses the resolved HOME, every ancestor of HOME and the filesystem root
+  (`protected`) and any path reached through a symlinked directory (`symlinked`); a leaf symlink stays
+  removable without following it. The MCP guard reports each refusal separately. This closes the
+  symlinked-parent case where a cache-shaped finding was deleted at its real target.
+- `isSafeBundleId` refuses the bundle id `"."` and control characters. `"."` collapsed every leftover
+  template onto its parent, so `apps --uninstall --purge` could delete `~/Library/Caches` or
+  `~/Library/Preferences`; a `Library/Caches` canary now locks it (`tests/apps.test.ts`).
+- `apply` keeps a finding's own `yellow` tier even when the per-rule choice says `green`, and the CLI
+  and MCP tier maps choose the strictest tier for a rule that yields both tiers.
+- A declared `busyProcesses` list now gates the delete; previously only `nativeCommand` was consulted.
+  Names are basenamed and lowercased before matching, and a Windows retry re-reads the guard before
+  each attempt.
+- A leaf symlink is deleted as a link even when the finding carries a trailing separator or comes
+  from a wildcard rule: glob results are resolved, and every deleter normalizes with `resolve`
+  before both the guard and the syscall, so `rm` is never handed `<link>/` and cannot recurse into
+  the target. A rule id inherited from `Object.prototype` no longer selects a finding when the tier
+  map has no own entry (`Object.hasOwn`).
 
 ### Honesty
 
+- A scan measures a symlinked root as the link itself, and `dirSize` does the same, matching what
+  the delete actually removes instead of the target's bytes.
 - A scan reports what it could not look at: `ScanReport.unscannable` and `unscannableSummary` name
   every rule with no scannable path and a reason code, and those rules are excluded from every total
   (`src/core/scan.ts`, `scan`). The macOS app models both fields and ships the localized reason
   wording (`UnscannableRule`, `UnscannableSummary`, `UnscannableText` in
   `apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift`).
+- A finding whose path disappeared before `apply` reached it is reported `skipped` instead of
+  `deleted`, because `rm` with `force` succeeds silently on a missing path.
 
 ### Rules
 
@@ -52,4 +73,4 @@
 
 - `bun run typecheck` is green on the merged tree (unused imports, the generic `pick`).
 
-Measured on this branch: `bun test` → 322 pass / 0 fail / 5 skip across 23 files; `bun test tests/e2e` → 111 pass / 0 fail / 5 skip across 9 files; log .autopilot/logs/gate-pr72-g5.log.
+Measured on this branch: `bun test` → 355 pass / 0 fail / 5 skip across 26 files, 2578 expects; `bun run typecheck` clean.

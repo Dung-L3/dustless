@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const home = mkdtempSync(join(tmpdir(), "dustless-q5b2-home-"));
-process.env["HOME"] = home;
+const originalXdg = process.env["XDG_CONFIG_HOME"];
 process.env["XDG_CONFIG_HOME"] = join(home, "config");
 
 const { apply } = await import("../src/core/apply.ts");
 const { assertPathDeletable } = await import("../src/mcp/safety.ts");
+const { realGuard } = await import("../src/core/paths.ts");
 
 type Finding = import("../src/types.ts").Finding;
 type ScanReport = import("../src/types.ts").ScanReport;
@@ -17,6 +18,8 @@ type ScanReport = import("../src/types.ts").ScanReport;
 const roots: string[] = [home];
 
 afterAll(async () => {
+  if (originalXdg === undefined) delete process.env["XDG_CONFIG_HOME"];
+  else process.env["XDG_CONFIG_HOME"] = originalXdg;
   for (const root of roots) await rm(root, { recursive: true, force: true });
 });
 
@@ -104,6 +107,80 @@ describe("race delete apply", () => {
     expect(result.outcomes[0]?.status).toBe("failed");
     expect(result.outcomes[0]?.detail).toMatch(/đường dẫn thay đổi/);
     expect(await readFile(join(other, "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("symlinked parent: apply refuses and keeps the real payload", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "keep.txt"), "keep");
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    const target = join(link, "keep.txt");
+    const result = await apply(report([finding(target)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("failed");
+    expect(result.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
+    expect(await readFile(join(victim, "keep.txt"), "utf8")).toBe("keep");
+  });
+
+  test("symlinked parent: realGuard refuses it and assertPathDeletable throws", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "keep.txt"), "keep");
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    expect(realGuard(join(link, "keep.txt"))).toEqual({ refused: "symlinked" });
+    expect(() => assertPathDeletable(finding(join(link, "keep.txt")))).toThrow(/symlinked directory/);
+  });
+
+  test("protected real targets: the filesystem root is refused", async () => {
+    expect(realGuard("/")).toEqual({ refused: "protected" });
+  });
+
+  test("a missing path reached through a symlinked parent is refused", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    expect(realGuard(join(link, "missing"))).toEqual({ refused: "symlinked" });
+  });
+
+  test("a missing path below a dangling symlink is refused", async () => {
+    const root = await box();
+    const dangling = join(root, "dangling");
+    await symlink(join(root, "never-existed"), dangling);
+    expect(realGuard(join(dangling, "missing"))).toEqual({ refused: "symlinked" });
+  });
+
+  test("the outcome path is the resolved target, not the raw spelling", async () => {
+    const root = await box();
+    const dir = join(root, "dir");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "data.txt"), "payload");
+    const raw = join(root, "dir", "..", "dir", "data.txt");
+    const result = await apply(report([finding(raw)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(result.outcomes[0]?.path).toBe(join(dir, "data.txt"));
+    expect(await exists(join(dir, "data.txt"))).toBe(false);
+  });
+
+  test("mcp guard: a protected target throws the protected message", () => {
+    expect(() => assertPathDeletable(finding("/"))).toThrow(/HOME, a parent of HOME or the filesystem root/);
+  });
+
+  test("a trailing separator cannot turn a leaf-symlink unlink into a target delete", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "keep.txt"), "keep");
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    const result = await apply(report([finding(`${link}/`)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(await readFile(join(victim, "keep.txt"), "utf8")).toBe("keep");
+    expect(await exists(link)).toBe(false);
   });
 
   test("mcp guard: red symlink throws, clean directory does not", async () => {

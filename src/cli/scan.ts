@@ -95,8 +95,8 @@ function tierChoicesFor(report: ScanReport): TierChoice {
   const choices: TierChoice = {};
   for (const finding of report.findings) {
     if (finding.blocked || finding.tier === "red") continue;
-    if (finding.tier === "green") choices[finding.ruleId] = "green";
-    else if (!(finding.ruleId in choices)) choices[finding.ruleId] = "yellow";
+    if (finding.tier === "yellow") choices[finding.ruleId] = "yellow";
+    else if (!Object.hasOwn(choices, finding.ruleId)) choices[finding.ruleId] = "green";
   }
   return choices;
 }

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { moveToTrash } from "../src/core/apps/index.ts";
@@ -78,6 +78,31 @@ describe("delete race", () => {
     expect(result.detail).toContain("danh sách đỏ");
     expect(ran).toBe(false);
     expect(await readFile(join(src, "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("a source reached through a symlinked parent is refused and its target survives", async () => {
+    const root = await box();
+    const victim = await cache(root, "victim");
+    const link = join(root, "link");
+    await symlink(victim, link);
+    const result = await moveToTrash(join(link, "data.txt"), join(root, "Trash"));
+    expect(result.status).toBe("failed");
+    expect(result.detail).toContain("liên kết tượng trưng");
+    expect(await readFile(join(victim, "data.txt"), "utf8")).toBe("payload");
+  });
+
+  test("a trailing separator on a leaf symlink still unlinks only the link", async () => {
+    const root = await box();
+    const target = await cache(root, "target");
+    const link = join(root, "link");
+    await symlink(target, link);
+    const linkSize = (await lstat(link)).size;
+    const result = await moveToTrash(`${link}/`, join(root, "Trash"));
+    expect(result.status).toBe("trashed");
+    expect(result.bytes).toBe(linkSize);
+    expect(await readFile(join(target, "data.txt"), "utf8")).toBe("payload");
+    expect(await lstat(link).then(() => false, () => true)).toBe(true);
+    expect(await lstat(join(root, "Trash", "link")).then(() => true, () => false)).toBe(true);
   });
 
   test("realGuard accepts a clean path and refuses a red-resolving one", async () => {

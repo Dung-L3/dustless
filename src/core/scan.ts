@@ -157,6 +157,7 @@ async function walk(root: string): Promise<Tree> {
   const rootMeta = await lstat(root).catch(() => null);
   if (!rootMeta) return { bytes: 0, mtime: 0, atime: 0 };
   const tree: Tree = { bytes: 0, mtime: rootMeta.mtimeMs, atime: rootMeta.atimeMs };
+  if (rootMeta.isSymbolicLink()) return { bytes: rootMeta.size, mtime: rootMeta.mtimeMs, atime: rootMeta.atimeMs };
   if (rootMeta.isFile()) {
     tree.bytes = rootMeta.size;
     return tree;
