@@ -13,6 +13,10 @@ const BUSY_NAMES: Record<string, string[]> = {
   yarn: ["yarn"],
 };
 
+function processName(name: string): string {
+  return basename(name.replace(/\\/g, "/").trim().toLowerCase()).replace(/\.exe$/, "");
+}
+
 type Options = {
   tiers?: TierChoice;
   assumeYes?: boolean;
@@ -43,7 +47,7 @@ async function run(
   finding: Finding,
   opts: Options,
   rules: Map<string, Rule>,
-  busy: Set<string>,
+  busy: Set<string> | null,
 ): Promise<ApplyOutcome> {
   const target = resolve(finding.path);
   const outcome: ApplyOutcome = {
@@ -69,9 +73,13 @@ async function run(
     return outcome;
   }
   const rule = rules.get(finding.ruleId);
-  const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
-  const declared = (rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map((name) => basename(name.trim()).toLowerCase());
-  const watchers = declared.filter((name) => busy.has(name));
+  const native = rule?.nativeCommand?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const declared = (rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map(processName);
+  if (declared.length > 0 && busy === null) {
+    outcome.detail = "không liệt kê được tiến trình đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng";
+    return outcome;
+  }
+  const watchers = declared.filter((name) => busy?.has(name));
   if (watchers.length > 0) {
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
     return outcome;
@@ -132,7 +140,19 @@ async function remove(path: string, beforeDelete?: () => void | Promise<void>): 
   return "";
 }
 
-async function runningCommands(): Promise<Set<string>> {
-  const run = await exec("ps", ["-Ao", "comm="]);
-  return new Set(run.out.split("\n").map((line) => basename(line.trim().toLowerCase())));
+async function runningCommands(): Promise<Set<string> | null> {
+  const posix = await exec("ps", ["-Ao", "comm="]);
+  const names = posix.code === 0 ? parseListing(posix.out, false) : [];
+  if (names.length > 0) return new Set(names);
+  const win = await exec("tasklist", ["/fo", "csv", "/nh"]);
+  const images = win.code === 0 ? parseListing(win.out, true) : [];
+  return images.length > 0 ? new Set(images) : null;
+}
+
+function parseListing(out: string, csv: boolean): string[] {
+  return out
+    .split("\n")
+    .map((line) => (csv ? line.trim().match(/^"([^"]+)"/)?.[1] ?? "" : line.trim()))
+    .map(processName)
+    .filter(Boolean);
 }
