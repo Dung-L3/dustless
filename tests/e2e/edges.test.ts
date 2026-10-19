@@ -147,7 +147,7 @@ describe("a wildcard cache rule must not delete through a leaf symlink", () => {
   });
 });
 
-describe("a read-only cache directory", () => {
+describe.skipIf(process.platform === "win32")("a read-only cache directory", () => {
   let box: Sandbox;
   const locked = (): string => join(box.home, ".npm", "_cacache", "locked");
 

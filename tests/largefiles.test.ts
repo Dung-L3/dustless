@@ -45,7 +45,7 @@ async function list(box: Sandbox, ...args: string[]): Promise<LargeFile[]> {
   return JSON.parse(run.stdout) as LargeFile[];
 }
 
-const names = (files: LargeFile[]): string[] => files.map((f) => f.path.split("/").pop() ?? "");
+const names = (files: LargeFile[]): string[] => files.map((f) => f.path.split(/[/\\]/).pop() ?? "");
 
 afterAll(cleanupAll);
 

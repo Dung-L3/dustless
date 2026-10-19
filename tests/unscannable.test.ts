@@ -39,7 +39,7 @@ describe("unscannable tracking", () => {
     expect(report.unscannableSummary.absent).toBeGreaterThanOrEqual(1);
   });
 
-  test("unreadable path yields reason no_access", async () => {
+  test.skipIf(process.platform === "win32")("unreadable path yields reason no_access", async () => {
     const unreadable = join(sandbox, "unreadable-cache");
     await mkdir(unreadable, { recursive: true });
     await writeFile(join(unreadable, "data.bin"), Buffer.alloc(1024, 7));
@@ -58,8 +58,9 @@ describe("unscannable tracking", () => {
   });
 
   test("rule with no platform path yields not_supported", async () => {
+    const other = process.platform === "win32" ? "mac" : "win";
     await writeRules(
-      `- id: test.nosupport\n  tier: green\n  desc: no support cache\n  paths: { win: "C:\\\\temp" }\n`,
+      `- id: test.nosupport\n  tier: green\n  desc: no support cache\n  paths: { ${other}: "~/.never" }\n`,
     );
     const report = await scan({ roots: [sandbox] });
     const u = report.unscannable.find((r) => r.ruleId === "test.nosupport");
@@ -117,7 +118,7 @@ describe("unscannable e2e", () => {
     expect(report.reclaimable).toBe(0);
   });
 
-  test("unreadable rule path appears in unscannable with reason no_access", async () => {
+  test.skipIf(process.platform === "win32")("unreadable rule path appears in unscannable with reason no_access", async () => {
     const unreadable = join(box.home, ".unreadable-cache");
     await mkdir(unreadable, { recursive: true });
     await writeFile(join(unreadable, "data.bin"), Buffer.alloc(1024, 7));

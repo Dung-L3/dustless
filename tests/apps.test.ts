@@ -202,7 +202,7 @@ describe("uninstall", () => {
     expect(report.outcomes[0]!.detail).toMatch(/not a \.app bundle|denied/);
   });
 
-  test("refuses system app path", async () => {
+  test.skipIf(process.platform === "win32")("refuses system app path", async () => {
     const apps = await listApps({ home, appDirs: [appsDir] });
     const target = apps.find((a) => a.bundleId === "com.example.myapp");
     expect(target).toBeDefined();
