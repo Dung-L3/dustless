@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
 import { HOME, isRed } from "../src/core/paths.ts";
 import { loadRules, userRulesPath } from "../src/core/rules.ts";
@@ -231,11 +231,12 @@ describe("scan", () => {
   });
 
   test("a root includes itself and the filesystem root keeps its separator", async () => {
+    const root = parse(exact).root;
     expect(withinRoots(exact, [exact])).toBe(true);
-    expect(withinRoots(`${exact}/child`, [exact])).toBe(true);
+    expect(withinRoots(join(exact, "child"), [exact])).toBe(true);
     expect(withinRoots(outside, [exact])).toBe(false);
-    expect(withinRoots("/tmp/x", ["/"])).toBe(true);
-    expect(withinRoots("/", ["/"])).toBe(true);
+    expect(withinRoots(join(root, "tmp", "x"), [root])).toBe(true);
+    expect(withinRoots(root, [root])).toBe(true);
     const report = await scan({ roots: [exact] });
     expect(report.findings.some((f) => f.ruleId === "test.exact")).toBe(true);
   });

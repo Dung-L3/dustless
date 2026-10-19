@@ -164,6 +164,7 @@ describe("rules schema", () => {
 
   test("windows browser rules target cache leaves, never the profile root", async () => {
     const cacheLeaf = /^(ShaderCache|GrShaderCache|GraphiteDawnCache|\*\/(Cache|Code Cache|GPUCache)|\*\/Service Worker\/CacheStorage)$/;
+    const sensitive = /\/(User Data|Default|Profile \d+|Guest Profile|System Profile|Login Data|History|Bookmarks|Cookies|Local State|Web Data)$/;
     const rules = await loadRules();
     for (const id of ["browser.chrome", "browser.edge"]) {
       const win = rules.find((rule) => rule.id === id)?.paths.win;
@@ -172,13 +173,16 @@ describe("rules schema", () => {
       expect(patterns.some((pattern) => pattern.includes("/User Data"))).toBe(true);
     }
     for (const rule of rules.filter((rule) => rule.tier === "green")) {
-      const win = rule.paths.win;
-      const patterns = (Array.isArray(win) ? win : [win]).map((pattern) => (pattern ?? "").replace(/\\/g, "/"));
-      for (const pattern of patterns) {
+      const candidates = [rule.paths.all, rule.paths.win]
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter((pattern): pattern is string => Boolean(pattern))
+        .map((pattern) => pattern.replace(/\\/g, "/"));
+      for (const pattern of candidates) {
+        expect(pattern.split("/")).not.toContain("..");
+        expect(pattern).not.toMatch(sensitive);
         const at = pattern.indexOf("/User Data");
         if (at < 0) continue;
         const suffix = pattern.slice(at + "/User Data".length).replace(/^\//, "");
-        expect(suffix.split("/")).not.toContain("..");
         expect(suffix).toMatch(cacheLeaf);
       }
     }

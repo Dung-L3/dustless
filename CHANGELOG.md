@@ -90,4 +90,4 @@
 
 - `bun run typecheck` is green on the merged tree (unused imports, the generic `pick`).
 
-Measured on this branch: `bun test` → 367 pass / 0 fail / 5 skip across 26 files, 2656 expects; `bun run typecheck` clean.
+Measured on this branch: `bun test` → 367 pass / 0 fail / 5 skip across 26 files, 2708 expects; `bun run typecheck` clean.

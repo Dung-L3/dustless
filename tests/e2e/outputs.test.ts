@@ -207,7 +207,13 @@ describe("11. rule subcommand", () => {
 
   test("rule add validates the whole rule before writing anything", async () => {
     const rulesFile = join(box.home, ".config", "dustless", "rules.yaml");
-    const before = await readFile(rulesFile, "utf8");
+    const before = await readFile(rulesFile, "utf8").catch(async () => {
+      await userRules(
+        box.home,
+        `- id: test.seed\n  tier: green\n  desc: seed\n  paths: { all: ${JSON.stringify(join(box.home, ".seed"))} }\n`,
+      );
+      return await readFile(rulesFile, "utf8");
+    });
     const badTier = await box.run(["rule", "add", "my.badtier", "purple", "desc", "download", join(box.home, ".bad")]);
     expect(badTier.code).toBe(1);
     expect(badTier.stderr).toContain("green|yellow");
