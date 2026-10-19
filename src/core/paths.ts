@@ -1,7 +1,7 @@
 import { homedir, tmpdir } from "node:os";
 import { readdir } from "node:fs/promises";
 import { lstatSync, realpathSync } from "node:fs";
-import { join, parse, resolve, sep } from "node:path";
+import { dirname, join, parse, resolve, sep } from "node:path";
 import type { Platform, Rule } from "../types.ts";
 
 export const platform: Platform =
@@ -54,7 +54,7 @@ export async function resolvePattern(pattern: string): Promise<ResolveResult> {
   for (const name of entries) {
     const full = join(base, name, suffix);
     if (suffix && !(await exists(full))) continue;
-    out.push(full);
+    out.push(resolved(full));
   }
   return { paths: out.sort() };
 }
@@ -171,7 +171,15 @@ export function realGuard(path: string): RealGuard {
   try {
     real = realpathSync(full);
   } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "ENOENT" ? { real: full } : { refused: "unresolvable" };
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return { refused: "unresolvable" };
+    const parent = dirname(full);
+    try {
+      const realParent = realpathSync(parent);
+      if (isRed(realParent)) return { refused: "red" };
+      if (canonicalReal(realParent) !== canonicalReal(parent)) return { refused: "symlinked" };
+    } catch {
+    }
+    return { real: full };
   }
   if (isRed(real)) return { refused: "red" };
   if (isProtectedReal(real)) return { refused: "protected" };

@@ -37,9 +37,18 @@
 - `apply` keeps a finding's own `yellow` tier even when the per-rule choice says `green`, and the CLI
   and MCP tier maps choose the strictest tier for a rule that yields both tiers.
 - A declared `busyProcesses` list now gates the delete; previously only `nativeCommand` was consulted.
+  Names are basenamed and lowercased before matching, and a Windows retry re-reads the guard before
+  each attempt.
+- A leaf symlink is deleted as a link even when the finding carries a trailing separator or comes
+  from a wildcard rule: glob results are resolved, and every deleter normalizes with `resolve`
+  before both the guard and the syscall, so `rm` is never handed `<link>/` and cannot recurse into
+  the target. A rule id inherited from `Object.prototype` no longer selects a finding when the tier
+  map has no own entry (`Object.hasOwn`).
 
 ### Honesty
 
+- A scan measures a symlinked root as the link itself, and `dirSize` does the same, matching what
+  the delete actually removes instead of the target's bytes.
 - A scan reports what it could not look at: `ScanReport.unscannable` and `unscannableSummary` name
   every rule with no scannable path and a reason code, and those rules are excluded from every total
   (`src/core/scan.ts`, `scan`). The macOS app models both fields and ships the localized reason

@@ -69,7 +69,7 @@ async function run(
   }
   const rule = rules.get(finding.ruleId);
   const native = rule?.nativeCommand?.split(" ")[0]?.toLowerCase() ?? "";
-  const declared = rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : []);
+  const declared = (rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map((name) => basename(name.trim()).toLowerCase());
   const watchers = declared.filter((name) => busy.has(name));
   if (watchers.length > 0) {
     outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
@@ -80,10 +80,11 @@ async function run(
     outcome.detail = "bỏ qua: đường dẫn không còn tồn tại";
     return outcome;
   }
-  const requested = opts.tiers?.[finding.ruleId] ?? "skip";
+  const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
+  const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
   const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
   if (action === "skip") {
-    outcome.detail = opts.tiers?.[finding.ruleId] ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
+    outcome.detail = chosen ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
     return outcome;
   }
   if (action === "yellow" && !opts.assumeYes && !(await confirm(finding, opts))) {
@@ -109,16 +110,17 @@ async function confirm(finding: Finding, opts: Options): Promise<boolean> {
 }
 
 async function remove(path: string, beforeDelete?: () => void | Promise<void>): Promise<string> {
-  const first = realGuard(path);
+  const target = resolve(path);
+  const first = realGuard(target);
   if ("refused" in first) return refusalText(first.refused);
   await beforeDelete?.();
-  const again = realGuard(path);
-  if ("refused" in again) return refusalText(again.refused);
-  if (again.real !== first.real) return refusalText("changed");
   const attempts = platform === "win" ? 4 : 1;
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    const again = realGuard(target);
+    if ("refused" in again) return refusalText(again.refused);
+    if (again.real !== first.real) return refusalText("changed");
     try {
-      await rm(path, { recursive: true, force: true });
+      await rm(target, { recursive: true, force: true });
       return "";
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? "EUNKNOWN";

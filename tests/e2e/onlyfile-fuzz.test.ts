@@ -420,7 +420,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
           expect(report.summary.purged).toBe(0);
           expect(report.summary.trashed).toBe(0);
           expect(report.summary.failed).toBeGreaterThanOrEqual(1);
-          expect(report.outcomes.some(o => o.status === "failed" && (o.detail.includes("not a valid identifier") || o.detail.includes("could not read bundle ID")))).toBe(true);
+          expect(report.outcomes.some(o => o.status === "failed" && o.detail.includes("not a valid identifier"))).toBe(true);
         }
       } else if (kind === "benign") {
         const apps = await appsViaCli();

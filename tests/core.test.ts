@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
@@ -274,18 +274,47 @@ describe("apply", () => {
     expect(result.outcomes[0]?.detail).toMatch(/không còn tồn tại/);
   });
 
-  test.skipIf(process.platform === "win32")("a declared busy process skips the finding while it runs", async () => {
-    const victim = join(sandbox, "busy");
-    await mkdir(victim, { recursive: true });
-    await writeRules(`- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${victim}" }\n  busyProcesses: [bun]\n`);
+  test.skipIf(process.platform === "win32")("declared and native busy processes both skip the finding", async () => {
+    const bin = join(sandbox, "bin");
+    await mkdir(bin, { recursive: true });
+    const fakePs = join(bin, "ps");
+    await writeFile(fakePs, "#!/bin/sh\necho Bun\necho npm\n");
+    await chmod(fakePs, 0o755);
+    const busyVictim = join(sandbox, "busy-declared");
+    const nativeVictim = join(sandbox, "busy-native");
+    await mkdir(busyVictim, { recursive: true });
+    await mkdir(nativeVictim, { recursive: true });
+    const priorRules = await readFile(userRulesPath(), "utf8").catch(() => null);
+    const priorPath = process.env["PATH"];
+    await writeRules(
+      `- id: test.busy\n  tier: green\n  desc: busy\n  paths: { all: "${busyVictim}" }\n  busyProcesses: [Bun]\n` +
+        `- id: test.native\n  tier: green\n  desc: native\n  paths: { all: "${nativeVictim}" }\n  nativeCommand: npm cache verify\n`,
+    );
+    process.env["PATH"] = `${bin}:${priorPath ?? ""}`;
     try {
-      const result = await apply(report([{ ...finding(victim), ruleId: "test.busy" }]), { assumeYes: true, tiers: { "test.busy": "green" } });
-      expect(result.outcomes[0]?.status).toBe("skipped");
-      expect(result.outcomes[0]?.detail).toMatch(/đang chạy/);
-      expect(await exists(victim)).toBe(true);
+      const result = await apply(
+        report([{ ...finding(busyVictim), ruleId: "test.busy" }, { ...finding(nativeVictim), ruleId: "test.native" }]),
+        { assumeYes: true, tiers: { "test.busy": "green", "test.native": "green" } },
+      );
+      expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped"]);
+      for (const outcome of result.outcomes) expect(outcome.detail).toMatch(/đang chạy/);
+      expect(await exists(busyVictim)).toBe(true);
+      expect(await exists(nativeVictim)).toBe(true);
     } finally {
-      await rm(userRulesPath(), { force: true });
+      if (priorPath === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = priorPath;
+      if (priorRules === null) await rm(userRulesPath(), { force: true });
+      else await writeFile(userRulesPath(), priorRules);
     }
+  });
+
+  test("a rule id inherited from Object.prototype is not selected by an empty tier map", async () => {
+    const victim = join(sandbox, "prototype");
+    await mkdir(victim, { recursive: true });
+    const result = await apply(report([{ ...finding(victim), ruleId: "constructor" }]), { assumeYes: true, tiers: {} });
+    expect(result.outcomes[0]?.status).toBe("skipped");
+    expect(result.outcomes[0]?.detail).toMatch(/không được yêu cầu/);
+    expect(await exists(victim)).toBe(true);
   });
 
   test("reports freed as the measured disk delta between freeBefore and freeAfter", async () => {

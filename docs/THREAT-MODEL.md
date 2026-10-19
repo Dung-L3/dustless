@@ -51,9 +51,14 @@ network stack, the browser, or any other software on the machine.
   (`src/core/paths.ts`). It refuses a target that is red-listed (`red`), cannot be resolved
   (`unresolvable`), is the resolved `$HOME`, any ancestor of `$HOME` or the filesystem root
   (`protected`), or is reached through a symlinked directory component (`symlinked`). A leaf symlink
-  is allowed: `rename`/`rm` act on the link itself, never on its target. The guard is read twice —
-  once before the target is sized or a trash slot is chosen, and again immediately before the
-  `rename`/`rm` — and a second reading that differs from the first is refused (`changed`). It is
+  is allowed: `rename`/`rm` act on the link itself, never on its target. Every deleter resolves the
+  path once and passes that same string to the guard and the syscall; glob results are resolved before
+  they become findings, so a trailing separator cannot hand `rm` a `<link>/` that recurses into the
+  target. The guard is read twice — once before the target is sized or a trash slot is chosen, and
+  again immediately before the `rename`/`rm` — and a second reading that differs from the first is
+  refused (`changed`); the Windows retry loop re-reads it before every attempt. A missing path checks
+  its parent's real path, so `link/missing` where `link` points into HOME or a red directory is
+  refused rather than waved through as unresolved. It is
   called from `remove` (`src/core/apply.ts`), `moveToTrash`/`purgePath` (`src/core/apps/index.ts`),
   `deleteLargeFile` (`src/core/largefiles/index.ts`) and `assertPathDeletable`
   (`src/mcp/safety.ts`). `isRed` (`src/core/paths.ts`) normalises duplicate separators, backslashes
@@ -69,7 +74,10 @@ network stack, the browser, or any other software on the machine.
   followed; the true close is `O_NOFOLLOW`/`unlinkat` by file descriptor, which `node:fs` does not
   expose. The busy-process gate is also fail-open when `ps` cannot be run (the set is empty), and a
   path spelled with different letter case on a case-insensitive filesystem can be refused as
-  `symlinked`; both err in the direction of refusing a delete, not of performing one.
+  `symlinked`; both err in the direction of refusing a delete, not of performing one. On Windows a
+  directory junction is treated as a removable leaf link; whether the Bun runtime's recursive `rm`
+  follows a junction is **unverified** on that platform, so the guard refuses the junction path only
+  when it is reached through a parent, not merely because it is a junction.
 
 ## 3. A tampered rule file
 

@@ -54,6 +54,7 @@ async function exists(path: string): Promise<boolean> {
 
 async function dirSize(path: string): Promise<number> {
   const root = await lstat(path).catch(() => null);
+  if (root?.isSymbolicLink()) return root.size;
   if (root?.isFile()) return root.size;
   let total = 0;
   const stack = [resolve(path)];
@@ -229,10 +230,11 @@ async function recheck(src: string, first: string, hook?: () => void | Promise<v
 }
 
 export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHook = {}): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
-  const first = realGuard(src);
+  const source = resolve(src);
+  const first = realGuard(source);
   if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
-  const bytes = await dirSize(src);
-  const name = src.split(sep).filter(Boolean).pop() ?? "unknown";
+  const bytes = await dirSize(source);
+  const name = source.split(sep).filter(Boolean).pop() ?? "unknown";
   await mkdir(trashDir, { recursive: true });
   let dest = join(trashDir, name);
   let suffix = 1;
@@ -240,10 +242,10 @@ export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHo
     dest = join(trashDir, `${name}.${suffix}`);
     suffix++;
   }
-  const race = await recheck(src, first.real, hooks.beforeDelete);
+  const race = await recheck(source, first.real, hooks.beforeDelete);
   if (race) return { status: "failed", bytes, detail: race };
   try {
-    await rename(src, dest);
+    await rename(source, dest);
     return { status: "trashed", bytes, detail: `moved to ${dest}` };
   } catch (err) {
     return { status: "failed", bytes, detail: String(err) };
@@ -251,13 +253,14 @@ export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHo
 }
 
 async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: string }> {
-  const first = realGuard(src);
+  const source = resolve(src);
+  const first = realGuard(source);
   if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
-  const bytes = await dirSize(src);
-  const race = await recheck(src, first.real, hooks.beforeDelete);
+  const bytes = await dirSize(source);
+  const race = await recheck(source, first.real, hooks.beforeDelete);
   if (race) return { status: "failed", bytes, detail: race };
   try {
-    await rm(src, { recursive: true, force: true });
+    await rm(source, { recursive: true, force: true });
     return { status: "purged", bytes, detail: "permanently deleted" };
   } catch (err) {
     return { status: "failed", bytes, detail: String(err) };

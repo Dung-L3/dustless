@@ -5,9 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const home = mkdtempSync(join(tmpdir(), "dustless-q5b2-home-"));
-const originalHome = process.env["HOME"];
 const originalXdg = process.env["XDG_CONFIG_HOME"];
-process.env["HOME"] = home;
 process.env["XDG_CONFIG_HOME"] = join(home, "config");
 
 const { apply } = await import("../src/core/apply.ts");
@@ -20,8 +18,6 @@ type ScanReport = import("../src/types.ts").ScanReport;
 const roots: string[] = [home];
 
 afterAll(async () => {
-  if (originalHome === undefined) delete process.env["HOME"];
-  else process.env["HOME"] = originalHome;
   if (originalXdg === undefined) delete process.env["XDG_CONFIG_HOME"];
   else process.env["XDG_CONFIG_HOME"] = originalXdg;
   for (const root of roots) await rm(root, { recursive: true, force: true });
@@ -140,6 +136,32 @@ describe("race delete apply", () => {
 
   test("protected real targets: the filesystem root is refused", async () => {
     expect(realGuard("/")).toEqual({ refused: "protected" });
+  });
+
+  test("a missing path reached through a symlinked parent is refused", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    expect(realGuard(join(link, "missing"))).toEqual({ refused: "symlinked" });
+  });
+
+  test("mcp guard: a protected target throws the protected message", () => {
+    expect(() => assertPathDeletable(finding("/"))).toThrow(/HOME, a parent of HOME or the filesystem root/);
+  });
+
+  test("a trailing separator cannot turn a leaf-symlink unlink into a target delete", async () => {
+    const root = await box();
+    const victim = join(root, "victim");
+    await mkdir(victim, { recursive: true });
+    await writeFile(join(victim, "keep.txt"), "keep");
+    const link = join(root, "cache");
+    await symlink(victim, link);
+    const result = await apply(report([finding(`${link}/`)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(await readFile(join(victim, "keep.txt"), "utf8")).toBe("keep");
+    expect(await exists(link)).toBe(false);
   });
 
   test("mcp guard: red symlink throws, clean directory does not", async () => {

@@ -105,7 +105,7 @@ export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<Uni
     return refuse(
       guard.refused === "red"
         ? `on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`
-        : `${refusalText("unresolvable")} — refusing to touch ${target}`,
+        : `${refusalText(guard.refused)} — refusing to touch ${target}`,
     );
   }
   if (!opts.confirm) return refuse("confirm required");
