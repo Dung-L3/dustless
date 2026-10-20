@@ -79,8 +79,8 @@ export function required(name: string, usage: string): string {
   return value;
 }
 
-export const GLOBAL_FLAGS = ["json", "quiet", "yes", "help", "version"] as const;
-export const COMMAND_FLAGS: Record<string, readonly string[]> = {
+const GLOBAL_FLAGS = ["json", "quiet", "yes", "help", "version"] as const;
+const COMMAND_FLAGS: Record<string, readonly string[]> = {
   scan: [],
   apply: ["only-file"],
   rule: [],

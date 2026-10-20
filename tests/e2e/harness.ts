@@ -156,7 +156,7 @@ export type Sandbox = {
   dispose: () => Promise<void>;
 };
 
-export function assertSandboxed(path: string, root: string): string {
+function assertSandboxed(path: string, root: string): string {
   const full = resolve(path);
   const base = resolve(root);
   if (full !== base && !full.startsWith(base + sep)) {

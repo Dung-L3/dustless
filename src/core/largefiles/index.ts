@@ -7,7 +7,7 @@ import type { UninstallOutcome, UninstallReport } from "../apps/types.ts";
 
 const MiB = 1024 * 1024;
 export const DEFAULT_MIN_SIZE = 200 * MiB;
-export const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 50;
 
 const SKIP_DIRS = new Set([".git", ".Trash"]);
 
