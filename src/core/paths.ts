@@ -91,7 +91,7 @@ export function matchesBasename(path: string, match?: string): boolean {
 
 export const HOME = homedir();
 
-export const RED_PATTERNS: RegExp[] = [
+const RED_PATTERNS: RegExp[] = [
   /Keychains?/i,
   /\/Mail(\.v2)?\//i,
   /Mail(\.v2)?$/i,
