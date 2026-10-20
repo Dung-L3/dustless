@@ -25,11 +25,12 @@ network stack, the browser, or any other software on the machine.
 ## Trust boundary
 
 Dustless runs with the user's privileges and treats the user's own process, rule file and file tree
-as trusted configuration. The delete guards are designed to stop mistakes and same-user symlink
-swaps, not a local process that can already rewrite the user's cache directories or race path
-components while Dustless runs. Section 2 records the exact residual race and what it means for a
-release claim. A rule file supplied by someone else is also outside the trust boundary; see section
-3 for the regex and deletion consequences.
+as trusted configuration. The delete guards are designed to stop mistakes and symlink swaps that
+are already in place when a deletion starts; they do not claim to defeat a concurrent local process
+that can rewrite the user's cache directories or race path components while Dustless runs. Section
+2 records the exact residual race and what it means for a release claim. A rule file supplied by
+someone else is also outside the trust boundary; see section 3 for the regex and deletion
+consequences.
 
 ## 1. A malicious app bundle id
 
@@ -84,8 +85,9 @@ release claim. A rule file supplied by someone else is also outside the trust bo
   (`openat`/`openat2`), followed by descriptor-relative `unlinkat`/`renameat`; `node:fs` exposes none
   of those primitives. This is the remaining TOCTOU window: the deterministic `moveToTrash` and
   `apply` tests swap the path in the `beforeDelete` hook before the second guard, so they prove the
-  recheck and refusal path, not the post-recheck syscall window. A path spelled with different letter case on a case-insensitive
-  filesystem can also be refused as `symlinked`; that errs in the direction of refusing a delete,
+  recheck and refusal path, not the post-recheck syscall window. A path spelled with different
+  letter case on a case-insensitive filesystem can also be refused as `symlinked`; that errs in the
+  direction of refusing a delete,
   not of performing one. The busy-process gate is name-only. A first-token normalization of POSIX
   titles was tried and rejected because ambient `npm exec` servers then blocked unrelated npm-cache
   cleanup; Windows npm/npx appear as `node.exe`, pnpm usually as `node`, and Gradle's daemon as
