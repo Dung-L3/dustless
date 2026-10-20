@@ -81,21 +81,22 @@ consequences.
   `tests/e2e/edges.test.ts` cases keep a symlinked cache root from being deleted through.
 - **Residual risk:** the real-path check and the path-based `rename`/`rm` are not one atomic
   operation. A component swapped between the second `realpathSync` and the syscall can still be
-  followed. The secure close is a parent-directory descriptor opened with no-follow traversal
-  (`openat`/`openat2`), followed by descriptor-relative `unlinkat`/`renameat`; `node:fs` exposes none
-  of those primitives. This is the remaining TOCTOU window: the deterministic `moveToTrash` and
-  `apply` tests swap the path in the `beforeDelete` hook before the second guard, so they prove the
-  recheck and refusal path, not the post-recheck syscall window. A path spelled with different
-  letter case on a case-insensitive filesystem can also be refused as `symlinked`; that errs in the
-  direction of refusing a delete,
+  followed. The secure close on POSIX is a parent-directory descriptor opened with no-follow
+  traversal (`openat`/`openat2`), followed by descriptor-relative `unlinkat`/`renameat`; Windows
+  would need handle-relative APIs. `node:fs` exposes none of those primitives. This is the remaining
+  TOCTOU window: the deterministic `moveToTrash` and `apply` tests swap the path in the
+  `beforeDelete` hook before the second guard, so they prove the recheck and refusal path, not the
+  post-recheck syscall window. A path spelled with different letter case on a case-insensitive
+  filesystem can also be refused as `symlinked`; that errs in the direction of refusing a delete,
   not of performing one. The busy-process gate is name-only. A first-token normalization of POSIX
   titles was tried and rejected because ambient `npm exec` servers then blocked unrelated npm-cache
   cleanup; Windows npm/npx appear as `node.exe`, pnpm usually as `node`, and Gradle's daemon as
   `java` (entries 112–113). That affects cache cleanup only, and a failed process listing is
   fail-closed (entry 110). On Windows a directory junction is treated as a removable leaf link; the
-  Windows-only `tests/windows-junction.test.ts` runs the probe in a child Bun process with a
-  throwaway `HOME`/`USERPROFILE`; it verifies that recursive apply removes the junction without
-  following it, `moveToTrash` moves the leaf and preserves the target, paths through a junction are
+  Windows-only `tests/windows-junction.test.ts` runs the source-level probe in a child Bun process
+  with a throwaway `HOME`/`USERPROFILE` (not the compiled binary); it verifies that recursive apply
+  removes the junction without following it, `moveToTrash` moves the leaf and preserves the target,
+  paths through a junction are
   refused, and `findLargeFiles` does not walk through one. That result is tied to the tested Bun
   runtime, not a platform-wide guarantee. The Windows CI job is advisory (`continue-on-error`), so a
   failure is visible but is not a merge gate; keep the test and do not describe it as one.
