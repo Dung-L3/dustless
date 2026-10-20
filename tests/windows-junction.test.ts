@@ -66,7 +66,8 @@ describe.skipIf(process.platform !== "win32")("Windows junction boundaries", () 
     const s = await scene("leaf");
     const result = await apply(report([finding(s.junction)]), { assumeYes: true, tiers: { "test.junction": "green" } });
     const status = result.outcomes[0]?.status;
-    expect(status === "deleted" || status === "failed").toBe(true);
+    expect(status).toBe("deleted");
+    expect(await exists(s.junction)).toBe(false);
     expect(await exists(s.target)).toBe(true);
     expect(await readFile(s.canary, "utf8")).toBe(s.content);
   });
