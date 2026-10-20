@@ -22,6 +22,15 @@ There is no telemetry, no account, no upsell, and no code path that sends data a
 (invariant 3). That is a statement about what this product does; it is not a claim about the
 network stack, the browser, or any other software on the machine.
 
+## Trust boundary
+
+Dustless runs with the user's privileges and treats the user's own process, rule file and file tree
+as trusted configuration. The delete guards are designed to stop mistakes and same-user symlink
+swaps, not a local process that can already rewrite the user's cache directories or race path
+components while Dustless runs. Section 2 records the exact residual race and what it means for a
+release claim. A rule file supplied by someone else is also outside the trust boundary; see section
+3 for the regex and deletion consequences.
+
 ## 1. A malicious app bundle id
 
 - **Asset:** documents and media outside `$HOME`, and any path derived from a crafted identifier.
@@ -71,20 +80,23 @@ network stack, the browser, or any other software on the machine.
   `tests/e2e/edges.test.ts` cases keep a symlinked cache root from being deleted through.
 - **Residual risk:** the real-path check and the path-based `rename`/`rm` are not one atomic
   operation. A component swapped between the second `realpathSync` and the syscall can still be
-  followed; the true close is `O_NOFOLLOW`/`unlinkat` by file descriptor, which `node:fs` does not
-  expose. This is the remaining TOCTOU window: the deterministic tests swap the path in the
-  `beforeDelete` hook before the second guard, so they prove the recheck and refusal path, not the
-  post-recheck syscall window. A path spelled with different letter case on a case-insensitive
+  followed. The secure close is a parent-directory descriptor opened with no-follow traversal
+  (`openat`/`openat2`), followed by descriptor-relative `unlinkat`/`renameat`; `node:fs` exposes none
+  of those primitives. This is the remaining TOCTOU window: the deterministic `moveToTrash` and
+  `apply` tests swap the path in the `beforeDelete` hook before the second guard, so they prove the
+  recheck and refusal path, not the post-recheck syscall window. A path spelled with different letter case on a case-insensitive
   filesystem can also be refused as `symlinked`; that errs in the direction of refusing a delete,
   not of performing one. The busy-process gate is name-only. A first-token normalization of POSIX
   titles was tried and rejected because ambient `npm exec` servers then blocked unrelated npm-cache
   cleanup; Windows npm/npx appear as `node.exe`, pnpm usually as `node`, and Gradle's daemon as
   `java` (entries 112–113). That affects cache cleanup only, and a failed process listing is
   fail-closed (entry 110). On Windows a directory junction is treated as a removable leaf link; the
-  Windows-only `tests/windows-junction.test.ts` verifies that recursive apply removes the junction
-  without following it, `moveToTrash` preserves the target, paths through a junction are refused,
-  and `findLargeFiles` does not walk through one. That result is tied to the tested Bun runtime,
-  not a platform-wide guarantee; the test is the regression guard.
+  Windows-only `tests/windows-junction.test.ts` runs the probe in a child Bun process with a
+  throwaway `HOME`/`USERPROFILE`; it verifies that recursive apply removes the junction without
+  following it, `moveToTrash` moves the leaf and preserves the target, paths through a junction are
+  refused, and `findLargeFiles` does not walk through one. That result is tied to the tested Bun
+  runtime, not a platform-wide guarantee. The Windows CI job is advisory (`continue-on-error`), so a
+  failure is visible but is not a merge gate; keep the test and do not describe it as one.
 
 ## 3. A tampered rule file
 

@@ -1,118 +1,72 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, sep } from "node:path";
-import { apply } from "../src/core/apply.ts";
-import { findLargeFiles } from "../src/core/largefiles/index.ts";
-import { moveToTrash } from "../src/core/apps/index.ts";
-import type { Finding, ScanReport } from "../src/types.ts";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-const exists = async (path: string): Promise<boolean> => await stat(path).then(() => true, () => false);
+const probe = resolve(import.meta.dir, "fixtures", "windows-junction-probe.ts");
 const roots: string[] = [];
-const priorXdg = process.env["XDG_CONFIG_HOME"];
 
 afterAll(async () => {
-  if (priorXdg === undefined) delete process.env["XDG_CONFIG_HOME"];
-  else process.env["XDG_CONFIG_HOME"] = priorXdg;
   for (const root of roots) await rm(root, { recursive: true, force: true });
 });
 
-async function box(): Promise<string> {
-  const root = await mkdtemp(join(homedir(), ".dustless-junction-"));
-  roots.push(root);
-  process.env["XDG_CONFIG_HOME"] = join(root, "config");
-  return root;
+async function runProbe(scenario: string): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), `dustless-junction-${scenario}-`));
+  roots.push(home);
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    TMPDIR: home,
+    TMP: home,
+    TEMP: home,
+    NO_COLOR: "1",
+  };
+  const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((done) => {
+    const child = spawn(process.execPath, [probe, scenario], { env, cwd: resolve(import.meta.dir, "..") });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      stderr += "\nTIMEOUT";
+      child.kill("SIGKILL");
+    }, 30_000);
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      done({ code: -1, stdout, stderr: `${stderr}\n${err.message}` });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      done({ code, stdout, stderr });
+    });
+  });
+  if (result.code !== 0) {
+    throw new Error(`junction probe ${scenario} failed (${result.code})\n${result.stderr}\n${result.stdout}`);
+  }
+  expect(result.stdout).toContain("ok");
 }
 
-const finding = (path: string): Finding => ({
-  ruleId: "test.junction",
-  tier: "green",
-  desc: "junction probe",
-  path,
-  bytes: 1024,
-  mtime: 0,
-  atime: 0,
-  ageDays: 999,
-  verified: true,
-  blocked: false,
-  note: "",
-});
-
-const report = (findings: Finding[]): ScanReport => ({
-  findings,
-  totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
-  reclaimable: 0,
-  freeBefore: 0,
-  platform: "win",
-  scannedMs: 0,
-  unscannable: [],
-  unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0 },
-});
-
-async function scene(label: string): Promise<{ root: string; target: string; junction: string; canary: string; content: string }> {
-  const root = await box();
-  const target = join(root, `target-${label}`);
-  const junction = join(root, `cache-${label}`);
-  const canary = join(target, "canary.txt");
-  const content = `JUNCTION-CANARY-${label}-${Date.now()}`;
-  await mkdir(target, { recursive: true });
-  await writeFile(canary, content);
-  await symlink(target, junction, "junction");
-  return { root, target, junction, canary, content };
-}
-
-describe.skipIf(process.platform !== "win32")("Windows junction boundaries", () => {
+describe.skipIf(process.platform !== "win32")("Windows junction boundaries (Windows-only)", () => {
   test("recursive apply of a junction leaf leaves the target intact", async () => {
-    const s = await scene("leaf");
-    const result = await apply(report([finding(s.junction)]), { assumeYes: true, tiers: { "test.junction": "green" } });
-    const status = result.outcomes[0]?.status;
-    expect(status).toBe("deleted");
-    expect(await exists(s.junction)).toBe(false);
-    expect(await exists(s.target)).toBe(true);
-    expect(await readFile(s.canary, "utf8")).toBe(s.content);
+    await runProbe("leaf");
   });
 
-  test("a path through a junction into a red directory is refused", async () => {
-    const root = await box();
-    const red = join(root, "Documents");
-    const junction = join(root, "portal");
-    const canary = join(red, "canary.txt");
-    await mkdir(red, { recursive: true });
-    await writeFile(canary, "KEEP");
-    await symlink(red, junction, "junction");
-    const result = await apply(report([finding(join(junction, "canary.txt"))]), {
-      assumeYes: true,
-      tiers: { "test.junction": "green" },
-    });
-    expect(result.outcomes[0]?.status).toBe("failed");
-    expect(result.outcomes[0]?.detail).toMatch(/danh sách đỏ|liên kết tượng trưng/);
-    expect(await readFile(canary, "utf8")).toBe("KEEP");
+  test("a path through a junction into a red directory is refused as red", async () => {
+    await runProbe("red");
   });
 
   test("a path through a clean junction is still refused", async () => {
-    const s = await scene("through");
-    const result = await apply(report([finding(join(s.junction, "canary.txt"))]), {
-      assumeYes: true,
-      tiers: { "test.junction": "green" },
-    });
-    expect(result.outcomes[0]?.status).toBe("failed");
-    expect(result.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
-    expect(await readFile(s.canary, "utf8")).toBe(s.content);
+    await runProbe("through");
   });
 
-  test("moveToTrash of a junction leaf leaves the target intact", async () => {
-    const s = await scene("trash");
-    const result = await moveToTrash(s.junction, join(s.root, "Trash"));
-    expect(result.status).toBe("trashed");
-    expect(await exists(s.target)).toBe(true);
-    expect(await readFile(s.canary, "utf8")).toBe(s.content);
+  test("moveToTrash moves the junction leaf and leaves the target intact", async () => {
+    await runProbe("trash");
   });
 
   test("findLargeFiles does not walk through a junction", async () => {
-    const s = await scene("walk");
-    await writeFile(join(s.target, "big.bin"), Buffer.alloc(4096));
-    const found = await findLargeFiles({ roots: [s.root], minSize: 1, limit: 50 });
-    expect(found.filter((file) => file.path.startsWith(s.junction + sep))).toEqual([]);
-    expect(found.some((file) => file.path === join(s.target, "big.bin"))).toBe(true);
+    await runProbe("walk");
   });
 });
