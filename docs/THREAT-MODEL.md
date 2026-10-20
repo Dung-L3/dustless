@@ -96,8 +96,8 @@ consequences.
   Windows-only `tests/windows-junction.test.ts` runs the source-level probe in a child Bun process
   with a throwaway `HOME`/`USERPROFILE` (not the compiled binary); it verifies that recursive apply
   removes the junction without following it, `moveToTrash` moves the leaf and preserves the target,
-  paths through a junction are
-  refused, and `findLargeFiles` does not walk through one. That result is tied to the tested Bun
+  paths through a junction are refused, and `findLargeFiles` does not walk through one. That result
+  is tied to the tested Bun
   runtime, not a platform-wide guarantee. The Windows CI job is advisory (`continue-on-error`), so a
   failure is visible but is not a merge gate; keep the test and do not describe it as one.
 
