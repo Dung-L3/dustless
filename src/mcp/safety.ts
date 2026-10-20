@@ -1,8 +1,6 @@
 import { parse, resolve, sep } from "node:path";
-import { HOME, isRed, realGuard, RED_PATTERNS } from "../core/paths.ts";
+import { HOME, realGuard } from "../core/paths.ts";
 import type { Finding, Tier } from "../types.ts";
-
-export { HOME, isRed, RED_PATTERNS };
 
 export const MAX_AGENT_DELETE_BYTES = 50 * 1024 ** 3;
 export const PERMITTED_TIERS: Record<"green" | "yellow", Tier[]> = {

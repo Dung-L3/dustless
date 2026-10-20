@@ -3,8 +3,7 @@ import { args } from "../args.ts";
 import { exec as spaceExec } from "../space.ts";
 import type { KillOptions, KillResult, MemoryInfo, ProcessCategory, ProcessInfo, RamDeps } from "./types.ts";
 
-export type { ProcessCategory, ProcessInfo, MemoryInfo, RamDeps, KillResult } from "./types.ts";
-export const MIN_RECLAIMABLE_BYTES = 50 * 1024 * 1024;
+const MIN_RECLAIMABLE_BYTES = 50 * 1024 * 1024;
 
 const KIB = 1024;
 const DEFAULT_EXEC: NonNullable<RamDeps["exec"]> = async (cmd, args) => {
@@ -173,11 +172,8 @@ export function createRam(deps: RamDeps = {}) {
   return { getMemoryInfo, getProcesses, killProcess, run };
 }
 
-export const defaultRam = createRam();
+const defaultRam = createRam();
 export const runRam = defaultRam.run.bind(defaultRam);
-export const getMemoryInfo = defaultRam.getMemoryInfo.bind(defaultRam);
-export const getProcesses = defaultRam.getProcesses.bind(defaultRam);
-export const killProcess = defaultRam.killProcess.bind(defaultRam);
 
 function parsePageSize(text: string): number {
   const match = text.match(/page size of (\d+)\s*bytes/);

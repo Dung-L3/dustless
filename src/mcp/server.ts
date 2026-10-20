@@ -23,7 +23,7 @@ type RpcId = string | number | null;
 type RpcError = { code: number; message: string; data?: unknown };
 type RpcMessage = { jsonrpc: "2.0"; id: RpcId; result?: unknown; error?: RpcError };
 
-export const core: Core = { scan, apply, loadRules: () => loadRules(), freeSpace };
+const core: Core = { scan, apply, loadRules: () => loadRules(), freeSpace };
 
 export function guardStdout(): void {
   const target = console as unknown as Record<string, (...args: unknown[]) => void>;

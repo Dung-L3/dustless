@@ -1,5 +1,5 @@
-import { homedir, tmpdir } from "node:os";
-import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { readdir, stat } from "node:fs/promises";
 import { lstatSync, realpathSync } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import type { Platform, Rule } from "../types.ts";
@@ -30,7 +30,6 @@ export async function resolvePattern(pattern: string): Promise<ResolveResult> {
     const ok = await exists(full);
     if (ok) return { paths: [full] };
     try {
-      const { stat } = await import("node:fs/promises");
       await stat(full);
       return { paths: [], error: { code: "EACCES", pattern } };
     } catch (err) {
@@ -69,7 +68,6 @@ export async function exists(path: string): Promise<boolean> {
     return true;
   } catch {
     try {
-      const { stat } = await import("node:fs/promises");
       return (await stat(path)).isFile();
     } catch {
       return false;
@@ -92,9 +90,8 @@ export function matchesBasename(path: string, match?: string): boolean {
 }
 
 export const HOME = homedir();
-export const TMP = tmpdir();
 
-export const RED_PATTERNS: RegExp[] = [
+const RED_PATTERNS: RegExp[] = [
   /Keychains?/i,
   /\/Mail(\.v2)?\//i,
   /Mail(\.v2)?$/i,

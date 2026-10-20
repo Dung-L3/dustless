@@ -6,7 +6,7 @@ The whole point is that an agent calling "delete stuff" is exactly where a bug b
 
 - `scan` is read-only. It can never delete anything.
 - `apply` deletes **nothing** unless you pass `confirm: true`. Omit it and you get a refusal plus the exact plan.
-- Red-path protection (Keychain, Mail, iCloud, `.git`, Documents, Desktop, Pictures, SQLite WAL) is hard-coded and re-exported. No parameter turns it off.
+- Red-path protection (Keychain, Mail, iCloud, `.git`, Documents, Desktop, Pictures, SQLite WAL) is hard-coded and enforced by the scan and safety layers. No parameter turns it off.
 - Anything whose cross-verification failed is reported as `BLOCKED` and refused, never silently skipped.
 - A hard 50 GB cap per call, only raisable with `allow_large: true` — which still requires `confirm: true`.
 - `apply` is all-or-nothing: one unknown rule id or one blocked path refuses the entire call, and the response lists every problem.

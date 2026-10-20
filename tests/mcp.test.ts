@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { ApplyReport, Finding, Rule, ScanReport } from "../src/types.ts";
 import { encode, guardStdout, handleRpc, PROTOCOL_VERSION, SERVER_INFO } from "../src/mcp/server.ts";
 import { createTools, type Core, type Tool } from "../src/mcp/tools.ts";
-import { AgentRefusal, assertAgentCanDelete, assertPathDeletable, assertWithinAgentCap, isRed, MAX_AGENT_DELETE_BYTES } from "../src/mcp/safety.ts";
+import { AgentRefusal, assertAgentCanDelete, assertPathDeletable, assertWithinAgentCap, MAX_AGENT_DELETE_BYTES } from "../src/mcp/safety.ts";
+import { isRed } from "../src/core/paths.ts";
 
 const GIB = 1024 ** 3;
 const CACHE = join(tmpdir(), "npm-cache");
@@ -286,7 +287,7 @@ describe("safety guards", () => {
     expect(core.deleted).toEqual([]);
   });
 
-  test("the red guard is re-exported and blocks protected paths", () => {
+  test("the red guard blocks protected paths", () => {
     expect(isRed("/Users/me/Library/Mail/V10")).toBe(true);
     expect(isRed("/Users/me/project/.git/objects")).toBe(true);
     expect(() => assertPathDeletable(finding({ path: "/Users/me/Pictures/x" }))).toThrow(/red blocklist/);
