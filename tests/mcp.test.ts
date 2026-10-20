@@ -287,7 +287,7 @@ describe("safety guards", () => {
     expect(core.deleted).toEqual([]);
   });
 
-  test("the red guard is re-exported and blocks protected paths", () => {
+  test("the red guard blocks protected paths", () => {
     expect(isRed("/Users/me/Library/Mail/V10")).toBe(true);
     expect(isRed("/Users/me/project/.git/objects")).toBe(true);
     expect(() => assertPathDeletable(finding({ path: "/Users/me/Pictures/x" }))).toThrow(/red blocklist/);
