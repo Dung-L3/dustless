@@ -67,7 +67,7 @@ async function assertCanary(s: Scene): Promise<void> {
 
 afterAll(cleanupAll);
 
-describe("real-path red guards through the compiled binary", () => {
+describe("real-path red filtering through the compiled binary", () => {
   test("scan drops symlink leaves and files reached through them into a red directory", async () => {
     const s = await scene("scan");
     const report = scanJson((await s.box.run(["scan", "--json"])).stdout);
@@ -95,12 +95,13 @@ describe("real-path red guards through the compiled binary", () => {
     await s.box.dispose();
   });
 
-  test("apply --only-file naming the portals and paths through them deletes nothing", async () => {
+  test("apply --only-file deletes only the selected clean leaf", async () => {
     const s = await scene("onlyfile");
     const selection = join(s.box.home, "selection.json");
     await writeFile(
       selection,
       JSON.stringify([
+        s.plain,
         s.portal,
         s.portalTrailing,
         join(s.portal, "canary.txt"),
@@ -111,8 +112,9 @@ describe("real-path red guards through the compiled binary", () => {
     const run = await s.box.run(["apply", "--yes", "--json", "--only-file", selection]);
     expect(run.code).toBe(0);
     const outcomes = applyJson(run.stdout).outcomes;
-    expect(outcomes.filter((o) => o.status === "deleted")).toEqual([]);
+    expect(outcomes.filter((o) => o.status === "deleted").map((o) => o.path)).toEqual([s.plain]);
     expect(outcomes.filter((o) => o.path.includes("portal"))).toEqual([]);
+    expect(await exists(s.plain)).toBe(false);
     expect(await exists(s.portal)).toBe(true);
     expect(await exists(s.portalTrailing)).toBe(true);
     await assertCanary(s);
@@ -135,6 +137,8 @@ describe("real-path red guards through the compiled binary", () => {
       const report = JSON.parse(run.stdout) as { outcomes: Array<{ status: string; detail: string }> };
       expect(report.outcomes[0]?.status).toBe("failed");
       expect(report.outcomes[0]?.detail).toContain("red list");
+      expect(await exists(s.portal)).toBe(true);
+      expect(await exists(s.portalTrailing)).toBe(true);
       await assertCanary(s);
       expect(await digest(s.redDir)).toBe(beforeRed);
     }
