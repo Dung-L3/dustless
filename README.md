@@ -265,7 +265,7 @@ A real rule:
 | `tier` | `green` or `yellow`. Any other value is rejected at load (`src/core/rules.ts:60`). `red` and `blocked` are not assignable: RED is a path list, BLOCKED is a verdict. |
 | `desc` | One line, shown in `rule list`. |
 | `paths` | Keys are `mac`, `win`, `linux` or `all` (`src/core/rules.ts:7`). `~` expands to your home directory; on Windows `%VAR%` expands from the environment (`src/core/paths.ts:14`). Each value is a string or a list of strings. A `*` expands to the directories directly under its parent. |
-| `match` | Optional regex tested against the basename of each directory the path produced (`src/core/paths.ts:90`). |
+| `match` | Optional regex tested against the basename of each directory the path produced (`src/core/paths.ts:90`). It runs in-process without a timeout, so a pathological pattern can slow a scan; only load rule files you trust. |
 | `minAgeDays` | If the newest file inside is younger than this, the finding is demoted from GREEN to YELLOW (`src/core/scan.ts:132`). |
 | `requireVerify` | Name of a cross-check: `gradle_version_unused`, `git_clean`, or `not_in_gitignore`. If it fails, the finding is demoted to YELLOW **and** marked BLOCKED (`src/core/scan.ts:136`). |
 | `nativeCommand` | Optional. Names the tool that owns the cache. If that tool is in the process table when `apply` runs, the cache is skipped so a live install is not broken underneath you (`src/core/apply.ts:72`). |

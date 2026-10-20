@@ -89,6 +89,17 @@ describe.skipIf(process.platform !== "win32")("Windows junction boundaries", () 
     expect(await readFile(canary, "utf8")).toBe("KEEP");
   });
 
+  test("a path through a clean junction is still refused", async () => {
+    const s = await scene("through");
+    const result = await apply(report([finding(join(s.junction, "canary.txt"))]), {
+      assumeYes: true,
+      tiers: { "test.junction": "green" },
+    });
+    expect(result.outcomes[0]?.status).toBe("failed");
+    expect(result.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
+    expect(await readFile(s.canary, "utf8")).toBe(s.content);
+  });
+
   test("moveToTrash of a junction leaf leaves the target intact", async () => {
     const s = await scene("trash");
     const result = await moveToTrash(s.junction, join(s.root, "Trash"));
