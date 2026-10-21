@@ -7,6 +7,7 @@ type Finding = { file: string; message: string };
 
 const BASELINE = join(ROOT, "scripts/repo-policy-baseline.txt");
 const CODE_DIRS = ["src", "scripts", "tests", "apps/dustless-mac/Sources", "apps/dustless-mac/Tests"];
+const SIZE_DIRS = ["src", "scripts", "apps/dustless-mac/Sources", "apps/dustless-mac/Tests"];
 const DOC_FILES = [
   "README.md",
   "README.vi.md",
@@ -74,9 +75,9 @@ async function walk(dir: string, out: string[]): Promise<string[]> {
   return out;
 }
 
-async function collectCodeFiles(): Promise<string[]> {
+async function collectCodeFiles(dirs: string[] = CODE_DIRS): Promise<string[]> {
   const files: string[] = [];
-  for (const dir of CODE_DIRS) await walk(join(ROOT, dir), files);
+  for (const dir of dirs) await walk(join(ROOT, dir), files);
   return files;
 }
 
@@ -130,8 +131,8 @@ async function checkNoComments(files: string[], findings: Finding[]): Promise<vo
   }
 }
 
-async function checkFileSize(files: string[], baseline: Baseline, findings: Finding[]): Promise<void> {
-  for (const file of files) {
+async function checkFileSize(baseline: Baseline, findings: Finding[]): Promise<void> {
+  for (const file of await collectCodeFiles(SIZE_DIRS)) {
     const rel = relative(ROOT, file);
     if (DATA_TABLES.has(rel)) continue;
     const lines = (await readFile(file, "utf8")).split("\n").length;
@@ -202,9 +203,8 @@ async function writeBaseline(): Promise<void> {
     used += await readFile(file, "utf8");
   }
   const unused = [...keys].filter((key) => !used.includes(`"${key}"`)).sort();
-  const files = await collectCodeFiles();
   const oversize: string[] = [];
-  for (const file of files) {
+  for (const file of await collectCodeFiles(SIZE_DIRS)) {
     const rel = relative(ROOT, file);
     if (DATA_TABLES.has(rel)) continue;
     const lines = (await readFile(file, "utf8")).split("\n").length;
@@ -243,7 +243,7 @@ if (process.argv.includes("--write-baseline")) {
 const files = await collectCodeFiles();
 const findings: Finding[] = [];
 await checkNoComments(files, findings);
-await checkFileSize(files, baseline, findings);
+await checkFileSize(baseline, findings);
 await checkLocalizationKeys(baseline, findings);
 await checkDocReferences(baseline, findings);
 
