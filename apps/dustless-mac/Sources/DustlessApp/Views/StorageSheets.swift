@@ -57,9 +57,11 @@ struct LargeFileTrashSheet: View {
 struct UninstallConfirmationSheet: View {
     let app: InstalledApp
     let onCancel: () -> Void
-    let onConfirm: () -> Void
+    let onConfirm: (Bool) -> Void
 
     @EnvironmentObject private var settings: AppSettings
+
+    @State private var permanent = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -95,16 +97,16 @@ struct UninstallConfirmationSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             HStack(spacing: PanelStyle.Space.s) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                Text(settings.t("appsPurgeTitle"))
+                Image(systemName: permanent ? "exclamationmark.triangle.fill" : "trash.fill")
+                    .foregroundStyle(permanent ? .orange : .secondary)
+                Text(settings.t(permanent ? "appsPurgeTitle" : "appsRemoveTitle"))
                     .font(PanelFont.emphasis(.semibold))
             }
             Text(app.name)
                 .font(PanelFont.emphasis())
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text(settings.t("appsPurgeBody", ["n": "\(app.relatedPaths.count)"]))
+            Text(settings.t(permanent ? "appsPurgeBody" : "appsRemoveBody", ["n": "\(app.relatedPaths.count)"]))
                 .font(PanelFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -132,13 +134,49 @@ struct UninstallConfirmationSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("storage.uninstall.cancel")
                 Spacer()
-                Button(role: .destructive, action: onConfirm) {
-                    Text(settings.t("appsPurgeAction"))
-                        .frame(minWidth: 160)
+                if permanent {
+                    DestructiveButton {
+                        onConfirm(true)
+                    } label: {
+                        Text(settings.t("appsPurgeAction"))
+                            .frame(minWidth: 160)
+                    }
+                    .accessibilityIdentifier("storage.uninstall.confirm")
+                } else {
+                    Button {
+                        onConfirm(false)
+                    } label: {
+                        Text(settings.t("appsMoveToTrash"))
+                            .frame(minWidth: 160)
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("storage.uninstall.confirm")
                 }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("storage.uninstall.confirm")
             }
+
+            Button {
+                permanent = false
+            } label: {
+                Text(settings.t("appsKeepReversible"))
+            }
+            .buttonStyle(.plain)
+            .font(PanelFont.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("storage.uninstall.keep")
+            .opacity(permanent ? 1 : 0)
+            .disabled(!permanent)
+
+            Button {
+                permanent = true
+            } label: {
+                Text(settings.t("appsMakePermanent"))
+            }
+            .buttonStyle(.plain)
+            .font(PanelFont.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("storage.uninstall.makePermanent")
+            .opacity(permanent ? 0 : 1)
+            .disabled(permanent)
         }
         .padding(PanelStyle.Space.l)
         .background(.ultraThinMaterial)
