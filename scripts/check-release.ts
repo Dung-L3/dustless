@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ROOT } from "./lib.ts";
 
 const tag = process.argv[2] ?? "";
-if (!/^v\d+\.\d+\.\d+/.test(tag)) {
+if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
   process.stderr.write(`release tag must look like v1.2.3, got "${tag}"\n`);
   process.exit(1);
 }
@@ -17,7 +17,7 @@ if (pkg.version !== version) {
 }
 
 const changelog = await readFile(join(ROOT, "CHANGELOG.md"), "utf8");
-const heading = new RegExp(`^## .*${version.replace(/\./g, "\\.")}`, "m");
+const heading = new RegExp(`^## .*${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m");
 if (!heading.test(changelog)) {
   problems.push(`CHANGELOG.md has no heading for ${version}`);
 }
