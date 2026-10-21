@@ -1,15 +1,15 @@
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
-import { listApps, uninstall } from "../core/apps/index.ts";
+import { homeAppDirs, listApps, uninstall } from "../core/apps/index.ts";
 import type { UninstallReport } from "../core/apps/types.ts";
 import { DEFAULT_MIN_SIZE, deleteLargeFile, findLargeFiles } from "../core/largefiles/index.ts";
+import { describeReason } from "../core/messages.ts";
 import { writeOut } from "../core/output.ts";
 import { bold, bytesOf, dim, errorOut, flag, opt, paint, required, say } from "./context.ts";
 
 function appDirs(): string[] | undefined {
   if (process.env["DUSTLESS_UI_TESTING"] !== "1") return undefined;
-  const raw = process.env["DUSTLESS_APPS_DIRS"];
-  return raw ? raw.split(":").filter(Boolean) : [];
+  return homeAppDirs(homedir());
 }
 
 async function printUninstall(report: UninstallReport): Promise<number> {
@@ -27,7 +27,7 @@ async function printUninstall(report: UninstallReport): Promise<number> {
             ? paint("33", "⊘")
             : paint("31", "✖");
     say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${o.path}`);
-    if (o.detail) say(`  ${dim(o.detail)}`);
+    if (o.detail) say(`  ${dim(describeReason(o.detail))}`);
   }
   say(
     `\n${paint("32", `🗑 ${report.summary.trashed}`)}  ${paint("31", `🔥 ${report.summary.purged}`)}  ${paint("33", `⊘ ${report.summary.skipped}`)}  ${paint("31", `✖ ${report.summary.failed}`)} · ${bold(`tổng ${bytesOf(report.summary.totalBytes)}`)}`,

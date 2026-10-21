@@ -21,9 +21,19 @@ struct OverviewView: View {
         } content: {
             ScrollView {
                 VStack(alignment: .leading, spacing: PanelStyle.Space.l) {
-                    if !freeStats.isEmpty { freeSpace }
-                    if let report = store.report { tiers(report) }
-                    if let blocked = blocked { coverage(blocked) }
+                    if let error = store.engineError {
+                        engineErrorCard(error)
+                    }
+                    if let report = store.report {
+                        UnscannableNotice(report: report, identifier: "overview.unscannable")
+                        tierStrip(report)
+                    }
+                    if let blocked = blocked {
+                        coverage(blocked)
+                    }
+                    if let report = store.report {
+                        topFindings(report)
+                    }
                     moduleLines
                     cta
                 }
@@ -38,36 +48,111 @@ struct OverviewView: View {
     }
 
     private var provenance: String {
-        settings.provenance(store.report, scannedAt: store.scannedAt)
+        settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
+    }
+
+    private func engineErrorCard(_ error: L10nText) -> some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(settings.t("engineUnavailable"))
+                        .font(PanelFont.emphasis())
+                    Text(settings.text(error))
+                        .font(PanelFont.mono(11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .help(settings.text(error))
+                }
+                Spacer(minLength: 0)
+            }
+            Button(settings.t("retry")) {
+                Task { await store.rescan() }
+            }
+            .controlSize(.small)
+            .disabled(store.isBusy)
+            .help(settings.t("rescanHelp"))
+            .accessibilityHint(settings.t("rescanHelp"))
+            .accessibilityIdentifier("overview.retry")
+        }
+        .padding(PanelStyle.Space.m)
+        .panelCard(PanelStyle.rowFill)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("overview.engineError")
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
-            HStack(spacing: 5) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.accentColor)
-                Text(settings.t("reclaimableMetric").uppercased())
+        HStack(alignment: .top, spacing: PanelStyle.Space.l) {
+            VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.accentColor)
+                    Text(settings.t("reclaimableMetric").uppercased())
+                        .font(PanelFont.caption)
+                        .tracking(0.8)
+                        .foregroundStyle(.secondary)
+                }
+                Text(store.report == nil ? "—" : ByteFormat.string(UInt64(shownReclaimable)))
+                    .font(PanelFont.hero)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(heroHint)
                     .font(PanelFont.caption)
-                    .tracking(0.8)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let apply = store.lastApply {
+                    Text(settings.t("resultSummary", [
+                        "freed": ByteFormat.string(apply.freed),
+                        "elapsed": Duration.milliseconds(apply.elapsedMs),
+                        "free": ByteFormat.string(apply.freeAfter),
+                    ]))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Text(store.report == nil ? "—" : ByteFormat.string(UInt64(shownReclaimable)))
-                .font(PanelFont.hero)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(store.report == nil ? settings.t("overviewNoScan") : settings.t("reclaimableHelp"))
-                .font(PanelFont.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
+            .accessibilityIdentifier("overview.hero")
+
+            VStack(alignment: .trailing, spacing: PanelStyle.Space.s) {
+                PanelStat(label: settings.t("reclaimable"), value: selectedValue)
+                    .help(selectedHelp)
+                    .accessibilityIdentifier("overview.selected")
+                PanelStat(label: settings.t("freeNow"), value: freeValue)
+                    .help(settings.t("freeNowHelp"))
+                    .accessibilityIdentifier("overview.freeSpace")
+            }
+            .frame(width: 190, alignment: .trailing)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
-        .accessibilityIdentifier("overview.hero")
     }
 
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
+
+    private var selectedValue: String {
+        store.selectedBytes > 0 ? ByteFormat.string(store.selectedBytes) : "—"
+    }
+
+    private var selectedHelp: String {
+        store.selectedFindings.isEmpty
+            ? settings.t("selectedNone")
+            : settings.t("itemMany", ["n": "\(store.selectedFindings.count)"])
+    }
+
+    private var freeValue: String {
+        let free = store.report?.freeBefore ?? store.diskSpace?.available
+        return free.map(ByteFormat.string) ?? "—"
+    }
+
+    private var heroHint: String {
+        if store.report != nil { return settings.t("reclaimableHelp") }
+        return store.engineError == nil ? settings.t("overviewNoScan") : settings.t("engineUnavailable")
+    }
 
     private func countUp(to target: Double) async {
         guard !reduceMotion, target > 0, shownReclaimable < target else {
@@ -82,48 +167,15 @@ struct OverviewView: View {
         }
     }
 
-    private var freeSpace: some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-            PanelStatStrip(stats: freeStats)
-            if let apply = store.lastApply {
-                Text(settings.t("resultSummary", [
-                    "freed": ByteFormat.string(apply.freed),
-                    "elapsed": Duration.milliseconds(apply.elapsedMs),
-                    "free": ByteFormat.string(apply.freeAfter),
-                ]))
-                .font(PanelFont.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityIdentifier("overview.freeSpace")
-    }
-
-    private var freeStats: [(label: String, value: String)] {
-        let free = store.report?.freeBefore ?? store.diskSpace?.available
-        var stats: [(label: String, value: String)] = []
-        if let free {
-            stats.append((label: settings.t("freeNow"), value: ByteFormat.string(free)))
-        }
-        if let apply = store.lastApply {
-            stats.append((label: settings.t("freed"), value: ByteFormat.string(apply.freed)))
-        }
-        return stats
-    }
-
-    private func tiers(_ report: ScanReport) -> some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-            Text(settings.t("tiers"))
-                .panelSectionHeader()
+    private func tierStrip(_ report: ScanReport) -> some View {
+        HStack(spacing: PanelStyle.Space.s) {
             ForEach(TierTab.allCases) { tab in
-                tierRow(tab, report: report)
+                tierCard(tab, report: report)
             }
         }
-        .padding(PanelStyle.Space.m)
-        .panelCard()
     }
 
-    private func tierRow(_ tab: TierTab, report: ScanReport) -> some View {
+    private func tierCard(_ tab: TierTab, report: ScanReport) -> some View {
         let items = tab.findings(in: report)
         let bytes = items.reduce(0) { $0 + $1.bytes }
         let title = settings.tabTitle(tab)
@@ -131,25 +183,27 @@ struct OverviewView: View {
             store.tierTab = tab
             router.select(.cleanup)
         } label: {
-            HStack(spacing: PanelStyle.Space.s) {
-                Image(systemName: tab.symbolName)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(tab.tint)
-                    .frame(width: 14)
-                Text(title)
-                    .font(PanelFont.emphasis())
-                Spacer(minLength: PanelStyle.Space.s)
-                Text(settings.t("itemMany", ["n": "\(items.count)"]))
-                    .font(PanelFont.number())
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 5) {
+                    Image(systemName: tab.symbolName)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(tab.tint)
+                    Text(title)
+                        .font(PanelFont.emphasis())
+                    Spacer(minLength: 0)
+                }
                 Text(ByteFormat.string(bytes))
                     .font(PanelFont.number(.semibold))
-                    .frame(minWidth: PanelStyle.byteColumnWidth, alignment: .trailing)
+                    .foregroundStyle(bytes == 0 ? Color.secondary : Color.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(PanelStyle.Space.m)
+            .panelCard(PanelStyle.rowFill)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"])) · \(ByteFormat.string(bytes))")
         .accessibilityIdentifier("overview.tier.\(tab.rawValue)")
     }
@@ -179,6 +233,57 @@ struct OverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("overview.blocked")
+    }
+
+    private func topFindings(_ report: ScanReport) -> some View {
+        let items = Array(report.deletable.sorted { $0.bytes > $1.bytes }.prefix(5))
+        return VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            Text(settings.t("findings"))
+                .panelSectionHeader()
+            ForEach(items) { finding in
+                topFindingRow(finding)
+            }
+        }
+        .padding(PanelStyle.Space.m)
+        .panelCard()
+        .accessibilityIdentifier("overview.findings")
+    }
+
+    private func topFindingRow(_ finding: Finding) -> some View {
+        Button {
+            store.tierTab = tierTab(for: finding.effectiveTier)
+            router.select(.cleanup)
+        } label: {
+            HStack(spacing: PanelStyle.Space.s) {
+                TierBadge(tier: finding.effectiveTier, compact: true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(finding.ruleId)
+                        .font(PanelFont.emphasis())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(finding.path)
+                        .font(PanelFont.mono(10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: PanelStyle.Space.s)
+                Text(ByteFormat.string(finding.bytes))
+                    .font(PanelFont.number(.semibold))
+                    .frame(width: PanelStyle.byteColumnWidth, alignment: .trailing)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("overview.finding.\(finding.ruleId)")
+    }
+
+    private func tierTab(for tier: Tier) -> TierTab {
+        switch tier {
+        case .green: .safe
+        case .yellow: .review
+        case .red, .blocked: .locked
+        }
     }
 
     private var moduleLines: some View {
@@ -249,39 +354,56 @@ struct OverviewView: View {
         HStack {
             Spacer(minLength: 0)
             if store.report == nil {
+                if store.engineError == nil {
+                    Button {
+                        Task { await store.rescan() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if store.isBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.7)
+                            }
+                            Text(store.isBusy ? settings.t("scanningShort") : settings.t("scanNow"))
+                        }
+                        .frame(minWidth: 190)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(store.isBusy)
+                    .help(settings.t("rescanHelp"))
+                    .accessibilityIdentifier("overview.scan")
+                }
+            } else if store.selectedFindings.isEmpty {
                 Button {
-                    Task { await store.rescan() }
+                    router.select(.cleanup)
                 } label: {
-                    Text(settings.t("scanNow"))
+                    Text(settings.t("menuPickToClean"))
                         .frame(minWidth: 190)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(isScanning)
-                .help(settings.t("rescanHelp"))
-                .accessibilityIdentifier("overview.scan")
+                .help(settings.t("menuPickToClean"))
+                .accessibilityIdentifier("overview.pick")
             } else {
                 Button {
                     router.select(.cleanup)
                     store.showingConfirmation = true
                 } label: {
-                    Text(store.selectedFindings.isEmpty
-                         ? settings.t("selectedNone")
-                         : settings.t("overviewReview", [
-                             "n": "\(store.selectedFindings.count)",
-                             "size": ByteFormat.string(store.selectedBytes),
-                         ]))
+                    Text(settings.t("reviewAndDelete"))
                         .frame(minWidth: 190)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(!store.canClean)
                 .help(settings.t("reviewAndDeleteHelp"))
+                .accessibilityLabel(settings.t("overviewReview", [
+                    "n": "\(store.selectedFindings.count)",
+                    "size": ByteFormat.string(store.selectedBytes),
+                ]))
                 .accessibilityIdentifier("overview.review")
             }
         }
         .accessibilityIdentifier("overview.cta")
     }
-
-    private var isScanning: Bool { store.isBusy }
 }

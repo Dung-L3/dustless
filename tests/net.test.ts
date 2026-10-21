@@ -507,6 +507,25 @@ describe("netPrivilege", () => {
     expect(netPrivilege("mac", netPrivilegeSteps(MAC_INFO)).rule).not.toMatch(/[*?[\]\\]/);
   });
 
+  test("a service name holding a shell metacharacter or a command separator is refused", () => {
+    for (const service of [
+      "Wi-Fi;rm",
+      "Wi-Fi|cat",
+      "Wi-Fi&",
+      "Wi-Fi$HOME",
+      "Wi-Fi`id`",
+      "Wi-Fi>out",
+      "Wi-Fi<input",
+      "Wi-Fi(1)",
+      "Wi-Fi{1}",
+      "Wi-Fi!",
+      "Wi-Fi'x'",
+      "Wi-Fi,rm",
+    ]) {
+      expect(() => netPrivilege("mac", netPrivilegeSteps({ ...MAC_INFO, service }))).toThrow();
+    }
+  });
+
   test("an account name that could inject a second rule is refused", () => {
     for (const user of ["", "ALL", "a b", "a,b", "mac ALL=(root) NOPASSWD: /bin/sh"]) {
       expect(() => netPrivilege(user, netPrivilegeSteps(MAC_INFO))).toThrow();

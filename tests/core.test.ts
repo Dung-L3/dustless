@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile }
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
+import { SCHEMA_VERSION } from "../src/types.ts";
 import { HOME, isRed } from "../src/core/paths.ts";
 import { loadRules, userRulesPath } from "../src/core/rules.ts";
 import { freeSpace } from "../src/core/space.ts";
@@ -32,10 +33,11 @@ const finding = (path: string, bytes = 1024): Finding => ({
   ageDays: 999,
   verified: true,
   blocked: false,
-  note: "",
+  note: [],
 });
 
 const report = (findings: Finding[], freeBefore = 0): ScanReport => ({
+  schemaVersion: SCHEMA_VERSION,
   findings,
   totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
   reclaimable: 0,
@@ -43,7 +45,7 @@ const report = (findings: Finding[], freeBefore = 0): ScanReport => ({
   platform: "mac",
   scannedMs: 0,
   unscannable: [],
-  unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0 },
+  unscannableSummary: { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0, protected: 0 },
 });
 
 afterAll(async () => {
@@ -195,7 +197,8 @@ describe("scan", () => {
     expect(hit?.bytes).toBe(4096 + 10 + 1000);
     expect(hit?.tier).toBe("yellow");
     expect(hit?.ageDays).toBeLessThan(1);
-    expect(hit?.note).toMatch(/mới 0\.\d ngày/);
+    expect(hit?.note?.[0]?.code).toBe("min_age");
+    expect(hit?.note?.[0]?.params?.["age"]).toMatch(/^0\.\d$/);
     expect(hit?.verified).toBe(true);
     expect(report.totals.yellow.bytes).toBeGreaterThan(0);
   });
@@ -206,7 +209,7 @@ describe("scan", () => {
     expect(aged?.ageDays).toBeGreaterThan(85);
     expect(aged?.ageDays).toBeLessThan(95);
     expect(aged?.tier).toBe("green");
-    expect(aged?.note).toBe("");
+    expect(aged?.note).toEqual([]);
   });
 
   test("never emits a red path", async () => {
@@ -255,8 +258,10 @@ describe("apply", () => {
     const targets = [join(sandbox, "Documents", "notes"), homeLink, parentLink, rootLink, allowed];
     const result = await apply(report(targets.map((path) => finding(path))), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(result.outcomes.map((o) => o.status)).toEqual(["failed", "failed", "failed", "failed", "deleted"]);
-    expect(result.outcomes[0]?.detail).toMatch(/danh sách đỏ/);
-    for (const index of [1, 2, 3]) expect(result.outcomes[index]?.detail).toMatch(/HOME/);
+    expect(result.outcomes[0]?.detail?.code).toBe("red_list");
+    expect(result.outcomes[1]?.detail?.code).toBe("protected");
+    expect(result.outcomes[2]?.detail?.code).toBe("protected");
+    expect(result.outcomes[3]?.detail?.code).toBe("protected");
     expect(await exists(allowed)).toBe(false);
     expect(await exists(HOME)).toBe(true);
     expect(await exists(homeLink)).toBe(true);
@@ -271,12 +276,12 @@ describe("apply", () => {
 
     const quiet = await apply(report([yellow]), { tiers: { "test.cache": "yellow" } });
     expect(quiet.outcomes[0]?.status).toBe("skipped");
-    expect(quiet.outcomes[0]?.detail).toMatch(/cần xác nhận/);
+    expect(quiet.outcomes[0]?.detail?.code).toBe("needs_confirmation");
     expect(await exists(victim)).toBe(true);
 
     const declined = await apply(report([yellow]), { tiers: { "test.cache": "yellow" }, onPrompt: async () => false });
     expect(declined.outcomes[0]?.status).toBe("skipped");
-    expect(declined.outcomes[0]?.detail).toMatch(/từ chối/);
+    expect(declined.outcomes[0]?.detail?.code).toBe("declined");
     expect(await exists(victim)).toBe(true);
 
     const accepted = await apply(report([yellow]), { tiers: { "test.cache": "yellow" }, onPrompt: async () => true });
@@ -290,7 +295,7 @@ describe("apply", () => {
     const yellow: Finding = { ...finding(victim), tier: "yellow" };
     const result = await apply(report([yellow]), { tiers: { "test.cache": "green" } });
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/cần xác nhận/);
+    expect(result.outcomes[0]?.detail?.code).toBe("needs_confirmation");
     expect(await exists(victim)).toBe(true);
   });
 
@@ -298,7 +303,7 @@ describe("apply", () => {
     const ghost = join(sandbox, "vanished");
     const result = await apply(report([finding(ghost)]), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/không còn tồn tại/);
+    expect(result.outcomes[0]?.detail?.code).toBe("missing");
   });
 
   test.skipIf(process.platform === "win32")("declared and native busy processes both skip the finding", async () => {
@@ -333,7 +338,6 @@ describe("apply", () => {
         { assumeYes: true, tiers: { "test.busy": "green", "test.native": "green", "test.win": "green" } },
       );
       expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped", "skipped"]);
-      for (const outcome of result.outcomes) expect(outcome.detail).toMatch(/đang chạy/);
       expect(await exists(busyVictim)).toBe(true);
       expect(await exists(nativeVictim)).toBe(true);
       expect(await exists(winVictim)).toBe(true);
@@ -364,7 +368,8 @@ describe("apply", () => {
         tiers: { "test.fallback": "green" },
       });
       expect(result.outcomes[0]?.status).toBe("skipped");
-      expect(result.outcomes[0]?.detail).toBe("uv đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng");
+      expect(result.outcomes[0]?.detail?.code).toBe("busy_process");
+      expect(result.outcomes[0]?.detail?.params?.["names"]).toBe("uv");
       expect(await exists(victim)).toBe(true);
     } finally {
       if (priorPath === undefined) delete process.env["PATH"];
@@ -405,8 +410,8 @@ describe("apply", () => {
         { assumeYes: true, tiers: { "test.unknown": "green", "test.unknownnative": "green", "test.unknownfree": "green" } },
       );
       expect(result.outcomes.map((o) => o.status)).toEqual(["skipped", "skipped", "deleted"]);
-      expect(result.outcomes[0]?.detail).toMatch(/không liệt kê được/);
-      expect(result.outcomes[1]?.detail).toMatch(/không liệt kê được/);
+    expect(result.outcomes[0]?.detail?.code).toBe("listing_unavailable");
+    expect(result.outcomes[1]?.detail?.code).toBe("listing_unavailable");
       expect(await exists(victim)).toBe(true);
       expect(await exists(nativeVictim)).toBe(true);
       expect(await exists(freeVictim)).toBe(false);
@@ -423,7 +428,7 @@ describe("apply", () => {
     await mkdir(victim, { recursive: true });
     const result = await apply(report([{ ...finding(victim), ruleId: "constructor" }]), { assumeYes: true, tiers: {} });
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/không được yêu cầu/);
+    expect(result.outcomes[0]?.detail?.code).toBe("not_selected");
     expect(await exists(victim)).toBe(true);
   });
 
@@ -450,14 +455,14 @@ describe("verification block", () => {
       tier: "yellow" as const,
       verified: false,
       blocked: true,
-      note: "KHÔNG XÓA: project /x/android uses Gradle 8.14",
+      note: [{ code: "verify_failed" as const, params: { cause: "gradle_used" } }],
     };
     const result = await apply(report([blocked]), {
       assumeYes: true,
       tiers: { "test.cache": "yellow" },
     });
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(result.outcomes[0]?.detail?.code).toBe("verify_failed");
     expect(await exists(victim)).toBe(true);
   });
 });
@@ -476,7 +481,7 @@ describe("an explicit selection", () => {
       only: new Set([resolve(picked)]),
     });
     expect(result.outcomes.map((o) => o.status)).toEqual(["deleted", "skipped"]);
-    expect(result.outcomes[1]?.detail).toMatch(/chọn/);
+    expect(result.outcomes[1]?.detail?.code).toBe("not_selected");
     expect(await exists(picked)).toBe(false);
     expect(await exists(left)).toBe(true);
   });
@@ -509,12 +514,12 @@ describe("an explicit selection", () => {
     const result = await apply(
       report([
         finding(red),
-        { ...finding(blocked), tier: "yellow", blocked: true, verified: false, note: "KHÔNG XÓA: in use" },
+        { ...finding(blocked), tier: "yellow", blocked: true, verified: false, note: [{ code: "verify_failed" as const, params: { cause: "unknown" } }] },
       ]),
       { assumeYes: true, tiers: { "test.cache": "green", "test.yellow": "yellow" }, only: new Set([resolve(red), resolve(blocked)]) },
     );
     expect(result.outcomes.map((o) => o.status)).toEqual(["failed", "skipped"]);
-    expect(result.outcomes[1]?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(result.outcomes[1]?.detail?.code).toBe("verify_failed");
     expect(await exists(red)).toBe(true);
     expect(await exists(blocked)).toBe(true);
   });

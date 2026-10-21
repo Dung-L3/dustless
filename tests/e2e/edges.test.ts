@@ -172,7 +172,8 @@ describe.skipIf(process.platform === "win32")("a read-only cache directory", () 
     expect(run.code).toBe(1);
     const outcome = applyJson(run.stdout).outcomes[0];
     expect(outcome?.status).toBe("failed");
-    expect(outcome?.detail).toMatch(/EACCES|EPERM|ENOTEMPTY/);
+    expect(outcome?.detail?.code).toBe("io_error");
+    expect(outcome?.detail?.params?.["code"]).toMatch(/EACCES|EPERM|ENOTEMPTY/);
     expect(await treeBytes(locked())).toBe(512 * 1024);
   });
 

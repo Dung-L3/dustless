@@ -134,6 +134,6 @@ describe("dependency tree liveness", () => {
     };
     const verdict = await verify(rule, deps);
     expect(verdict.ok).toBe(false);
-    expect(verdict.note).toContain("stale");
+    expect(verdict.cause).toBe("node_stale");
   });
 });

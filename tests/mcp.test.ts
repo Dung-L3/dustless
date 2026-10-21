@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApplyReport, Finding, Rule, ScanReport } from "../src/types.ts";
+import { SCHEMA_VERSION } from "../src/types.ts";
 import { encode, guardStdout, handleRpc, PROTOCOL_VERSION, SERVER_INFO } from "../src/mcp/server.ts";
 import { createTools, type Core, type Tool } from "../src/mcp/tools.ts";
 import { AgentRefusal, assertAgentCanDelete, assertPathDeletable, assertWithinAgentCap, MAX_AGENT_DELETE_BYTES } from "../src/mcp/safety.ts";
@@ -21,12 +22,13 @@ const RULES: Rule[] = [
 function finding(over: Partial<Finding> = {}): Finding {
   return {
     ruleId: "npm.cacache", tier: "green", desc: "npm cache tarball", path: CACHE,
-    bytes: 2 * GIB, mtime: 0, atime: 0, ageDays: 40, verified: true, blocked: false, note: "", ...over,
+    bytes: 2 * GIB, mtime: 0, atime: 0, ageDays: 40, verified: true, blocked: false, note: [], ...over,
   };
 }
 
 function reportOf(findings: Finding[]): ScanReport {
   return {
+    schemaVersion: SCHEMA_VERSION,
     findings,
     totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
     reclaimable: 0, freeBefore: 100 * GIB, platform: "mac", scannedMs: 1,
@@ -45,12 +47,13 @@ function fakeCore(over: Partial<Core> = {}): Core & { deleted: string[][] } {
     apply: async (report, opts): Promise<ApplyReport> => {
       deleted.push(report.findings.map((f) => f.path));
       return {
+        schemaVersion: SCHEMA_VERSION,
         outcomes: report.findings.map((f) => ({
           ruleId: f.ruleId, tier: f.tier, path: f.path,
           status: opts?.tiers?.[f.ruleId] === "skip" ? "skipped" : "deleted",
-          bytes: f.bytes, detail: "",
+          bytes: f.bytes, detail: null,
         })),
-        freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+        deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
       };
     },
     ...over,
@@ -168,8 +171,8 @@ describe("scan options", () => {
 
 describe("apply safety", () => {
   test("blocked findings are counted as blocked, not reclaimable", async () => {
-    const blockedYellow = finding({ ruleId: "gradle.version_cache", tier: "yellow", blocked: true, bytes: GIB, note: "in use" });
-    const blockedGreen = finding({ ruleId: "gradle.version_cache", tier: "green", blocked: true, bytes: GIB / 2, note: "in use" });
+    const blockedYellow = finding({ ruleId: "gradle.version_cache", tier: "yellow", blocked: true, bytes: GIB, note: [{ code: "verify_failed" as const, params: { cause: "unknown" } }] });
+    const blockedGreen = finding({ ruleId: "gradle.version_cache", tier: "green", blocked: true, bytes: GIB / 2, note: [{ code: "verify_failed" as const, params: { cause: "unknown" } }] });
     const tools = createTools(fakeCore({ scan: async () => reportOf([finding(), blockedYellow, blockedGreen]) }));
     const reply = await rpc(tools, {
       jsonrpc: "2.0", id: 99, method: "tools/call", params: { name: "scan", arguments: {} },
@@ -218,7 +221,7 @@ describe("apply safety", () => {
   });
 
   test("a yellow finding is refused unless tier yellow is requested", async () => {
-    const core = fakeCore({ scan: async () => reportOf([finding({ tier: "yellow", note: "project còn thay đổi chưa commit" })]) });
+    const core = fakeCore({ scan: async () => reportOf([finding({ tier: "yellow", note: [{ code: "verify_failed" as const, params: { cause: "git_dirty" } }] })]) });
     const tools = createTools(core);
     const denied = await applyCall(tools, 12, { rule_ids: ["npm.cacache"], confirm: true });
     expect(denied.result?.isError).toBe(true);
@@ -236,8 +239,9 @@ describe("apply safety", () => {
       apply: async (report, opts) => {
         seen.push(opts?.tiers);
         return {
-          outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: "" })),
-          freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+          schemaVersion: SCHEMA_VERSION,
+          outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: null })),
+          deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
         };
       },
     });
@@ -253,8 +257,9 @@ describe("apply safety", () => {
       apply: async (report, opts) => {
         seen.push(opts?.tiers);
         return {
-          outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: "" })),
-          freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+          schemaVersion: SCHEMA_VERSION,
+          outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: null })),
+          deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
         };
       },
     });

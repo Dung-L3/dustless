@@ -30,6 +30,9 @@ struct DetailView: View {
                     staleBanner(settings.text(error))
                         .transition(.opacity)
                 }
+                UnscannableNotice(report: report, showsDetail: true, identifier: "cleanup.unscannable")
+                    .padding(.horizontal, PanelStyle.Space.l)
+                    .padding(.top, PanelStyle.Space.s)
                 tierContent(report)
             } else if let error = store.engineError {
                 EngineErrorView(
@@ -39,13 +42,17 @@ struct DetailView: View {
                     Task { await store.rescan() }
                 }
             } else {
-                EmptyStateView(isBusy: store.isBusy) {
+                EmptyStateView(isBusy: store.isBusy, scanLabel: scanLabel) {
                     Task { await store.rescan() }
                 }
             }
         }
         .animation(reduceMotion ? nil : .snappy(duration: PanelMotion.banner), value: store.busyMessage)
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.engineError == nil)
+    }
+
+    private var scanLabel: String {
+        store.report == nil ? settings.t("scanNow") : settings.t("rescan")
     }
 
     private func staleBanner(_ text: String) -> some View {
@@ -95,7 +102,7 @@ struct DetailView: View {
             .padding(.vertical, PanelStyle.Space.s)
 
             if allItems.isEmpty {
-                TierEmptyView(tab: store.tierTab, isBusy: store.isBusy) {
+                TierEmptyView(tab: store.tierTab, isBusy: store.isBusy, scanLabel: scanLabel) {
                     Task { await store.rescan() }
                 }
             } else if filteredItems.isEmpty && !store.findingsQuery.isEmpty {
@@ -105,7 +112,7 @@ struct DetailView: View {
                     if store.tierTab == .locked {
                         lockedSection(filteredItems)
                     } else {
-                        deletableSection(filteredItems)
+                        deletableSection(filteredItems, tierTotal: allItems.count)
                     }
                 }
                 .listStyle(.inset)
@@ -138,7 +145,7 @@ struct DetailView: View {
         }
     }
 
-    private func deletableSection(_ items: [Finding]) -> some View {
+    private func deletableSection(_ items: [Finding], tierTotal: Int) -> some View {
         Section {
             ForEach(items) { finding in
                 FindingRow(
@@ -150,8 +157,8 @@ struct DetailView: View {
             }
         } header: {
             HStack {
-                Text(settings.t("willDelete"))
-                Text(settings.t("itemMany", ["n": "\(items.count)"]))
+                Text(settings.tabTitle(store.tierTab))
+                Text(sectionCount(shown: items.count, total: tierTotal))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
@@ -163,6 +170,11 @@ struct DetailView: View {
             }
             .font(PanelFont.caption)
         }
+    }
+
+    private func sectionCount(shown: Int, total: Int) -> String {
+        guard shown != total else { return settings.t("itemMany", ["n": "\(total)"]) }
+        return settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
     }
 
     private func lockedSection(_ items: [Finding]) -> some View {
@@ -199,6 +211,11 @@ struct DetailView: View {
                      : settings.t("selectedNone"))
                     .font(PanelFont.emphasis())
                     .accessibilityIdentifier("cleanup.selected")
+                if store.selectedBytes > 0 {
+                    Text(settings.t("willDelete"))
+                        .font(PanelFont.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if store.selectedLockedCount > 0 {
                     Text(settings.t("lockedExcluded", ["n": "\(store.selectedLockedCount)"]))
                         .font(PanelFont.caption)
@@ -212,6 +229,7 @@ struct DetailView: View {
                 .disabled(!store.canClean)
                 .keyboardShortcut(.return, modifiers: .command)
                 .help(settings.t("reviewAndDeleteHelp"))
+                .accessibilityHint(settings.t("safetyReadOnly"))
                 .accessibilityIdentifier("cleanup.review")
         }
         .padding(.horizontal, PanelStyle.Space.l)
@@ -224,6 +242,7 @@ struct DetailView: View {
 struct TierEmptyView: View {
     let tab: TierTab
     let isBusy: Bool
+    let scanLabel: String
     let onScan: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -238,13 +257,13 @@ struct TierEmptyView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
-            Button(settings.t("rescan"), action: onScan)
+            Button(scanLabel, action: onScan)
                 .controlSize(.large)
                 .disabled(isBusy)
                 .accessibilityIdentifier("cleanup.empty.scan")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("cleanup.empty")
     }
 }
@@ -271,6 +290,7 @@ struct NoMatchesView: View {
 
 struct EmptyStateView: View {
     let isBusy: Bool
+    let scanLabel: String
     let onScan: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -285,12 +305,13 @@ struct EmptyStateView: View {
             Text(settings.t("emptyStateBody"))
                 .font(PanelFont.body)
                 .foregroundStyle(.secondary)
-            Button(settings.t("rescan"), action: onScan)
+            Button(scanLabel, action: onScan)
                 .controlSize(.large)
                 .disabled(isBusy)
                 .accessibilityIdentifier("cleanup.emptyState.scan")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -308,13 +329,7 @@ struct EngineErrorView: View {
                 .foregroundStyle(.orange)
             Text(settings.t("engineUnavailable"))
                 .font(PanelFont.emphasis(.semibold))
-            Text(message)
-                .font(PanelFont.mono(11))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 520)
+            errorMessage
             Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
                 .disabled(isBusy)
@@ -325,5 +340,19 @@ struct EngineErrorView: View {
         }
         .padding(30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var errorMessage: some View {
+        ScrollView {
+            Text(message)
+                .font(PanelFont.mono(11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 520)
+                .help(message)
+        }
+        .frame(maxWidth: 520, maxHeight: 220)
     }
 }

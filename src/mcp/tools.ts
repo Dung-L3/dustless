@@ -1,7 +1,9 @@
 import { statfs } from "node:fs/promises";
 import { homedir, release, version } from "node:os";
 import { exists, HOME } from "../core/paths.ts";
+import { describeReason } from "../core/messages.ts";
 import { userRulesPath } from "../core/rules.ts";
+import { accountedBytes, isNested } from "../core/space.ts";
 import type { ApplyReport, Finding, Rule, ScanReport, Tier, TierChoice, TierStat } from "../types.ts";
 import {
   AgentRefusal, assertAgentCanDelete, assertNoUnknownRules, assertNotBlocked,
@@ -120,7 +122,20 @@ function tally(seed: Totals, findings: Finding[]): Totals {
     const key = finding.blocked ? "blocked" : finding.tier;
     const bucket = (totals[key] ??= { count: 0, bytes: 0 });
     bucket.count += 1;
-    bucket.bytes += finding.bytes;
+    if (key === "blocked" || key === "red") bucket.bytes += finding.bytes;
+  }
+  const claimed: string[] = [];
+  const counted = new Set<string>();
+  for (const finding of [...findings]
+    .filter((entry) => !entry.blocked && (entry.tier === "green" || entry.tier === "yellow"))
+    .sort((a, b) => a.path.length - b.path.length)) {
+    if (claimed.some((parent) => isNested(finding.path, parent))) continue;
+    claimed.push(finding.path);
+    counted.add(finding.path);
+  }
+  for (const finding of findings) {
+    const key = finding.blocked ? "blocked" : finding.tier;
+    if (key !== "blocked" && key !== "red" && counted.has(finding.path)) totals[key].bytes += finding.bytes;
   }
   return totals;
 }
@@ -138,7 +153,11 @@ async function scanTool(core: Core, args: Record<string, unknown>): Promise<Tool
   }
   const summaries = summarize(findings);
   const totals = tally(report.totals, findings);
-  const reclaimable = sumOf(findings.filter((finding) => !finding.blocked && (finding.tier === "green" || finding.tier === "yellow")));
+  const reclaimable = accountedBytes(
+    findings
+      .filter((finding) => !finding.blocked && (finding.tier === "green" || finding.tier === "yellow"))
+      .map((finding) => ({ path: finding.path, bytes: finding.bytes })),
+  );
   const body = [
     `Dustless scan - ${report.platform}, ${report.scannedMs}ms, ${findings.length} of ${report.findings.length} findings. Nothing was deleted.`,
     table(["rule_id", "tier", "items", "size", "path"], summaries.map(summaryRow)),
@@ -169,7 +188,7 @@ async function applyTool(core: Core, args: Record<string, unknown>): Promise<Too
   collect(problems, "size cap", () => assertWithinAgentCap(selected, allowLarge));
   collect(problems, "confirmation", () => assertAgentCanDelete(ruleIds, confirm));
   if (!selected.length) problems.push("targets: no requested rule id matched anything. Call scan and use ids from its result.");
-  const bytes = sumOf(selected);
+  const bytes = accountedBytes(selected.map((finding) => ({ path: finding.path, bytes: finding.bytes })));
   const plan = {
     requested: ruleIds, tier, permitted_tiers: PERMITTED_TIERS[tier], confirm, allow_large: allowLarge, total_bytes: bytes,
     would_delete: selected.map((finding) => ({
@@ -194,16 +213,23 @@ async function applyTool(core: Core, args: Record<string, unknown>): Promise<Too
   const result = await core.apply({ ...report, findings: selected }, { tiers, assumeYes: true });
   const notDeleted = result.outcomes.filter((outcome) => outcome.status !== "deleted");
   const body = [
-    `Deleted ${result.outcomes.length - notDeleted.length} of ${result.outcomes.length} finding(s). Freed ${formatBytes(result.freed)} in ${result.elapsedMs}ms.`,
+    `Deleted ${result.outcomes.length - notDeleted.length} of ${result.outcomes.length} finding(s) (${formatBytes(result.deletedBytes)}). ` +
+      `Freed ${formatBytes(result.freed)} of volume space in ${result.elapsedMs}ms.`,
     table(["rule_id", "tier", "status", "bytes", "path", "detail"], result.outcomes.map((outcome) => [
-      outcome.ruleId, outcome.tier, outcome.status, formatBytes(outcome.bytes), displayPath(outcome.path), outcome.detail || "-",
+      outcome.ruleId, outcome.tier, outcome.status, formatBytes(outcome.bytes), displayPath(outcome.path),
+      outcome.detail ? describeReason(outcome.detail) : "-",
     ])),
     notDeleted.length ? `${notDeleted.length} finding(s) were NOT deleted - see the detail column.` : "All requested findings were deleted.",
   ].join("\n\n");
   return ok(body, {
     freed: result.freed, free_before: result.freeBefore, free_after: result.freeAfter, elapsed_ms: result.elapsedMs,
     deleted: result.outcomes.filter((outcome) => outcome.status === "deleted").map((outcome) => ({ rule_id: outcome.ruleId, path: outcome.path, bytes: outcome.bytes })),
-    not_deleted: notDeleted.map((outcome) => ({ rule_id: outcome.ruleId, path: outcome.path, status: outcome.status, detail: outcome.detail })),
+    not_deleted: notDeleted.map((outcome) => ({
+      rule_id: outcome.ruleId,
+      path: outcome.path,
+      status: outcome.status,
+      detail: outcome.detail ? describeReason(outcome.detail) : "",
+    })),
   });}
 
 async function listRulesTool(core: Core, args: Record<string, unknown>): Promise<ToolResult> {

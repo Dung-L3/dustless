@@ -49,6 +49,10 @@ final class AwdlControl: ObservableObject {
         }
         do {
             let privilege = try await DustlessCLI.resolve().awdlPrivilege()
+            guard Self.isExpectedRule(privilege) else {
+                error = L10nText("awdlInstallFailed")
+                return false
+            }
             let staging = FileManager.default.temporaryDirectory
                 .appendingPathComponent("dustless-awdl-\(UUID().uuidString)")
             try privilege.rule.write(to: staging, atomically: true, encoding: .utf8)
@@ -87,6 +91,18 @@ final class AwdlControl: ObservableObject {
     private static let installTool = "/usr/bin/install"
     private static let visudoTool = "/usr/sbin/visudo"
     private static let rmTool = "/bin/rm"
+    private static let expectedCommands = ["/sbin/ifconfig awdl0 down", "/sbin/ifconfig awdl0 up"]
+
+    private static func isExpectedRule(_ privilege: AwdlPrivilege) -> Bool {
+        guard privilege.path == privilegePath else { return false }
+        guard privilege.allowed == expectedCommands else { return false }
+        let user = privilege.user
+        guard !user.isEmpty else { return false }
+        guard user.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }) else {
+            return false
+        }
+        return privilege.rule == "\(user) ALL=(root) NOPASSWD: \(privilege.allowed.joined(separator: ", "))\n"
+    }
 
     private func runAdmin(_ shell: String) async throws {
         let literal = shell

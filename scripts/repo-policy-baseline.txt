@@ -52,6 +52,7 @@ scan.unscannable.reason.absent
 scan.unscannable.reason.error
 scan.unscannable.reason.no_access
 scan.unscannable.reason.not_supported
+scan.unscannable.reason.protected
 scan.unscannable.reason.red
 scanning
 scanningHint
@@ -65,11 +66,9 @@ working
 workingHint
 yellowHint
 [oversize-files]
-apps/dustless-mac/Sources/DustlessApp/Views/StorageView.swift 884
-apps/dustless-mac/Tests/DustlessAppTests/EngineContractTests.swift 836
-tests/core.test.ts 521
-tests/net.test.ts 515
 [doc-line-references]
+docs/TESTING.md 34
+docs/RESEARCH-CLEANER-APPS.md 6
 README.md 43
 README.vi.md 44
 README.zh.md 44

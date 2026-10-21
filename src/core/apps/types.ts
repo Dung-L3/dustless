@@ -1,3 +1,5 @@
+import type { Reason } from "../../types.ts";
+
 export type AppInfo = {
   bundleId: string;
   name: string;
@@ -26,7 +28,7 @@ export type UninstallOutcome = {
   path: string;
   status: "trashed" | "purged" | "skipped" | "failed";
   bytes: number;
-  detail: string;
+  detail: Reason | null;
 };
 
 export type UninstallReport = {

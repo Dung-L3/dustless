@@ -64,6 +64,38 @@ struct UnscannableTextTests {
         let zh = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
         #expect(zh.reasonLabels == ["红名单"])
     }
+
+    @Test func protectedResolvesToLocalizedLabel() throws {
+        let summary = UnscannableSummary(absent: 0, noAccess: 0, notSupported: 0, error: 0, red: 0, protected: 2)
+        let report = try makeReport(summary: summary)
+        let en = try #require(UnscannableText.bannerParts(report: report, lang: .en))
+        #expect(en.reasonLabels == ["outside the delete scope"])
+        let vi = try #require(UnscannableText.bannerParts(report: report, lang: .vi))
+        #expect(vi.reasonLabels == ["ngoài phạm vi xóa"])
+        let zh = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
+        #expect(zh.reasonLabels == ["超出删除范围"])
+    }
+
+    @Test func aReportCarryingTheProtectedReasonDecodes() throws {
+        let json = Data(#"""
+        {"absent":0,"no_access":0,"not_supported":0,"error":0,"red":0,"protected":1}
+        """#.utf8)
+        let summary = try JSONDecoder().decode(UnscannableSummary.self, from: json)
+        #expect(summary.protected == 1)
+        #expect(summary.total == 1)
+        #expect(UnscannableText.reasonsPresent(in: summary) == [.protected])
+        let reason = try JSONDecoder().decode(UnscannableReason.self, from: Data(#""protected""#.utf8))
+        #expect(reason == .protected)
+    }
+
+    @Test func aReportWithoutTheProtectedCountStillDecodes() throws {
+        let json = Data(#"""
+        {"absent":1,"no_access":0,"not_supported":0,"error":0,"red":0}
+        """#.utf8)
+        let summary = try JSONDecoder().decode(UnscannableSummary.self, from: json)
+        #expect(summary.protected == 0)
+        #expect(summary.total == 1)
+    }
 }
 
 private func makeReport(summary: UnscannableSummary) throws -> ScanReport {

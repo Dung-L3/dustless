@@ -4,8 +4,11 @@ import { createInterface } from "node:readline/promises";
 import { apply } from "../core/apply.ts";
 import { writeOut } from "../core/output.ts";
 import { scan } from "../core/scan.ts";
+import { adjustScanAccounting } from "../core/space.ts";
 import type { ApplyReport, Finding, ScanReport, TierChoice } from "../types.ts";
+import { SCHEMA_VERSION } from "../types.ts";
 import { HUE, ICON, bold, bytesOf, dim, flag, paint, required, say, tierBadge } from "./context.ts";
+import { describeReason } from "../core/messages.ts";
 
 async function printScan(report: ScanReport): Promise<void> {
   if (flag("json")) {
@@ -20,7 +23,7 @@ async function printScan(report: ScanReport): Promise<void> {
   for (const f of report.findings) {
     say(`${tierBadge(f.tier)} ${bytesOf(f.bytes).padStart(9)}  ${f.ageDays.toFixed(0)}d  ${f.ruleId}`);
     say(`    ${dim(f.path)}`);
-    if (f.note) say(`    ${paint(HUE[f.tier], f.note)}`);
+    for (const note of f.note) say(`    ${paint(HUE[f.tier], describeReason(note))}`);
   }
   const { green, yellow } = report.totals;
   say(
@@ -37,13 +40,16 @@ async function printApply(result: ApplyReport): Promise<void> {
   for (const o of result.outcomes) {
     const mark = o.status === "deleted" ? paint("32", "✔") : o.status === "failed" ? paint("31", "✖") : paint("33", "–");
     say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${dim(o.ruleId)}  ${o.path}`);
-    if (o.detail) say(`  ${dim(o.detail)}`);
+    if (o.detail) say(`  ${dim(describeReason(o.detail))}`);
   }
-  say(`\n${bold(`Đã thu hồi ${bytesOf(result.freed)}`)}`);
+  say(`\n${bold(`Đã xóa ${bytesOf(result.deletedBytes)}`)}`);
+  say(dim(`Dung lượng trống của volume tăng ${bytesOf(result.freed)}`));
 }
 
 const idleApply = (): ApplyReport => ({
+  schemaVersion: SCHEMA_VERSION,
   outcomes: [],
+  deletedBytes: 0,
   freed: 0,
   freeBefore: 0,
   freeAfter: 0,
@@ -51,7 +57,7 @@ const idleApply = (): ApplyReport => ({
 });
 
 export async function runScan(): Promise<number> {
-  await printScan(await scan());
+  await printScan(adjustScanAccounting(await scan()));
   return 0;
 }
 
@@ -72,7 +78,7 @@ async function readSelection(): Promise<Set<string> | undefined> {
 
 export async function runApply(): Promise<number> {
   const only = await readSelection();
-  const report = await scan();
+  const report = adjustScanAccounting(await scan());
   if (!flag("json")) await printScan(report);
   const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
   if (deletable.length === 0) {

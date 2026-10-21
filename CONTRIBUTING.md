@@ -38,13 +38,13 @@ Cụ thể:
 
 - Xóa cache của tool version → phải quét chéo project thật
 - Xóa `node_modules` → phải kiểm tra git có thay đổi chưa commit không
-- Xóa thư mục dữ liệu người dùng → **không viết rule cho nó**. Đó là job của danh sách đỏ ở `src/core/paths.ts:81`, không phải của rule database
+- Xóa thư mục dữ liệu người dùng → **không viết rule cho nó**. Đó là job của danh sách đỏ ở `src/core/paths.ts`, không phải của rule database
 
-Cái điểm mấu chốt: `requireVerify` trượt thì finding đó bị gắn cờ `blocked` và không bao giờ bị xóa, kể cả dưới `--yes` (`src/core/scan.ts:76`, `src/core/apply.ts:60`). Một rule `green` không có `requireVerify` sẽ xóa thẳng — đó là trường hợp nguy hiểm nhất trong toàn bộ hệ thống, hãy viết kiểm chứng.
+Cái điểm mấu chốt: `requireVerify` trượt thì finding đó bị gắn cờ `blocked` và không bao giờ bị xóa, kể cả dưới `--yes` (`src/core/scan.ts`, `src/core/apply.ts`). Một rule `green` không có `requireVerify` sẽ xóa thẳng — đó là trường hợp nguy hiểm nhất trong toàn bộ hệ thống, hãy viết kiểm chứng.
 
 ## Bối cảnh bắt buộc
 
-Mọi rule phải khai báo `paths`, và key chỉ được là `mac`, `win`, `linux` hoặc `all` (`src/core/rules.ts:7`). Bộ nạp sẽ **từ chối** file nếu thiếu `id`, thiếu `desc`, thiếu `paths`, có key platform lạ, có value rỗng, hoặc đặt `tier` ngoài `green|yellow` (`src/core/rules.ts:53`). Nó **không** đòi bạn phải phủ cả ba nền tảng: một rule chỉ có `mac` vẫn hợp lệ, và chỉ chạy trên nền tảng đó.
+Mọi rule phải khai báo `paths`, và key chỉ được là `mac`, `win`, `linux` hoặc `all` (`src/core/rules.ts`). Bộ nạp sẽ **từ chối** file nếu thiếu `id`, thiếu `desc`, thiếu `paths`, có key platform lạ, có value rỗng, hoặc đặt `tier` ngoài `green|yellow` (`src/core/rules.ts`). Nó **không** đòi bạn phải phủ cả ba nền tảng: một rule chỉ có `mac` vẫn hợp lệ, và chỉ chạy trên nền tảng đó.
 
 Nếu một rule chỉ nên chạy ở một OS, hãy nói rõ bằng cách chỉ liệt kê key của OS đó — đừng viết path của OS khác rồi hy vọng nó không tồn tại.
 

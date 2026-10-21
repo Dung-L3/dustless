@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   AWDL_INTERFACE,
   AWDL_PRIVILEGE_PATH,
@@ -168,6 +170,141 @@ describe("awdlPrivilege", () => {
     expect(AWDL_PRIVILEGE_PATH.split("/").pop()).not.toContain(".");
   });
 });
+
+const RULE = "mac ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up\n";
+
+const HOSTILE_IFCONFIGS = [
+  "/tmp/evil\nmac ALL=(root) NOPASSWD: /bin/sh\n#",
+  "/sbin/ifconfig\nmac ALL=(root) NOPASSWD: /bin/sh",
+  "/sbin/ifconfig\r",
+  "/sbin/ifconfig\0",
+  "/sbin/ifconfig awdl0 down",
+  "/sbin/ifconfig\tawdl0",
+  "/sbin/ifconfig;rm -rf /",
+  "/sbin/ifconfig|id",
+  "/sbin/ifconfig&",
+  "/sbin/ifconfig$HOME",
+  "/sbin/ifconfig>out",
+  "/sbin/ifconfig<input",
+  "/sbin/ifconfig(x)",
+  "/sbin/ifconfig{x}",
+  "/sbin/ifconfig[0]",
+  "/sbin/ifconfig*",
+  "/sbin/ifconfig?",
+  "/sbin/ifconfig!",
+  "/sbin/ifconfig#x",
+  "/sbin/ifconfig\\x",
+  "/sbin/ifconfig'x'",
+  '/sbin/ifconfig"x"',
+  "/sbin/ifconfig`x`",
+  "ifconfig",
+  "./ifconfig",
+  "../sbin/ifconfig",
+  "/usr/sbin/ifconfig",
+  "/sbin/ifconfig/",
+  "/tmp/evil",
+];
+
+describe("the AWDL rule accepts one executable and refuses the rest", () => {
+  test("every hostile path is refused instead of being written into the rule", () => {
+    for (const value of HOSTILE_IFCONFIGS) {
+      expect(() => awdlPrivilege("mac", value)).toThrow();
+    }
+  });
+
+  test("the allowlisted system executable is accepted and produces the exact rule", () => {
+    expect(awdlPrivilege("mac").rule).toBe(RULE);
+    expect(awdlPrivilege("mac", "/sbin/ifconfig").rule).toBe(RULE);
+    expect(awdlPrivilege("mac").allowed).toEqual([
+      "/sbin/ifconfig awdl0 down",
+      "/sbin/ifconfig awdl0 up",
+    ]);
+    expect(awdlPrivilege("mac").path).toBe(AWDL_PRIVILEGE_PATH);
+  });
+
+  test("the rule holds no character outside the allowlist and is a single line", () => {
+    const rule = awdlPrivilege("mac").rule;
+    expect(rule).toBe(RULE);
+    expect(rule.slice(0, -1)).toMatch(/^[A-Za-z0-9 ._:=(),/-]+$/);
+    expect(rule.split("\n")).toEqual([
+      "mac ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up",
+      "",
+    ]);
+    expect(rule).not.toContain("\r");
+  });
+
+  test("an account name that could inject a second rule is refused", () => {
+    for (const user of [
+      "",
+      "ALL",
+      "a b",
+      "mac ALL=(root) NOPASSWD: /bin/sh",
+      "mac\nroot ALL=(root) NOPASSWD: /bin/sh",
+    ]) {
+      expect(() => awdlPrivilege(user)).toThrow();
+    }
+  });
+});
+
+describe("the executable is never chosen from the environment", () => {
+  test("no engine source file names the removed override", async () => {
+    const root = join(import.meta.dir, "..", "src");
+    const files = await sourceFiles(root);
+    expect(files.length).toBeGreaterThan(10);
+    for (const file of files) {
+      expect(await readFile(file, "utf8")).not.toContain("DUSTLESS_IFCONFIG");
+    }
+  });
+
+  test("the executable the engine runs is the fixed system path", () => {
+    expect(IFCONFIG).toBe("/sbin/ifconfig");
+  });
+});
+
+describe("the injected executable is the one that runs", () => {
+  test("the toggle and the state read both use the injected path", async () => {
+    const { run, calls } = stub();
+    await setAwdl(false, {
+      run,
+      platform: "mac",
+      isRootUser: ROOT,
+      ifconfig: "/tmp/fake-ifconfig",
+    });
+    expect(calls[0]).toEqual({ cmd: "/tmp/fake-ifconfig", args: [AWDL_INTERFACE, "down"] });
+    expect(calls[1]).toEqual({ cmd: "/tmp/fake-ifconfig", args: [AWDL_INTERFACE] });
+  });
+
+  test("without an injection the fixed system path runs", async () => {
+    const { run, calls } = stub();
+    await setAwdl(false, { run, platform: "mac", isRootUser: ROOT });
+    expect(calls[0]).toEqual({ cmd: IFCONFIG, args: [AWDL_INTERFACE, "down"] });
+    expect(calls[1]).toEqual({ cmd: IFCONFIG, args: [AWDL_INTERFACE] });
+  });
+
+  test("the escalation names the injected path too", async () => {
+    const { run, calls } = stub();
+    await setAwdl(true, {
+      run,
+      platform: "mac",
+      isRootUser: USER,
+      ifconfig: "/tmp/fake-ifconfig",
+    });
+    expect(calls[0]).toEqual({
+      cmd: "sudo",
+      args: ["-n", "/tmp/fake-ifconfig", AWDL_INTERFACE, "up"],
+    });
+  });
+});
+
+async function sourceFiles(dir: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...(await sourceFiles(full)));
+    else if (entry.name.endsWith(".ts")) found.push(full);
+  }
+  return found;
+}
 
 describe("validSudoersUser", () => {
   test("accepts ordinary account names", () => {

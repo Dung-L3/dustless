@@ -39,7 +39,7 @@ struct ConfirmDeleteSheet: View {
                                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                                         Image(systemName: "info.circle")
                                             .font(.system(size: 9))
-                                        Text(finding.note)
+                                        Text(ReasonText.text(finding.note, lang: settings.language))
                                             .fixedSize(horizontal: false, vertical: true)
                                             .lineLimit(nil)
                                     }
@@ -103,19 +103,47 @@ struct ConfirmDeleteSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("confirm.cancel")
                 Spacer()
-                Button(role: .destructive, action: onConfirm) {
+                DestructiveButton(
+                    help: settings.t("confirmSheetBody", ["n": "\(findings.count)"]),
+                    hint: settings.t("confirmSheetBody", ["n": "\(findings.count)"]),
+                    action: onConfirm
+                ) {
                     Text(settings.t("deleteItemsButton", [
                         "n": "\(findings.count)",
                         "size": ByteFormat.string(totalBytes),
                     ]))
                     .frame(minWidth: 190)
                 }
-                .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("confirm.delete")
             }
+
+            safetyPromises
         }
         .padding(PanelStyle.Space.l)
         .background(.ultraThinMaterial)
+    }
+
+    private var safetyPromises: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            promise("safetyReadOnly")
+            promise("safetyRed")
+            promise("safetyMeasured")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func promise(_ key: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark.shield")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            Text(settings.t(key))
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -159,11 +187,20 @@ struct CleanupResultCard: View {
     private var headline: some View {
         HStack(alignment: .firstTextBaseline, spacing: PanelStyle.Space.l) {
             VStack(alignment: .leading, spacing: 2) {
+                Text(settings.t("deleted"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                Text(ByteFormat.string(report.deletedBytes))
+                    .font(PanelFont.hero)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            VStack(alignment: .leading, spacing: 2) {
                 Text(settings.t("freed"))
                     .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
                 Text(ByteFormat.string(report.freed))
-                    .font(PanelFont.hero)
+                    .font(PanelFont.number())
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -182,11 +219,13 @@ struct CleanupResultCard: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(settings.t("resultSummary", [
-            "freed": ByteFormat.string(report.freed),
-            "elapsed": Duration.milliseconds(report.elapsedMs),
-            "free": ByteFormat.string(report.freeAfter),
-        ]))
+        .accessibilityLabel(
+            settings.t("resultSummary", [
+                "freed": ByteFormat.string(report.freed),
+                "elapsed": Duration.milliseconds(report.elapsedMs),
+                "free": ByteFormat.string(report.freeAfter),
+            ]) + " · " + settings.t("deleted") + " " + ByteFormat.string(report.deletedBytes)
+        )
     }
 
     private var counts: some View {
@@ -234,8 +273,8 @@ struct CleanupResultCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .multilineTextAlignment(.leading)
-                if !outcome.detail.isEmpty {
-                    Text(outcome.detail)
+                if let detail = outcome.detail {
+                    Text(ReasonText.text(detail, lang: settings.language))
                         .font(PanelFont.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)

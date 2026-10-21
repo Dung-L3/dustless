@@ -265,19 +265,18 @@ describe("A. --only-file fuzz properties", () => {
         `- id: test.cache\n  tier: green\n  desc: planted\n  paths: { all: [${JSON.stringify(join(box.home, ".npm", "_cacache"))}] }\n- id: test.home\n  tier: green\n  desc: planted\n  paths: { all: ["~"] }\n`,
       );
       const scan = scanJson((await box.run(["scan", "--json"])).stdout);
-      expect(scan.findings.some((f) => f.ruleId === "test.home")).toBe(true);
+      expect(scan.findings.some((f) => f.ruleId === "test.home")).toBe(false);
+      expect(scan.unscannable.find((r) => r.ruleId === "test.home")?.reason).toBe("protected");
       expect(scan.findings.some((f) => resolve(f.path) === resolve(join(box.home, ".npm", "_cacache")))).toBe(true);
       const file = join(box.home, "selection-refusal.json");
       await writeFile(file, JSON.stringify([box.home]));
       const run = await box.run(["apply", "--yes", "--json", "--only-file", file]);
-      expect(run.code).toBe(1);
+      expect(run.code).toBe(0);
       const result = applyJson(run.stdout);
-      const homeOutcome = result.outcomes.find((o) => resolve(o.path) === resolve(box.home));
-      expect(homeOutcome).toBeDefined();
-      expect(homeOutcome?.status).toBe("failed");
-      expect(homeOutcome?.detail).toContain("từ chối");
-      expect(homeOutcome?.detail).toContain("HOME");
+      expect(result.outcomes.some((o) => resolve(o.path) === resolve(box.home))).toBe(false);
+      expect(result.outcomes.every((o) => o.status === "skipped")).toBe(true);
       expect(await treeBytes(join(box.home, ".npm", "_cacache"))).toBe(2 * MB);
+      expect(await Bun.$`test -d ${box.home}`.quiet().nothrow().then((r) => r.exitCode)).toBe(0);
     } finally {
       await box.dispose();
     }
@@ -303,7 +302,7 @@ describe("A. --only-file fuzz properties", () => {
 describe("B. uninstall bundle-id traversal fuzz", () => {
   type AppJson = { bundleId: string; name: string; path: string; bytes: number; relatedPaths: string[] };
   type UninstallJson = {
-    outcomes: { path: string; status: string; bytes: number; detail: string }[];
+    outcomes: { path: string; status: string; bytes: number; detail: { code: string } | null }[];
     summary: { trashed: number; purged: number; skipped: number; failed: number; totalBytes: number };
   };
 
@@ -420,7 +419,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
           expect(report.summary.purged).toBe(0);
           expect(report.summary.trashed).toBe(0);
           expect(report.summary.failed).toBeGreaterThanOrEqual(1);
-          expect(report.outcomes.some(o => o.status === "failed" && o.detail.includes("not a valid identifier"))).toBe(true);
+          expect(report.outcomes.some(o => o.status === "failed" && o.detail?.code === "bad_bundle_id")).toBe(true);
         }
       } else if (kind === "benign") {
         const apps = await appsViaCli();

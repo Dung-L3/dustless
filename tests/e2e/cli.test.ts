@@ -162,8 +162,8 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
     expect(hit?.blocked).toBe(true);
     expect(hit?.verified).toBe(false);
     expect(hit?.tier).toBe("yellow");
-    expect(hit?.note).toContain("KHÔNG XÓA");
-    expect(hit?.note).toContain("8.14");
+    expect(hit?.note?.[0]?.code).toBe("verify_failed");
+    expect(hit?.note?.[0]?.params?.["cause"]).toBe("gradle_used");
     expect(report.totals["blocked"]).toEqual({ count: 1, bytes: 2 * MB });
   });
 
@@ -171,7 +171,7 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.14"));
     expect(hit?.ageDays ?? 0).toBeGreaterThan(30);
-    expect(hit?.note).not.toContain("rule yêu cầu");
+    expect(hit?.note?.[0]?.code).not.toBe("min_age");
     expect(report.findings.find((f) => at(f.path, "/.gradle/caches/8.12"))?.tier).toBe("green");
   });
 
@@ -181,7 +181,7 @@ describe("4. cross-verification blocks a gradle cache a project still uses", () 
     expect(run.code).toBe(0);
     const result = applyJson(run.stdout);
     expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.status).toBe("skipped");
-    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.detail).toContain("KIỆM SOÁT CHẶN");
+    expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.14"))?.detail?.code).toBe("verify_failed");
     expect(await digest(used())).toBe(before);
     expect(await treeBytes(used())).toBe(2 * MB);
     expect(result.outcomes.find((o) => at(o.path, "/.gradle/caches/8.12"))?.status).toBe("deleted");
@@ -227,7 +227,7 @@ describe("5. vendored copies do not pin a gradle version", () => {
     const report = scanJson((await box.run(["scan", "--json"])).stdout);
     const hit = report.findings.find((f) => at(f.path, "/.gradle/caches/8.14"));
     expect(hit?.blocked).toBe(true);
-    expect(hit?.note).toContain("8.14");
+    expect(hit?.note?.[0]?.params?.["version"]).toBe("8.14");
   });
 
   test("apply --yes deletes only the genuinely unused cache", async () => {

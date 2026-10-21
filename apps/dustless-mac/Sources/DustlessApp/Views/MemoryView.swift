@@ -38,14 +38,21 @@ enum MemCategoryFilter: String, CaseIterable, Identifiable {
     }
 }
 
+struct PendingStop {
+    let pid: Int
+    let name: String
+    let force: Bool
+    let sigkill: Bool
+}
+
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var killResults: [Int: KillStatus] = [:]
+    @State private var pendingStop: PendingStop?
     @State private var isStopping = false
-    @State private var hoveredPID: Int?
     @State private var collapsed: Set<String>?
     @State private var query = ""
     @State private var category: MemCategoryFilter = .all
@@ -55,7 +62,7 @@ struct MemoryView: View {
     var body: some View {
         let report = store.memoryReport
         let matched = filteredGroups(report)
-        let groups = Array(matched.prefix(Self.groupLimit))
+        let groups = isFiltering ? matched : Array(matched.prefix(Self.groupLimit))
         PanelScaffold {
             header(report)
         } summary: {
@@ -65,6 +72,31 @@ struct MemoryView: View {
         } content: {
             processList(groups, summary: countSummary(groups: groups, matched: matched))
         }
+        .confirmationDialog(
+            settings.t("memoryStopConfirmTitle"),
+            isPresented: Binding(
+                get: { pendingStop != nil },
+                set: { if !$0 { pendingStop = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(settings.t("memoryStopConfirmAction"), role: .destructive) {
+                guard let pending = pendingStop else { return }
+                pendingStop = nil
+                killProcess(pid: pending.pid, force: pending.force, sigkill: pending.sigkill)
+            }
+            Button(settings.t("confirmCancel"), role: .cancel) {
+                pendingStop = nil
+            }
+        } message: {
+            Text(stopMessage)
+        }
+        .accessibilityIdentifier("memory.stop.confirm")
+    }
+
+    private var stopMessage: String {
+        guard let pending = pendingStop else { return "" }
+        return settings.t("memoryStopConfirmBody", ["name": pending.name, "pid": "\(pending.pid)"])
     }
 
     private func countSummary(groups: [ProcessGroup], matched: [ProcessGroup]) -> String? {
@@ -113,7 +145,6 @@ struct MemoryView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.small)
-                .accessibilityLabel(settings.t("filterCategory"))
             },
             trailing: { EmptyView() },
             searchIdentifier: "memory.search"
@@ -164,11 +195,11 @@ struct MemoryView: View {
             }
 
             if groups.isEmpty {
-                Text(isFiltering ? settings.t("noMatches") : settings.t("memoryNoProcesses"))
-                    .font(PanelFont.body)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 120)
-                    .accessibilityIdentifier("memory.empty")
+                PanelStateView(
+                    kind: .empty,
+                    message: isFiltering ? settings.t("noMatches") : settings.t("memoryNoProcesses"),
+                    identifier: "memory.empty"
+                )
             } else {
                 ScrollView {
                     LazyVStack(spacing: PanelStyle.Space.s) {
@@ -238,6 +269,11 @@ struct MemoryView: View {
                 .truncationMode(.middle)
                 .help(group.bundlePath ?? group.id)
 
+            StatusChip(
+                color: categoryColor(groupCategory(group)),
+                text: settings.t(categoryKey(groupCategory(group)))
+            )
+
             Spacer(minLength: PanelStyle.Space.s)
 
             Text(settings.t("memoryProcessCount", ["n": "\(group.count)"]))
@@ -256,6 +292,10 @@ struct MemoryView: View {
         .help(settings.t(isOpen ? "collapseGroup" : "expandGroup"))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("memory.group.\(group.id)")
+    }
+
+    private func groupCategory(_ group: ProcessGroup) -> MemCategory {
+        group.processes.first?.category ?? .other
     }
 
     @ViewBuilder
@@ -293,14 +333,9 @@ struct MemoryView: View {
                 .help(proc.command)
                 .accessibilityLabel(rowDescription(proc))
 
-            StatusChip(
-                color: categoryColor(proc.category),
-                text: settings.t(categoryKey(proc.category))
-            )
-
             Spacer(minLength: 6)
 
-            Text("\(proc.pid)")
+            Text(String(proc.pid))
                 .font(PanelFont.mono(12))
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)
@@ -339,24 +374,20 @@ struct MemoryView: View {
         if let status = killResults[proc.pid] {
             statusView(status, for: proc)
         } else {
-            let hovering = hoveredPID == proc.pid
-            Button(action: { killProcess(pid: proc.pid, force: false, sigkill: false) }) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(hovering ? Color.red : Color.secondary.opacity(0.8))
-                    .frame(width: 24, height: 20)
-                    .background(hovering ? Color.red.opacity(0.14) : .clear, in: .rect(cornerRadius: 5))
+            Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: false, sigkill: false) }) {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(DestructiveStyle.red)
+                    .frame(width: 22, height: 20)
+                    .background(DestructiveStyle.red.opacity(0.12), in: .rect(cornerRadius: 5))
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .onHover { hovering in
-                hoveredPID = hovering ? proc.pid : (hoveredPID == proc.pid ? nil : hoveredPID)
-            }
             .help(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityIdentifier("memory.stop.\(proc.pid)")
             .contextMenu {
-                Button(action: { killProcess(pid: proc.pid, force: true, sigkill: true) }) {
+                Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: true, sigkill: true) }) {
                     Label(
                         settings.t("memoryForceStopNamed", ["name": proc.name]),
                         systemImage: "exclamationmark.octagon.fill"

@@ -1,8 +1,9 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { realGuard, refusalText } from "../paths.ts";
+import { realGuard, refusalCode } from "../paths.ts";
 import { moveToTrash } from "../apps/index.ts";
+import type { Reason } from "../../types.ts";
 import type { UninstallOutcome, UninstallReport } from "../apps/types.ts";
 
 const MiB = 1024 * 1024;
@@ -92,32 +93,28 @@ export async function findLargeFiles(opts: FindLargeFilesOptions = {}): Promise<
 export async function deleteLargeFile(opts: DeleteLargeFileOptions): Promise<UninstallReport> {
   const target = resolve(opts.path);
   const roots = scannedRoots(opts.roots);
-  const refuse = (detail: string): UninstallReport => ({
+  const refuse = (detail: Reason): UninstallReport => ({
     outcomes: [{ path: opts.path, status: "failed", bytes: 0, detail }],
     summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
   });
 
   if (!roots.some((root) => target === root || target.startsWith(root + sep))) {
-    return refuse("outside the scanned roots");
+    return refuse({ code: "outside_roots" });
   }
   const guard = realGuard(target);
   if ("refused" in guard) {
-    return refuse(
-      guard.refused === "red"
-        ? `on the red list (mail, keychains, .git, Documents, …) — refusing to touch ${target}`
-        : `${refusalText(guard.refused)} — refusing to touch ${target}`,
-    );
+    return refuse({ code: refusalCode(guard.refused) });
   }
-  if (!opts.confirm) return refuse("confirm required");
+  if (!opts.confirm) return refuse({ code: "confirm_required" });
   const meta = await lstat(target).catch(() => null);
   if (!meta) {
     return {
-      outcomes: [{ path: opts.path, status: "skipped", bytes: 0, detail: "does not exist" }],
+      outcomes: [{ path: opts.path, status: "skipped", bytes: 0, detail: { code: "not_found" } }],
       summary: { trashed: 0, purged: 0, skipped: 1, failed: 0, totalBytes: 0 },
     };
   }
-  if (meta.isSymbolicLink()) return refuse("refusing symlink");
-  if (!meta.isFile()) return refuse("not a regular file");
+  if (meta.isSymbolicLink()) return refuse({ code: "symlink" });
+  if (!meta.isFile()) return refuse({ code: "not_a_regular_file" });
 
   const outcome: UninstallOutcome = { path: target, ...(await moveToTrash(target, opts.trashDir ?? join(homedir(), ".Trash"), { beforeDelete: opts.beforeDelete })) };
   const ok = outcome.status === "trashed";

@@ -117,12 +117,12 @@ export async function gradleVersionUnused(
   if (users.length > 0) {
     const shown = users.slice(0, MAX_LISTED).join(", ");
     const rest = users.length > MAX_LISTED ? ` (+${users.length - MAX_LISTED} more)` : "";
-    return { ok: false, note: `project ${shown}${rest} uses Gradle ${cacheVersion}` };
+    return { ok: false, cause: "gradle_used", params: { projects: shown + rest, version: cacheVersion } };
   }
 
   return {
     ok: true,
-    note: `no project references Gradle ${cacheVersion} (scanned ${projects.size} projects)`,
+    params: { version: cacheVersion, scanned: String(projects.size) },
   };
 }
 

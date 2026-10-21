@@ -34,7 +34,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
   | dustless mcp
 ```
 
-You should get back a single line of JSON with `serverInfo.name` of `dustless` and `serverInfo.version` from `package.json` (`SERVER_INFO`, `src/mcp/server.ts:12`), the same number `dustless version` prints.
+You should get back a single line of JSON with `serverInfo.name` of `dustless` and `serverInfo.version` from `package.json` (`SERVER_INFO`, `src/mcp/server.ts`), the same number `dustless version` prints.
 
 ## Client configuration
 

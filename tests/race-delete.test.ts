@@ -46,7 +46,7 @@ describe("delete race", () => {
       },
     });
     expect(result.status).toBe("failed");
-    expect(result.detail).toContain("danh sách đỏ");
+    expect(result.detail?.code).toBe("red_list");
     expect(await readFile(join(red, "keep.txt"), "utf8")).toBe("keep");
   });
 
@@ -61,7 +61,7 @@ describe("delete race", () => {
       },
     });
     expect(result.status).toBe("failed");
-    expect(result.detail).toContain("thay đổi");
+    expect(result.detail?.code).toBe("changed");
     expect(await readFile(join(other, "data.txt"), "utf8")).toBe("payload");
   });
 
@@ -75,7 +75,7 @@ describe("delete race", () => {
       },
     });
     expect(result.status).toBe("failed");
-    expect(result.detail).toContain("danh sách đỏ");
+    expect(result.detail?.code).toBe("red_list");
     expect(ran).toBe(false);
     expect(await readFile(join(src, "data.txt"), "utf8")).toBe("payload");
   });
@@ -87,7 +87,7 @@ describe("delete race", () => {
     await symlink(victim, link);
     const result = await moveToTrash(join(link, "data.txt"), join(root, "Trash"));
     expect(result.status).toBe("failed");
-    expect(result.detail).toContain("liên kết tượng trưng");
+    expect(result.detail?.code).toBe("symlink");
     expect(await readFile(join(victim, "data.txt"), "utf8")).toBe("payload");
   });
 

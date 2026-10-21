@@ -39,17 +39,104 @@ public enum DustlessError: LocalizedError {
     }
 }
 
+public struct EngineRun: Sendable {
+    public let data: Data
+    public let status: Int32
+    public let stderr: String
+
+    public init(data: Data, status: Int32, stderr: String) {
+        self.data = data
+        self.status = status
+        self.stderr = stderr
+    }
+}
+
+public protocol EngineLauncher: Sendable {
+    func launch(executable: URL, arguments: [String], timeout: Int) async throws -> EngineRun
+}
+
+public struct ProcessLauncher: EngineLauncher {
+    public init() {}
+
+    public func launch(executable tool: URL, arguments: [String], timeout: Int) async throws -> EngineRun {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<EngineRun, Error>) in
+            let running = RunningProcess()
+            let out = LockedBox(Data())
+            let err = LockedBox(Data())
+            let timedOut = LockedBox(false)
+            let queue = DispatchQueue(label: "dustless.engine", qos: .userInitiated)
+
+            queue.async {
+                let process = Process()
+                process.executableURL = tool
+                process.arguments = arguments
+                let outPipe = Pipe()
+                let errPipe = Pipe()
+                process.standardOutput = outPipe
+                process.standardError = errPipe
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: DustlessError.launchFailed(error.localizedDescription))
+                    return
+                }
+                running.attach(process)
+
+                let readers = DispatchGroup()
+                for (handle, sink) in [(outPipe.fileHandleForReading, out), (errPipe.fileHandleForReading, err)] {
+                    readers.enter()
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let data = handle.readDataToEndOfFile()
+                        sink.mutate { $0 = data }
+                        readers.leave()
+                    }
+                }
+
+                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeout)) {
+                    timedOut.mutate { $0 = true }
+                    running.cancel()
+                }
+
+                readers.wait()
+                process.waitUntilExit()
+                running.finish()
+
+                if timedOut.read() {
+                    continuation.resume(throwing: DustlessError.timedOut(timeout))
+                    return
+                }
+
+                continuation.resume(returning: EngineRun(
+                    data: out.read(),
+                    status: process.terminationStatus,
+                    stderr: String(data: err.read(), encoding: .utf8) ?? ""
+                ))
+            }
+        }
+    }
+}
+
 public struct DustlessCLI: Sendable {
     public let executable: URL
     public let timeout: Int
+    private let launcher: EngineLauncher
 
-    public init(executable: URL, timeout: Int = 900) {
+    public init(executable: URL, timeout: Int = 900, launcher: EngineLauncher = ProcessLauncher()) {
         self.executable = executable
         self.timeout = timeout
+        self.launcher = launcher
     }
 
     public static func resolve(timeout: Int = 900) throws -> DustlessCLI {
         DustlessCLI(executable: try BinaryLocator.locate(), timeout: timeout)
+    }
+
+    public static func resolve(
+        context: BinarySearchContext,
+        timeout: Int = 900,
+        launcher: EngineLauncher = ProcessLauncher()
+    ) throws -> DustlessCLI {
+        DustlessCLI(executable: try BinaryLocator.locate(in: context), timeout: timeout, launcher: launcher)
     }
 
     public func scan() async throws -> ScanReport {
@@ -140,7 +227,7 @@ public struct DustlessCLI: Sendable {
         try await decode(NetPrivilege.self, from: run(["net", "--print-privilege", "--json"]))
     }
 
-    private func runAsRoot(_ arguments: [String]) async throws -> RunResult {
+    private func runAsRoot(_ arguments: [String]) async throws -> EngineRun {
         let line = ([sh(executable.path)] + arguments).joined(separator: " ") + " || true"
         let literal = line
             .replacingOccurrences(of: "\\", with: "\\\\")
@@ -155,10 +242,21 @@ public struct DustlessCLI: Sendable {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, from result: RunResult) throws -> T {
+    private struct SchemaEnvelope: Decodable {
+        let schemaVersion: Int?
+    }
+
+    private func decode<T: Decodable>(_ type: T.Type, from result: EngineRun) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: result.data)
         } catch {
+            if let envelope = try? JSONDecoder().decode(SchemaEnvelope.self, from: result.data),
+               let version = envelope.schemaVersion,
+               !EngineContract.isSupported(version) {
+                throw DustlessError.unreadableOutput(
+                    "the engine speaks schema version \(version), this app understands \(EngineContract.currentSchemaVersion)"
+                )
+            }
             if result.status == 0 {
                 let reason = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 throw DustlessError.unreadableOutput(reason.isEmpty ? String(describing: error) : reason)
@@ -183,70 +281,11 @@ public struct DustlessCLI: Sendable {
         return message.isEmpty ? nil : message
     }
 
-    private struct RunResult: Sendable {
-        let data: Data
-        let status: Int32
-        let stderr: String
-    }
-
-    private func run(_ arguments: [String]) async throws -> RunResult {
+    private func run(_ arguments: [String]) async throws -> EngineRun {
         try await run(executable: executable, arguments)
     }
 
-    private func run(executable tool: URL, _ arguments: [String]) async throws -> RunResult {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<RunResult, Error>) in
-            let running = RunningProcess()
-            let out = LockedBox(Data())
-            let err = LockedBox(Data())
-            let timedOut = LockedBox(false)
-            let queue = DispatchQueue(label: "dustless.engine", qos: .userInitiated)
-
-            queue.async {
-                let process = Process()
-                process.executableURL = tool
-                process.arguments = arguments
-                let outPipe = Pipe()
-                let errPipe = Pipe()
-                process.standardOutput = outPipe
-                process.standardError = errPipe
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: DustlessError.launchFailed(error.localizedDescription))
-                    return
-                }
-                running.attach(process)
-
-                let readers = DispatchGroup()
-                for (handle, sink) in [(outPipe.fileHandleForReading, out), (errPipe.fileHandleForReading, err)] {
-                    readers.enter()
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let data = handle.readDataToEndOfFile()
-                        sink.mutate { $0 = data }
-                        readers.leave()
-                    }
-                }
-
-                DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeout)) {
-                    timedOut.mutate { $0 = true }
-                    running.cancel()
-                }
-
-                readers.wait()
-                process.waitUntilExit()
-                running.finish()
-
-                if timedOut.read() {
-                    continuation.resume(throwing: DustlessError.timedOut(timeout))
-                    return
-                }
-
-                continuation.resume(returning: RunResult(
-                    data: out.read(),
-                    status: process.terminationStatus,
-                    stderr: String(data: err.read(), encoding: .utf8) ?? ""
-                ))
-            }
-        }
+    private func run(executable tool: URL, _ arguments: [String]) async throws -> EngineRun {
+        try await launcher.launch(executable: tool, arguments: arguments, timeout: timeout)
     }
 }

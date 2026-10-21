@@ -1,12 +1,33 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
+import type { Reason } from "../../types.ts";
 import type { AppInfo, ListAppsOptions, UninstallOptions, UninstallOutcome, UninstallReport } from "./types.ts";
-import { realGuard, refusalText } from "../paths.ts";
+import { realGuard, refusalCode } from "../paths.ts";
 
 export type DeleteHook = { beforeDelete?: () => void | Promise<void> };
 
-const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
+export const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
+
+export function defaultAppDirs(home: string): string[] {
+  return DEFAULT_APP_DIRS.map((dir) => expandHome(dir, home));
+}
+
+export function scopedAppDirs(home: string, requested?: readonly string[]): string[] {
+  const defaults = defaultAppDirs(home);
+  if (!requested) return defaults;
+  const scoped: string[] = [];
+  for (const dir of requested) {
+    const expanded = resolve(expandHome(dir, home));
+    if (defaults.some((fallback) => isUnder(expanded, fallback))) scoped.push(expanded);
+  }
+  return scoped;
+}
+
+export function homeAppDirs(home: string): string[] {
+  const resolvedHome = resolve(home);
+  return defaultAppDirs(home).filter((dir) => isUnder(dir, resolvedHome));
+}
 
 const RELATIVE_LEFTOVER_PATHS = [
   "Library/Application Support/{id}",
@@ -184,7 +205,7 @@ function isDenied(path: string, home: string): boolean {
 
 export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   const home = opts.home ?? homedir();
-  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
+  const appDirs = scopedAppDirs(home, opts.appDirs);
   const results: AppInfo[] = [];
 
   for (const appDir of appDirs) {
@@ -221,18 +242,18 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function recheck(src: string, first: string, hook?: () => void | Promise<void>): Promise<string> {
+async function recheck(src: string, first: string, hook?: () => void | Promise<void>): Promise<Reason | null> {
   await hook?.();
   const again = realGuard(src);
-  if ("refused" in again) return refusalText(again.refused);
-  if (again.real !== first) return refusalText("changed");
-  return "";
+  if ("refused" in again) return { code: refusalCode(again.refused) };
+  if (again.real !== first) return { code: "changed" };
+  return null;
 }
 
-export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHook = {}): Promise<{ status: "trashed" | "failed"; bytes: number; detail: string }> {
+export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHook = {}): Promise<{ status: "trashed" | "failed"; bytes: number; detail: Reason | null }> {
   const source = resolve(src);
   const first = realGuard(source);
-  if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
+  if ("refused" in first) return { status: "failed", bytes: 0, detail: { code: refusalCode(first.refused) } };
   const bytes = await dirSize(source);
   const name = source.split(sep).filter(Boolean).pop() ?? "unknown";
   await mkdir(trashDir, { recursive: true });
@@ -246,24 +267,24 @@ export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHo
   if (race) return { status: "failed", bytes, detail: race };
   try {
     await rename(source, dest);
-    return { status: "trashed", bytes, detail: `moved to ${dest}` };
+    return { status: "trashed", bytes, detail: { code: "moved_to_trash", params: { path: dest } } };
   } catch (err) {
-    return { status: "failed", bytes, detail: String(err) };
+    return { status: "failed", bytes, detail: { code: "io_error", params: { code: "EUNKNOWN", message: String(err) } } };
   }
 }
 
-async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: string }> {
+async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: Reason | null }> {
   const source = resolve(src);
   const first = realGuard(source);
-  if ("refused" in first) return { status: "failed", bytes: 0, detail: refusalText(first.refused) };
+  if ("refused" in first) return { status: "failed", bytes: 0, detail: { code: refusalCode(first.refused) } };
   const bytes = await dirSize(source);
   const race = await recheck(source, first.real, hooks.beforeDelete);
   if (race) return { status: "failed", bytes, detail: race };
   try {
     await rm(source, { recursive: true, force: true });
-    return { status: "purged", bytes, detail: "permanently deleted" };
+    return { status: "purged", bytes, detail: { code: "purged" } };
   } catch (err) {
-    return { status: "failed", bytes, detail: String(err) };
+    return { status: "failed", bytes, detail: { code: "io_error", params: { code: "EUNKNOWN", message: String(err) } } };
   }
 }
 
@@ -271,7 +292,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   const { home, appPath, relatedPaths, confirm, purge = false, trashDir } = opts;
 
   if (!confirm) {
-    const failedOutcome = (p: string) => ({ path: p, status: "failed" as const, bytes: 0, detail: "confirm required" });
+    const failedOutcome = (p: string) => ({ path: p, status: "failed" as const, bytes: 0, detail: { code: "confirm_required" as const } });
     return {
       outcomes: [
         failedOutcome(appPath),
@@ -282,32 +303,32 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   }
 
   const resolvedAppPath = resolve(appPath);
-  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
+  const appDirs = scopedAppDirs(home, opts.appDirs);
 
   if (!resolvedAppPath.endsWith(".app" + sep) && !resolvedAppPath.endsWith(".app")) {
     return {
-      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "not a .app bundle" }],
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "not_an_app" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
 
   if (isSystemApp(resolvedAppPath)) {
     return {
-      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "system app refused" }],
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "system_app" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
 
   if (!isAllowedAppDir(resolvedAppPath, appDirs, home)) {
     return {
-      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "app not in allowed app directories" }],
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "not_allowed_dir" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
 
   if (isDenied(resolvedAppPath, home)) {
     return {
-      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "denied path" }],
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "denied_path" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
@@ -315,14 +336,14 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   const bundleInfo = await readBundleInfo(resolvedAppPath);
   if (!bundleInfo) {
     return {
-      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: "could not read bundle ID" }],
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "no_bundle_id" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }
   if (!isSafeBundleId(bundleInfo.bundleId)) {
     return {
       outcomes: [
-        { path: appPath, status: "failed", bytes: 0, detail: `bundle id "${bundleInfo.bundleId}" is not a valid identifier` },
+        { path: appPath, status: "failed", bytes: 0, detail: { code: "bad_bundle_id", params: { id: bundleInfo.bundleId } } },
       ],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
@@ -335,13 +356,13 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   for (const p of resolvedRelatedPaths) {
     if (!isUnder(p, home) || resolve(p) === resolve(home)) {
       return {
-        outcomes: [{ path: p, status: "failed", bytes: 0, detail: "leftover path escapes HOME" }],
+        outcomes: [{ path: p, status: "failed", bytes: 0, detail: { code: "leftover_escapes_home" } }],
         summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
       };
     }
     if (!expectedRelatedPaths.has(p)) {
       return {
-        outcomes: [{ path: p, status: "failed", bytes: 0, detail: "not a valid leftover path for this app" }],
+        outcomes: [{ path: p, status: "failed", bytes: 0, detail: { code: "not_a_leftover" } }],
         summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
       };
     }
@@ -353,7 +374,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
 
   for (const p of allPaths) {
     if (!(await exists(p))) {
-      outcomes.push({ path: p, status: "skipped", bytes: 0, detail: "does not exist" });
+      outcomes.push({ path: p, status: "skipped", bytes: 0, detail: { code: "not_found" } });
       continue;
     }
 
