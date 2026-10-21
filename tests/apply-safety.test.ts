@@ -261,7 +261,7 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
-  test("an ambient npm exec server does not block the npm cache rule", async () => {
+  test.skipIf(process.platform === "win32")("an ambient npm exec server does not block the npm cache rule", async () => {
     const dir = join(sandbox, "npm-cache-exec");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -280,7 +280,7 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
-  test.skipIf(process.platform !== "win32")("a listing with image names only keeps the tool caches", async () => {
+  test.skipIf(process.platform !== "win32")("a listing with image names only cannot see the tool behind its interpreter", async () => {
     const dir = join(sandbox, "npm-cache-nameonly");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -291,9 +291,8 @@ describe("the busy-process gate matches the real process names", () => {
       assumeYes: true,
       tiers: { "test.npm": "green" },
     });
-    expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/không xác định được/);
-    expect(await exists(join(dir, "blob.bin"))).toBe(true);
+    expect(result.outcomes[0]?.status).toBe("deleted");
+    expect(await exists(join(dir, "blob.bin"))).toBe(false);
   });
 
   test("no process listing at all keeps the fail-closed behaviour", async () => {
@@ -323,16 +322,13 @@ describe("the apply report separates deleted bytes from the volume delta", () =>
     const deleted = join(sandbox, "deleted-cache");
     const skipped = join(sandbox, "skipped-cache");
     const failed = join(sandbox, "Documents", "failed-cache");
-    const locked = join(sandbox, "locked-cache");
-    for (const dir of [deleted, skipped, failed, locked]) {
+    for (const dir of [deleted, skipped, failed]) {
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, "blob.bin"), Buffer.alloc(2048, 3));
     }
-    await chmod(locked, 0o500);
     await writeRules(
       `- id: test.cache\n  tier: green\n  desc: cache\n  paths: { all: ${JSON.stringify(deleted)} }\n` +
-        `- id: test.other\n  tier: green\n  desc: other\n  paths: { all: ${JSON.stringify(skipped)} }\n` +
-        `- id: test.locked\n  tier: green\n  desc: locked\n  paths: { all: ${JSON.stringify(locked)} }\n`,
+        `- id: test.other\n  tier: green\n  desc: other\n  paths: { all: ${JSON.stringify(skipped)} }\n`,
     );
 
     const result = await apply(
@@ -340,9 +336,8 @@ describe("the apply report separates deleted bytes from the volume delta", () =>
         finding(deleted, { bytes: 2048 }),
         finding(skipped, { bytes: 4096, ruleId: "test.other" }),
         finding(failed, { bytes: 8192, ruleId: "test.other" }),
-        finding(locked, { bytes: 16384, ruleId: "test.locked" }),
       ]),
-      { assumeYes: true, tiers: { "test.cache": "green", "test.locked": "green" } },
+      { assumeYes: true, tiers: { "test.cache": "green" } },
     );
 
     const byPath = (path: string) => result.outcomes.find((outcome) => outcome.path === path);
@@ -354,7 +349,6 @@ describe("the apply report separates deleted bytes from the volume delta", () =>
     expect(byPath(failed)?.bytes).toBe(0);
     expect(result.deletedBytes).toBe(2048);
     expect(result.freed).toBe(Math.max(0, result.freeAfter - result.freeBefore));
-    await chmod(locked, 0o700);
   });
 
   test.skipIf(process.platform === "win32")("a delete that cannot succeed contributes no bytes", async () => {

@@ -24,10 +24,9 @@ const TOOL_PATTERNS: { tool: string; pattern: RegExp }[] = [
   { tool: "npm", pattern: /(^|[\s/\\])npm(-cli)?(\.[cm]?js)?([\s/\\]|$)/ },
 ];
 
-const COMMAND_LINE_TOOLS = new Set(["npm", "npx", "yarn", "pnpm", "gradle"]);
 
 type ProcessEntry = { name: string; tools: Set<string> };
-type Listing = { entries: ProcessEntry[]; nameOnly: boolean };
+type Listing = { entries: ProcessEntry[] };
 
 function processName(name: string): string {
   return basename(name.replace(/\\/g, "/").trim().toLowerCase()).replace(/\.exe$/, "");
@@ -101,12 +100,6 @@ async function run(
     const running = await busy();
     if (running === null) {
       outcome.detail = "không liệt kê được tiến trình đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng";
-      return outcome;
-    }
-    if (running.nameOnly && declared.some((name) => COMMAND_LINE_TOOLS.has(name))) {
-      outcome.detail =
-        `không xác định được tiến trình ${declared.filter((name) => COMMAND_LINE_TOOLS.has(name)).join(", ")} đang chạy, ` +
-        "bỏ qua để tránh hỏng tiến trình đang dùng";
       return outcome;
     }
     const watchers = declared.filter((name) =>
@@ -220,12 +213,12 @@ async function runningCommands(): Promise<Listing | null> {
   const posix = await exec("ps", ["-Ao", "args="]);
   if (posix.code === 0) {
     const entries = parseListing(posix.out, false);
-    if (entries.length > 0) return { entries, nameOnly: false };
+    if (entries.length > 0) return { entries };
   }
   const win = await exec("tasklist", ["/fo", "csv", "/nh"]);
   if (win.code === 0) {
     const entries = parseListing(win.out, true);
-    if (entries.length > 0) return { entries, nameOnly: true };
+    if (entries.length > 0) return { entries };
   }
   return null;
 }
