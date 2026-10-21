@@ -99,6 +99,14 @@ struct EngineContractTests {
         #expect(report.elapsedMs >= 0)
     }
 
+    @Test func theApplyPayloadSeparatesDeletedBytesFromTheVolumeDelta() throws {
+        let report = try JSONDecoder().decode(ApplyReport.self, from: fixture("apply.json"))
+        let deletedBytes = report.outcomes.filter { $0.status == .deleted }.reduce(UInt64(0)) { $0 + $1.bytes }
+        #expect(report.deletedBytes == deletedBytes)
+        #expect(report.freed == report.volumeDelta)
+        #expect(report.outcomes.filter { $0.status != .deleted }.allSatisfy { $0.bytes == 0 })
+    }
+
     @Test func decodesRealRamPayload() throws {
         let report = try JSONDecoder().decode(MemoryReport.self, from: fixture("ram.json"))
         #expect(report.memory.total > 0)
@@ -615,7 +623,7 @@ struct EngineProcessContractTests {
         try String(contentsOf: capture.appendingPathComponent(name), encoding: .utf8)
     }
 
-    private let applyReport = #"{"outcomes":[],"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
+    private let applyReport = #"{"outcomes":[],"deletedBytes":0,"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
 
     @Test func theCleanCarriesExactlyTheSelectedPaths() async throws {
         let capture = try captureDir()

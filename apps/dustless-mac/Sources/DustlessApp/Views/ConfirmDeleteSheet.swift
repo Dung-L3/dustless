@@ -159,11 +159,20 @@ struct CleanupResultCard: View {
     private var headline: some View {
         HStack(alignment: .firstTextBaseline, spacing: PanelStyle.Space.l) {
             VStack(alignment: .leading, spacing: 2) {
+                Text(settings.t("deleted"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                Text(ByteFormat.string(report.deletedBytes))
+                    .font(PanelFont.hero)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            VStack(alignment: .leading, spacing: 2) {
                 Text(settings.t("freed"))
                     .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
                 Text(ByteFormat.string(report.freed))
-                    .font(PanelFont.hero)
+                    .font(PanelFont.number())
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -182,11 +191,13 @@ struct CleanupResultCard: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(settings.t("resultSummary", [
-            "freed": ByteFormat.string(report.freed),
-            "elapsed": Duration.milliseconds(report.elapsedMs),
-            "free": ByteFormat.string(report.freeAfter),
-        ]))
+        .accessibilityLabel(
+            settings.t("resultSummary", [
+                "freed": ByteFormat.string(report.freed),
+                "elapsed": Duration.milliseconds(report.elapsedMs),
+                "free": ByteFormat.string(report.freeAfter),
+            ]) + " · " + settings.t("deleted") + " " + ByteFormat.string(report.deletedBytes)
+        )
     }
 
     private var counts: some View {

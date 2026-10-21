@@ -6,7 +6,27 @@ import { realGuard, refusalText } from "../paths.ts";
 
 export type DeleteHook = { beforeDelete?: () => void | Promise<void> };
 
-const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
+export const DEFAULT_APP_DIRS = ["/Applications", "~/Applications"];
+
+export function defaultAppDirs(home: string): string[] {
+  return DEFAULT_APP_DIRS.map((dir) => expandHome(dir, home));
+}
+
+export function scopedAppDirs(home: string, requested?: readonly string[]): string[] {
+  const defaults = defaultAppDirs(home);
+  if (!requested) return defaults;
+  const scoped: string[] = [];
+  for (const dir of requested) {
+    const expanded = resolve(expandHome(dir, home));
+    if (defaults.some((fallback) => isUnder(expanded, fallback))) scoped.push(expanded);
+  }
+  return scoped;
+}
+
+export function homeAppDirs(home: string): string[] {
+  const resolvedHome = resolve(home);
+  return defaultAppDirs(home).filter((dir) => isUnder(dir, resolvedHome));
+}
 
 const RELATIVE_LEFTOVER_PATHS = [
   "Library/Application Support/{id}",
@@ -184,7 +204,7 @@ function isDenied(path: string, home: string): boolean {
 
 export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   const home = opts.home ?? homedir();
-  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
+  const appDirs = scopedAppDirs(home, opts.appDirs);
   const results: AppInfo[] = [];
 
   for (const appDir of appDirs) {
@@ -282,7 +302,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   }
 
   const resolvedAppPath = resolve(appPath);
-  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
+  const appDirs = scopedAppDirs(home, opts.appDirs);
 
   if (!resolvedAppPath.endsWith(".app" + sep) && !resolvedAppPath.endsWith(".app")) {
     return {

@@ -142,10 +142,13 @@ public struct ApplyOutcome: Codable, Sendable, Identifiable {
 
 public struct ApplyReport: Codable, Sendable {
     public let outcomes: [ApplyOutcome]
+    public let deletedBytes: UInt64
     public let freed: UInt64
     public let freeBefore: UInt64
     public let freeAfter: UInt64
     public let elapsedMs: Int
 
     public var deleted: [ApplyOutcome] { outcomes.filter { $0.status == .deleted } }
+
+    public var volumeDelta: UInt64 { freeAfter >= freeBefore ? freeAfter - freeBefore : 0 }
 }

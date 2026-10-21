@@ -71,6 +71,7 @@ export type ApplyOutcome = {
 
 export type ApplyReport = {
   outcomes: ApplyOutcome[];
+  deletedBytes: number;
   freed: number;
   freeBefore: number;
   freeAfter: number;
