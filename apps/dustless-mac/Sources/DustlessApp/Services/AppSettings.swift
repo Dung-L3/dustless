@@ -99,7 +99,7 @@ final class AppSettings: ObservableObject {
         return t("overviewAgeDays", ["n": "\(Int(seconds / 86400))"])
     }
 
-    func provenance(_ report: ScanReport?, scannedAt: Date?, engineFailed: Bool = false) -> String {
+    func provenance(_ report: ScanReport?, scannedAt: Date?, engineFailed: Bool) -> String {
         guard let report else {
             return engineFailed ? t("engineUnavailable") : t("overviewNoScan")
         }

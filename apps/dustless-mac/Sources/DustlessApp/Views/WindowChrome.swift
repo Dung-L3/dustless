@@ -104,7 +104,7 @@ struct PanelFilterBar<Filter: View, Trailing: View>: View {
             Spacer(minLength: PanelStyle.Space.s)
             trailing()
             SearchField(placeholder: placeholder, text: $text, identifier: searchIdentifier)
-                .frame(maxWidth: 220)
+                .frame(maxWidth: 280)
         }
     }
 }
@@ -229,6 +229,7 @@ struct SearchField: View {
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(PanelFont.body)
+                .help(placeholder)
                 .accessibilityLabel(placeholder)
                 .axID(identifier)
 

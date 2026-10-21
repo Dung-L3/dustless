@@ -47,7 +47,7 @@ struct SummaryHeader: View {
                     } else {
                         Image(systemName: "arrow.clockwise")
                     }
-                    Text(isScanning ? settings.t("scanningShort") : settings.t("rescan"))
+                    Text(isScanning ? settings.t("scanningShort") : scanLabel)
                 }
             }
             .disabled(isScanning)
@@ -58,6 +58,10 @@ struct SummaryHeader: View {
         .padding(.vertical, PanelStyle.Space.m)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var scanLabel: String {
+        report == nil ? settings.t("scanNow") : settings.t("rescan")
     }
 
     private func metric(title: String, value: String, symbol: String, tint: Color) -> some View {
