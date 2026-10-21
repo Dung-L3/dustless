@@ -234,6 +234,7 @@ public enum L10n {
         "scan.unscannable.reason.not_supported": "không hỗ trợ",
         "scan.unscannable.reason.error": "lỗi",
         "scan.unscannable.reason.red": "danh sách đỏ",
+        "scan.unscannable.reason.protected": "ngoài phạm vi xóa",
 
         "revealInFinder": "Hiện trong Finder",
         "copyPath": "Sao chép đường dẫn",
@@ -544,6 +545,7 @@ public enum L10n {
         "scan.unscannable.reason.not_supported": "not supported",
         "scan.unscannable.reason.error": "error",
         "scan.unscannable.reason.red": "red list",
+        "scan.unscannable.reason.protected": "outside the delete scope",
 
         "revealInFinder": "Reveal in Finder",
         "copyPath": "Copy Path",
@@ -854,6 +856,7 @@ public enum L10n {
         "scan.unscannable.reason.not_supported": "不支持",
         "scan.unscannable.reason.error": "错误",
         "scan.unscannable.reason.red": "红名单",
+        "scan.unscannable.reason.protected": "超出删除范围",
 
         "revealInFinder": "在访达中显示",
         "copyPath": "复制路径",

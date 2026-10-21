@@ -29,6 +29,7 @@ public enum UnscannableReason: String, Codable, CaseIterable, Sendable {
     case notSupported = "not_supported"
     case error
     case red
+    case protected = "protected"
 }
 
 public struct UnscannableRule: Codable, Sendable, Hashable {
@@ -45,6 +46,7 @@ public struct UnscannableSummary: Codable, Sendable, Hashable {
     public let notSupported: Int
     public let error: Int
     public let red: Int
+    public let protected: Int
 
     private enum CodingKeys: String, CodingKey {
         case absent
@@ -52,18 +54,30 @@ public struct UnscannableSummary: Codable, Sendable, Hashable {
         case notSupported = "not_supported"
         case error
         case red
+        case protected
     }
 
-    public init(absent: Int, noAccess: Int, notSupported: Int, error: Int, red: Int = 0) {
+    public init(absent: Int, noAccess: Int, notSupported: Int, error: Int, red: Int = 0, protected: Int = 0) {
         self.absent = absent
         self.noAccess = noAccess
         self.notSupported = notSupported
         self.error = error
         self.red = red
+        self.protected = protected
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        absent = try container.decode(Int.self, forKey: .absent)
+        noAccess = try container.decode(Int.self, forKey: .noAccess)
+        notSupported = try container.decode(Int.self, forKey: .notSupported)
+        error = try container.decode(Int.self, forKey: .error)
+        red = try container.decodeIfPresent(Int.self, forKey: .red) ?? 0
+        protected = try container.decodeIfPresent(Int.self, forKey: .protected) ?? 0
     }
 
     public var total: Int {
-        absent + noAccess + notSupported + error + red
+        absent + noAccess + notSupported + error + red + protected
     }
 }
 
@@ -107,6 +121,7 @@ public enum UnscannableText {
         if summary.notSupported > 0 { result.append(.notSupported) }
         if summary.error > 0 { result.append(.error) }
         if summary.red > 0 { result.append(.red) }
+        if summary.protected > 0 { result.append(.protected) }
         return result
     }
 
