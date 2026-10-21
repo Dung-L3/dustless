@@ -69,6 +69,28 @@ describe("unscannable tracking", () => {
     expect(report.unscannableSummary.not_supported).toBeGreaterThanOrEqual(1);
   });
 
+  test("a rule that reaches $HOME yields reason protected", async () => {
+    await writeRules(`- id: test.protected\n  tier: green\n  desc: home scope\n  paths: { all: "~" }\n`);
+    const report = await scan({ roots: [sandbox] });
+    const u = report.unscannable.find((r) => r.ruleId === "test.protected");
+    expect(u).toBeDefined();
+    expect(u?.reason).toBe("protected");
+    expect(u?.pathPatterns).toContain("~");
+    expect(report.unscannableSummary.protected).toBeGreaterThanOrEqual(1);
+    expect(report.findings.some((f) => f.ruleId === "test.protected")).toBe(false);
+    expect(report.reclaimable).toBe(0);
+  });
+
+  test("a rule that reaches the filesystem root yields reason protected", async () => {
+    await writeRules(`- id: test.root\n  tier: green\n  desc: root scope\n  paths: { all: "/" }\n`);
+    const report = await scan({ roots: [sandbox] });
+    const u = report.unscannable.find((r) => r.ruleId === "test.root");
+    expect(u).toBeDefined();
+    expect(u?.reason).toBe("protected");
+    expect(report.findings.some((f) => f.ruleId === "test.root")).toBe(false);
+    expect(report.reclaimable).toBe(0);
+  });
+
   test("rule with scannable path but zero findings is not unscannable", async () => {
     const empty = join(sandbox, "empty-cache");
     await mkdir(empty, { recursive: true });
@@ -87,6 +109,7 @@ describe("unscannable tracking", () => {
       expect(report.unscannableSummary[key]).toBeDefined();
       expect(typeof report.unscannableSummary[key]).toBe("number");
     }
+    expect(typeof report.unscannableSummary.protected).toBe("number");
   });
 
   test("fresh scan pre-selects zero items (initialSelection empty)", async () => {

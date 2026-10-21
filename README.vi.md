@@ -150,8 +150,8 @@ macOS TCC ẩn một số thư mục khỏi mọi tiến trình không có Full 
 
 Một lần scan giờ nói rõ nó không nhìn được gì thay vì im lặng. `scan --json` mang thêm hai key bên cạnh `findings` và `totals` (`src/types.ts`, `ScanReport`):
 
-- `unscannable` — một entry cho mỗi rule không tạo ra path nào quét được, gồm `ruleId`, `tier`, `desc`, các `pathPatterns` thất bại, và `reason` là `absent` (path không tồn tại), `no_access` (EACCES/EPERM — thường do thiếu Full Disk Access), `not_supported` (rule không có path cho nền tảng này), `red` (path trúng danh sách chặn vĩnh viễn) hoặc `error` (`src/core/scan.ts`, `scan`).
-- `unscannableSummary` — số lượng theo từng reason, với cả năm key luôn có mặt.
+- `unscannable` — một entry cho mỗi rule không tạo ra path nào quét được, gồm `ruleId`, `tier`, `desc`, các `pathPatterns` thất bại, và `reason` là `absent` (path không tồn tại), `no_access` (EACCES/EPERM — thường do thiếu Full Disk Access), `not_supported` (rule không có path cho nền tảng này), `red` (path trúng danh sách chặn vĩnh viễn), `protected` (phạm vi của rule chạm tới `$HOME`, thư mục cha của nó hoặc gốc hệ thống) hoặc `error` (`src/core/scan.ts`, `scan`).
+- `unscannableSummary` — số lượng theo từng reason, với cả sáu key luôn có mặt.
 
 Những rule đó bị loại khỏi `totals`, `reclaimable` và `freed`: field này chỉ có thể thêm thông tin, không bao giờ thêm một con số. Ứng dụng macOS mô hình hóa cả hai field và bản địa hóa cách diễn đạt reason (`UnscannableRule`, `UnscannableSummary` và `UnscannableText` trong `apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift`).
 
@@ -250,7 +250,7 @@ Một rule thật:
 | `id` | Duy nhất. Thay thế rule gốc có cùng id. |
 | `tier` | `green` hoặc `yellow`. Mọi giá trị khác bị từ chối lúc nạp (`src/core/rules.ts:60`). `red` và `blocked` không gán được: RED là danh sách path, BLOCKED là một kết luận. |
 | `desc` | Một dòng, hiển thị trong `rule list`. |
-| `paths` | Key là `mac`, `win`, `linux` hoặc `all` (`src/core/rules.ts:7`). `~` nở ra thành home directory; trên Windows `%VAR%` nở từ biến môi trường (`src/core/paths.ts:14`). Mỗi value là một string hoặc một list string. Dấu `*` nở ra thành các thư mục con trực tiếp. |
+| `paths` | Key là `mac`, `win`, `linux` hoặc `all` (`src/core/rules.ts:7`). `~` nở ra thành home directory; trên Windows `%VAR%` nở từ biến môi trường (`src/core/paths.ts:14`). Mỗi value là một string hoặc một list string. Dấu `*` khớp với đúng một đoạn path và có thể nằm giữa trong một đoạn (`*.avd`); một pattern có thể chứa nhiều dấu `*`, và mỗi dấu phải khớp đúng một đoạn: `~/*/*/node_modules` khớp `~/a/b/node_modules` và không khớp gì khác. Phần nở ra có giới hạn — tối đa 12 đoạn path và 20 000 entry thư mục cho mỗi pattern — và pattern chạm giới hạn nào cũng được báo là unscannable thay vì bị cắt bớt trong im lặng. Một pattern không được chạm tới `$HOME`, thư mục cha của `$HOME` (kể cả `~/..`), gốc hệ thống, hay một thư mục con trực tiếp của `$HOME` được chọn qua wildcard: `~/*` bị từ chối, `~/.cache/x` thì không (`patternVerdict` trong `src/core/paths.ts`). |
 | `match` | Regex tuỳ chọn, so với basename của từng thư mục mà path tạo ra (`src/core/paths.ts:90`). |
 | `minAgeDays` | Nếu file mới nhất bên trong còn trẻ hơn mốc này, finding bị hạ từ GREEN xuống YELLOW (`src/core/scan.ts:132`). |
 | `requireVerify` | Tên một bài kiểm chứng chéo: `gradle_version_unused`, `git_clean`, hoặc `not_in_gitignore`. Nếu trượt, finding bị hạ xuống YELLOW **và** bị đánh BLOCKED (`src/core/scan.ts:136`). |
@@ -262,6 +262,8 @@ Theo CONTRIBUTING, một rule mới mà không có kiểm chứng là bug, khôn
 dustless rule validate
 dustless rule list
 ```
+
+Một rule có phạm vi quá rộng sẽ bị từ chối, không bao giờ bị thu hẹp trong im lặng. `dustless rule add` thoát với mã `1` và không ghi gì, `dustless rule validate` gọi tên rule bị lỗi, và một lần scan báo rule đó là unscannable với reason `protected` thay vì xóa bất cứ thứ gì. Những hình dạng bị từ chối là chính `$HOME`, thư mục cha của `$HOME` (`~/..`), gốc hệ thống, và mọi wildcard có thể rơi vào một thư mục con trực tiếp của `$HOME` — `~/*` sẽ xóa sạch tất cả chúng. Một path chỉ đích danh một thư mục bên dưới `$HOME` (`~/.cache/x`) vẫn được chấp nhận; danh sách đỏ vẫn quyết định số phận của `~/Documents` và những thứ còn lại.
 
 ## Xử lý sự cố
 
