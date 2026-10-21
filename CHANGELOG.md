@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased — 0.5.0
+## Unreleased
+
+Nothing yet.
+
+## 0.5.0
+
+The first release with the macOS app built by the release workflow, the required checks that actually
+block a merge, and the delete path that re-checks a finding before it removes it.
+
+Versions 0.1.0 to 0.3.0 predate this file; their notes live in the GitHub releases.
+
 
 ### Safety
 
@@ -90,4 +100,31 @@
 
 - `bun run typecheck` is green on the merged tree (unused imports, the generic `pick`).
 
-Measured on this branch: `bun test` → 367 pass / 0 fail / 5 skip across 26 files, 2708 expects; `bun run typecheck` clean.
+Measured on this branch: `bun test` → 451 pass / 0 fail / 20 skip across 33 files; `bun run typecheck` clean;
+`cd apps/dustless-mac && swift test` → 81 tests in 12 suites.
+
+### What this release fixes
+
+- The sudoers rule that lets the app toggle AirDrop no longer takes its executable from the environment.
+  The rule is built by one allowlisted validator, the app re-checks the payload before it installs anything
+  as root, and the environment variable is gone from the shipped binary.
+- The app can no longer resolve the engine to its own executable. On a case insensitive volume
+  `Contents/MacOS/dustless` is the app itself, so a bundle whose engine was missing turned the app into a
+  fork bomb. The candidate list can no longer contain the app, every candidate is compared by real file
+  identity, and the bundle build fails when the copied engine does not answer.
+- A rule can no longer widen the delete scope to the direct children of `$HOME`, and a glob with more than
+  one `*` now matches what it says. The filesystem root, `$HOME` and its ancestors are reported as
+  unscannable instead of being counted as reclaimable.
+- A finding is re-checked before it is deleted: the age floor, the verification and the repository state are
+  measured again, and an unverifiable tree is skipped rather than removed.
+- The bytes that were deleted and the free space the volume gained are two different numbers and are now
+  reported as two different numbers.
+- The app says which rules it could not scan, and says so in the language the user chose. The engine sends
+  a reason code and the app renders it, so no Vietnamese or English sentence from the engine appears
+  inside an English or Chinese interface.
+- Every permanent delete is a fixed red button that does not follow the accent colour, so it can never be
+  the green the product uses for "safe". Return no longer deletes.
+- The engine payload carries a schema version and the app refuses a major version it does not understand.
+- The macOS and Windows jobs, the Swift job and a macOS build job are required checks, and the release
+  workflow runs every binary it publishes, ships `SHA256SUMS`, and builds the app bundle and the disk image
+  instead of leaving them to a manual upload.

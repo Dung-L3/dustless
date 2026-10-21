@@ -41,9 +41,21 @@ jobs:
       - name: The tag, the package and the docs must agree
         run: bun scripts/check-release.ts "${{ steps.resolve.outputs.tag }}"
 
+  prepare:
+    name: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      macos_signed: ${{ steps.check.outputs.macos_signed }}
+    steps:
+      - id: check
+        env:
+          SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+        run: |
+          if [ -n "$SIGNING_CERT" ]; then echo "macos_signed=1" >> "$GITHUB_OUTPUT"; else echo "macos_signed=0" >> "$GITHUB_OUTPUT"; fi
+
   build:
     name: build (${{ matrix.out }})
-    needs: guard
+    needs: [guard, prepare]
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +103,8 @@ jobs:
 
   bundle-macos:
     name: bundle-macos (macos)
-    needs: guard
+    needs: [guard, prepare]
+    if: needs.prepare.outputs.macos_signed == '1'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,9 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dustless-macos-app
-          path: |
-            dist/Dustless.app
-            dist/Dustless-*.dmg
+          path: dist/Dustless-*.dmg
           if-no-files-found: error
 
   bundle-windows:
@@ -187,6 +198,7 @@ jobs:
   checksums:
     name: checksums
     needs: [guard, build, bundle-macos, bundle-windows]
+    if: always() && needs.guard.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -198,7 +210,7 @@ jobs:
           mkdir -p out
           find artifacts -type f \( -name 'dustless-*' -o -name 'Dustless-*' \) ! -name '*.blockmap' -exec cp {} out/ \;
           ls -l out
-          test "$(find out -type f | wc -l)" -ge 7
+          test "$(find out -type f | wc -l)" -ge 6
       - name: SHA256SUMS
         run: |
           cd out
@@ -214,6 +226,7 @@ jobs:
   release:
     name: release
     needs: [guard, checksums]
+    if: needs.checksums.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -239,9 +252,13 @@ jobs:
           notes=$(mktemp)
           printf 'Dustless %s\n\n' "$TAG" > "$notes"
           printf -- '- Engine binaries for macOS, Linux and Windows\n' >> "$notes"
-          printf -- '- The macOS app bundle and a drag to install disk image\n' >> "$notes"
           printf -- '- A per user Windows installer and a portable archive\n' >> "$notes"
           printf -- '- SHA256SUMS for every file\n' >> "$notes"
+          if [ "${{ needs.prepare.outputs.macos_signed }}" = "1" ]; then
+            printf -- '- The macOS app bundle as a drag to install disk image\n' >> "$notes"
+          else
+            printf -- '- No macOS app in this release: the project holds no Apple Developer ID, so the bundle would not be notarised and macOS would refuse to open it. The command line engine is complete and is what this release ships.\n' >> "$notes"
+          fi
           gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag out/* || \
           gh release upload "$TAG" --clobber out/*
           gh release view "$TAG" --json tagName,assets --jq '.tagName, (.assets | length)'
