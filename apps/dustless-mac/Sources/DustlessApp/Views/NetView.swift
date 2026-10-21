@@ -27,6 +27,7 @@ enum NetOpFilter: String, CaseIterable, Identifiable {
 }
 
 struct NetView: View {
+    @State private var pendingOp: NetOp?
     @ObservedObject var net: NetControl
     @EnvironmentObject private var settings: AppSettings
 
@@ -43,6 +44,31 @@ struct NetView: View {
         } content: {
             operations
         }
+        .confirmationDialog(
+            settings.t("networkAdvancedConfirmTitle"),
+            isPresented: Binding(
+                get: { pendingOp != nil },
+                set: { if !$0 { pendingOp = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(settings.t("networkAdvancedConfirmAction"), role: .destructive) {
+                guard let op = pendingOp else { return }
+                pendingOp = nil
+                Task { await net.run(op) }
+            }
+            Button(settings.t("confirmCancel"), role: .cancel) {
+                pendingOp = nil
+            }
+        } message: {
+            Text(advancedMessage)
+        }
+        .accessibilityIdentifier("network.advanced.confirm")
+    }
+
+    private var advancedMessage: String {
+        guard let op = pendingOp else { return "" }
+        return settings.t("networkAdvancedConfirmBody", ["op": settings.t(op.labelKey)])
     }
 
     private var header: some View {
@@ -336,7 +362,11 @@ struct NetView: View {
     private func runButton(_ op: NetOp) -> some View {
         let running = net.isRunning(op)
         Button {
-            Task { await net.run(op) }
+            if op.isAdvanced {
+                pendingOp = op
+            } else {
+                Task { await net.run(op) }
+            }
         } label: {
             if running {
                 HStack(spacing: 5) {
