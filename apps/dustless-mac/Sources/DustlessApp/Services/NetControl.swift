@@ -4,7 +4,7 @@ import Foundation
 
 @MainActor
 final class NetControl: ObservableObject {
-    static let privilegePath = "/etc/sudoers.d/dustless-net"
+    static var privilegePath: String { PrivilegePaths.net }
 
     @Published private(set) var report: NetReport?
     @Published private(set) var isLoading = false

@@ -56,19 +56,26 @@ struct StorageModuleView: View {
                 message: store.storageError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
                 title: settings.t("engineUnavailable"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchStorage() } }
+                action: { Task { await store.fetchStorage() } },
+                identifier: "storage.state",
+                actionIdentifier: "storage.retry"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.storagePhase == .loaded {
             PanelStateView(
                 kind: .empty,
                 message: settings.t("volumesEmpty"),
-                title: settings.t("storage")
+                title: settings.t("storage"),
+                identifier: "storage.state"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            PanelStateView(kind: .loading, message: settings.t("busyStorage"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PanelStateView(
+                kind: .loading,
+                message: settings.t("busyStorage"),
+                identifier: "storage.state"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -92,19 +99,26 @@ struct MemoryModuleView: View {
                 message: store.memoryError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
                 title: settings.t("engineUnavailable"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchMemory() } }
+                action: { Task { await store.fetchMemory() } },
+                identifier: "memory.state",
+                actionIdentifier: "memory.retry"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.memoryPhase == .loaded {
             PanelStateView(
                 kind: .empty,
                 message: settings.t("memoryNoProcesses"),
-                title: settings.t("memory")
+                title: settings.t("memory"),
+                identifier: "memory.state"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            PanelStateView(kind: .loading, message: settings.t("busyMemory"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PanelStateView(
+                kind: .loading,
+                message: settings.t("busyMemory"),
+                identifier: "memory.state"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -129,12 +143,18 @@ struct NetworkModuleView: View {
                 message: settings.text(error),
                 title: settings.t("networkUnavailable"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await net.refresh() } }
+                action: { Task { await net.refresh() } },
+                identifier: "network.state",
+                actionIdentifier: "network.retry"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            PanelStateView(kind: .loading, message: settings.t("busyNetwork"))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PanelStateView(
+                kind: .loading,
+                message: settings.t("busyNetwork"),
+                identifier: "network.state"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

@@ -12,6 +12,8 @@ dist/
 # Build output
 build/
 out/
+artifacts/
+.ui-bin/
 
 # Retired autopilot infrastructure
 .autopilot/

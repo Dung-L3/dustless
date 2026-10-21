@@ -18,6 +18,7 @@ struct ModuleSidebar: View {
             Section(settings.t("modules")) {
                 ForEach(Module.allCases.filter { $0 != .cleanup }) { module in
                     Label(settings.t(module.titleKey), systemImage: module.symbolName)
+                        .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
                         .tag(SidebarItem.module(module))
                 }
             }
@@ -72,6 +73,7 @@ struct ModuleSidebar: View {
         .frame(minHeight: PanelStyle.rowMinHeight)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"])) · \(ByteFormat.string(bytes))")
+        .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")
         .accessibilityAddTraits(store.tierTab == tab && selection == .cleanup ? [.isSelected] : [])
     }
 }

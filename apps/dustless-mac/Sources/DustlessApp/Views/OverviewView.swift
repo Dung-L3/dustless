@@ -13,7 +13,7 @@ struct OverviewView: View {
 
     var body: some View {
         PanelScaffold {
-            PanelHeader(title: settings.t("overviewTitle"), subtitle: provenance)
+            PanelHeader(title: settings.t("overviewTitle"), subtitle: provenance, identifier: "overview.header")
         } summary: {
             hero
         } filters: {
@@ -64,6 +64,7 @@ struct OverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
+        .accessibilityIdentifier("overview.hero")
     }
 
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
@@ -95,6 +96,7 @@ struct OverviewView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityIdentifier("overview.freeSpace")
     }
 
     private var freeStats: [(label: String, value: String)] {
@@ -149,6 +151,7 @@ struct OverviewView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"])) · \(ByteFormat.string(bytes))")
+        .accessibilityIdentifier("overview.tier.\(tab.rawValue)")
     }
 
     private var blocked: (count: Int, bytes: UInt64)? {
@@ -175,21 +178,23 @@ struct OverviewView: View {
         .panelCard(PanelStyle.rowFill)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("overview.blocked")
     }
 
     private var moduleLines: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             Text(settings.t("modules"))
                 .panelSectionHeader()
-            moduleLine(.memory, settings.t("memory"), memoryLine)
-            moduleLine(.network, settings.t("networkTitle"), networkLine)
-            moduleLine(.network, settings.t("awdlTitle"), airDropLine)
+            moduleLine(.memory, settings.t("memory"), memoryLine, identifier: "memory")
+            moduleLine(.network, settings.t("networkTitle"), networkLine, identifier: "network")
+            moduleLine(.network, settings.t("awdlTitle"), airDropLine, identifier: "awdl")
         }
         .padding(PanelStyle.Space.m)
         .panelCard()
+        .accessibilityIdentifier("overview.modules")
     }
 
-    private func moduleLine(_ module: Module, _ title: String, _ value: String) -> some View {
+    private func moduleLine(_ module: Module, _ title: String, _ value: String, identifier: String) -> some View {
         HStack(spacing: PanelStyle.Space.s) {
             Image(systemName: module.symbolName)
                 .font(.system(size: 11))
@@ -208,9 +213,11 @@ struct OverviewView: View {
                 .controlSize(.small)
                 .help(title)
                 .accessibilityLabel("\(settings.t("overviewView")): \(title)")
+                .accessibilityIdentifier("overview.view.\(identifier)")
         }
         .padding(.vertical, PanelStyle.Space.xs)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("overview.line.\(identifier)")
     }
 
     private var memoryLine: String {
@@ -252,6 +259,7 @@ struct OverviewView: View {
                 .controlSize(.large)
                 .disabled(isScanning)
                 .help(settings.t("rescanHelp"))
+                .accessibilityIdentifier("overview.scan")
             } else {
                 Button {
                     router.select(.cleanup)
@@ -269,8 +277,10 @@ struct OverviewView: View {
                 .controlSize(.large)
                 .disabled(!store.canClean)
                 .help(settings.t("reviewAndDeleteHelp"))
+                .accessibilityIdentifier("overview.review")
             }
         }
+        .accessibilityIdentifier("overview.cta")
     }
 
     private var isScanning: Bool { store.isBusy }

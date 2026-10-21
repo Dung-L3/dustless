@@ -282,7 +282,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   }
 
   const resolvedAppPath = resolve(appPath);
-  const appDirs = DEFAULT_APP_DIRS.map((d) => expandHome(d, home));
+  const appDirs = (opts.appDirs ?? DEFAULT_APP_DIRS).map((d) => expandHome(d, home));
 
   if (!resolvedAppPath.endsWith(".app" + sep) && !resolvedAppPath.endsWith(".app")) {
     return {

@@ -83,32 +83,41 @@ struct MemoryView: View {
     }
 
     private func header(_ report: MemoryReport?) -> some View {
-        PanelHeader(title: settings.t("memory")) {
+        PanelHeader(title: settings.t("memory"), identifier: "memory.header") {
             HStack(spacing: PanelStyle.Space.s) {
                 if let report {
                     pressureChip(report)
+                        .accessibilityIdentifier("memory.pressure")
                 }
-                RefreshButton(isBusy: store.memoryPhase == .loading) {
-                    Task { await store.fetchMemory() }
-                }
+                RefreshButton(
+                    isBusy: store.memoryPhase == .loading,
+                    action: { Task { await store.fetchMemory() } },
+                    identifier: "memory.refresh"
+                )
             }
         }
     }
 
     private var filterBar: some View {
-        PanelFilterBar(placeholder: settings.t("searchProcesses"), text: $query) {
-            Picker(settings.t("filterCategory"), selection: $category) {
-                ForEach(MemCategoryFilter.allCases) { option in
-                    Text(option.titleKey.flatMap { settings.t($0) } ?? settings.t("filterAll")).tag(option)
+        PanelFilterBar(
+            placeholder: settings.t("searchProcesses"),
+            text: $query,
+            filter: {
+                Picker(settings.t("filterCategory"), selection: $category) {
+                    ForEach(MemCategoryFilter.allCases) { option in
+                        Text(option.titleKey.flatMap { settings.t($0) } ?? settings.t("filterAll"))
+                            .tag(option)
+                            .accessibilityIdentifier("memory.filter.\(option.rawValue)")
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .accessibilityLabel(settings.t("filterCategory"))
-        } trailing: {
-            EmptyView()
-        }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .accessibilityLabel(settings.t("filterCategory"))
+            },
+            trailing: { EmptyView() },
+            searchIdentifier: "memory.search"
+        )
     }
 
     private func pressureChip(_ report: MemoryReport) -> some View {
@@ -151,6 +160,7 @@ struct MemoryView: View {
                     .truncationMode(.tail)
                     .help(summary)
                     .accessibilityLabel(summary)
+                    .accessibilityIdentifier("memory.summary")
             }
 
             if groups.isEmpty {
@@ -158,6 +168,7 @@ struct MemoryView: View {
                     .font(PanelFont.body)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
+                    .accessibilityIdentifier("memory.empty")
             } else {
                 ScrollView {
                     LazyVStack(spacing: PanelStyle.Space.s) {
@@ -244,6 +255,7 @@ struct MemoryView: View {
         }
         .help(settings.t(isOpen ? "collapseGroup" : "expandGroup"))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("memory.group.\(group.id)")
     }
 
     @ViewBuilder
@@ -342,6 +354,7 @@ struct MemoryView: View {
             }
             .help(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
+            .accessibilityIdentifier("memory.stop.\(proc.pid)")
             .contextMenu {
                 Button(action: { killProcess(pid: proc.pid, force: true, sigkill: true) }) {
                     Label(
@@ -365,6 +378,7 @@ struct MemoryView: View {
             .foregroundStyle(tint)
             .help(label)
             .accessibilityLabel(label)
+            .accessibilityIdentifier("memory.status.\(proc.pid)")
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

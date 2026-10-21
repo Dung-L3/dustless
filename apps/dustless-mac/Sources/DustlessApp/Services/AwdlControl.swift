@@ -3,7 +3,7 @@ import Foundation
 
 @MainActor
 final class AwdlControl: ObservableObject {
-    static let privilegePath = "/etc/sudoers.d/dustless-awdl"
+    static var privilegePath: String { PrivilegePaths.awdl }
 
     static let shared = AwdlControl()
 

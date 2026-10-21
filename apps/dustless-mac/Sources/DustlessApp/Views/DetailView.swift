@@ -67,6 +67,7 @@ struct DetailView: View {
             .foregroundStyle(.secondary)
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
+            .accessibilityIdentifier("cleanup.error.dismiss")
         }
         .padding(.horizontal, PanelStyle.Space.l)
         .padding(.vertical, PanelStyle.Space.s)
@@ -83,11 +84,13 @@ struct DetailView: View {
                     .transition(.opacity)
             }
 
-            PanelFilterBar(placeholder: settings.t("searchFindings"), text: $store.findingsQuery) {
-                EmptyView()
-            } trailing: {
-                EmptyView()
-            }
+            PanelFilterBar(
+                placeholder: settings.t("searchFindings"),
+                text: $store.findingsQuery,
+                filter: { EmptyView() },
+                trailing: { EmptyView() },
+                searchIdentifier: "cleanup.search"
+            )
             .padding(.horizontal, PanelStyle.Space.l)
             .padding(.vertical, PanelStyle.Space.s)
 
@@ -153,8 +156,10 @@ struct DetailView: View {
                 Spacer()
                 Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
                     .disabled(store.isBusy)
+                    .accessibilityIdentifier("cleanup.selectAll")
                 Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
                     .disabled(store.isBusy)
+                    .accessibilityIdentifier("cleanup.selectNone")
             }
             .font(PanelFont.caption)
         }
@@ -177,6 +182,7 @@ struct DetailView: View {
                 Text("\(items.count)")
             }
             .font(PanelFont.caption)
+            .accessibilityIdentifier("cleanup.locked.header")
         } footer: {
             Text(settings.t("lockedSectionFooter"))
         }
@@ -192,6 +198,7 @@ struct DetailView: View {
                      ])
                      : settings.t("selectedNone"))
                     .font(PanelFont.emphasis())
+                    .accessibilityIdentifier("cleanup.selected")
                 if store.selectedLockedCount > 0 {
                     Text(settings.t("lockedExcluded", ["n": "\(store.selectedLockedCount)"]))
                         .font(PanelFont.caption)
@@ -205,6 +212,7 @@ struct DetailView: View {
                 .disabled(!store.canClean)
                 .keyboardShortcut(.return, modifiers: .command)
                 .help(settings.t("reviewAndDeleteHelp"))
+                .accessibilityIdentifier("cleanup.review")
         }
         .padding(.horizontal, PanelStyle.Space.l)
         .padding(.vertical, PanelStyle.Space.m)
@@ -233,9 +241,11 @@ struct TierEmptyView: View {
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
                 .disabled(isBusy)
+                .accessibilityIdentifier("cleanup.empty.scan")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("cleanup.empty")
     }
 }
 
@@ -255,6 +265,7 @@ struct NoMatchesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("cleanup.noMatches")
     }
 }
 
@@ -277,6 +288,7 @@ struct EmptyStateView: View {
             Button(settings.t("rescan"), action: onScan)
                 .controlSize(.large)
                 .disabled(isBusy)
+                .accessibilityIdentifier("cleanup.emptyState.scan")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -306,6 +318,7 @@ struct EngineErrorView: View {
             Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
                 .disabled(isBusy)
+                .accessibilityIdentifier("cleanup.retry")
             Text(settings.t("nothingDeleted"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.tertiary)

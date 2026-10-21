@@ -96,10 +96,12 @@ struct ConfirmDeleteSheet: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(settings.t("confirmTotal", ["amount": ByteFormat.string(totalBytes)]))
+            .accessibilityIdentifier("confirm.total")
 
             HStack(spacing: PanelStyle.Space.m) {
                 Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("confirm.cancel")
                 Spacer()
                 Button(role: .destructive, action: onConfirm) {
                     Text(settings.t("deleteItemsButton", [
@@ -109,6 +111,7 @@ struct ConfirmDeleteSheet: View {
                     .frame(minWidth: 190)
                 }
                 .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("confirm.delete")
             }
         }
         .padding(PanelStyle.Space.l)
@@ -149,6 +152,7 @@ struct CleanupResultCard: View {
             .foregroundStyle(.secondary)
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
+            .accessibilityIdentifier("cleanup.result.close")
         }
     }
 
@@ -194,6 +198,7 @@ struct CleanupResultCard: View {
         .font(PanelFont.secondary)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("cleanup.result.counts")
     }
 
     private var disclosure: some View {
@@ -210,6 +215,7 @@ struct CleanupResultCard: View {
             Text(settings.t("itemMany", ["n": "\(report.outcomes.count)"]))
                 .font(PanelFont.secondary)
         }
+        .accessibilityIdentifier("cleanup.result.disclosure")
     }
 
     private func outcomeRow(_ outcome: ApplyOutcome) -> some View {

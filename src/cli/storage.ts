@@ -6,6 +6,12 @@ import { DEFAULT_MIN_SIZE, deleteLargeFile, findLargeFiles } from "../core/large
 import { writeOut } from "../core/output.ts";
 import { bold, bytesOf, dim, errorOut, flag, opt, paint, required, say } from "./context.ts";
 
+function appDirs(): string[] | undefined {
+  if (process.env["DUSTLESS_UI_TESTING"] !== "1") return undefined;
+  const raw = process.env["DUSTLESS_APPS_DIRS"];
+  return raw ? raw.split(":").filter(Boolean) : [];
+}
+
 async function printUninstall(report: UninstallReport): Promise<number> {
   if (flag("json")) {
     await writeOut(`${JSON.stringify(report)}\n`);
@@ -37,7 +43,7 @@ export async function runApps(_rest: string[]): Promise<number> {
 
   if (flag("uninstall")) {
     const uninstallPath = required("uninstall", "dustless apps --uninstall <đường dẫn .app> --confirm");
-    const apps = await listApps({ home });
+    const apps = await listApps({ home, appDirs: appDirs() });
     const target = apps.find((a) => a.path === uninstallPath || resolve(a.path) === resolve(uninstallPath));
     if (!target) {
       if (flag("json")) {
@@ -53,13 +59,14 @@ export async function runApps(_rest: string[]): Promise<number> {
         appPath: target.path,
         relatedPaths: target.relatedPaths,
         confirm,
+        appDirs: appDirs(),
         purge,
         trashDir,
       }),
     );
   }
 
-  const apps = await listApps({ home });
+  const apps = await listApps({ home, appDirs: appDirs() });
   if (flag("json")) {
     await writeOut(`${JSON.stringify(apps)}\n`);
     return 0;

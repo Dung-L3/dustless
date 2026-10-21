@@ -56,3 +56,16 @@ jobs:
       - name: Swift unit tests
         working-directory: apps/dustless-mac
         run: swift test
+
+  ui:
+    name: ui (macos, advisory)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test:ui

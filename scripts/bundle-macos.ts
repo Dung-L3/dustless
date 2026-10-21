@@ -1,12 +1,17 @@
 import { chmod, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { APP_SRC, DIST, fail, readVersion, run, runInherit } from "./lib.ts";
+import { APP_SRC, DIST, ROOT, fail, readVersion, run, runInherit } from "./lib.ts";
 
-const APP = join(DIST, "Dustless.app");
+const APP = process.env["DUSTLESS_BUNDLE_OUT"] ?? join(DIST, "Dustless.app");
 const ENGINE = join(DIST, "dustless");
-const ICON = join(DIST, "icons", "dustless.icns");
+const ICON = existsSync(join(DIST, "icons", "dustless.icns"))
+  ? join(DIST, "icons", "dustless.icns")
+  : join(ROOT, "brand", "generated", "dustless.icns");
 const MENUBAR_ICON = join(APP_SRC, "Assets", "MenuBarIcon.png");
+const SWIFT_FLAGS = process.env["DUSTLESS_UI_TESTING"] === "1"
+  ? ["-Xswiftc", "-DDUSTLESS_UI_TESTING"]
+  : [];
 
 function infoPlist(version: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -36,11 +41,11 @@ if (!existsSync(MENUBAR_ICON)) fail(`missing ${MENUBAR_ICON} — the menu bar te
 
 const started = Date.now();
 
-const built = await runInherit("swift", ["build", "--package-path", APP_SRC, "-c", "release"]);
+const built = await runInherit("swift", ["build", "--package-path", APP_SRC, "-c", "release", ...SWIFT_FLAGS]);
 if (built !== 0) fail("swift build -c release failed");
 
 const binDir = (
-  await run("swift", ["build", "--package-path", APP_SRC, "-c", "release", "--show-bin-path"])
+  await run("swift", ["build", "--package-path", APP_SRC, "-c", "release", ...SWIFT_FLAGS, "--show-bin-path"])
 ).stdout.trim();
 const swiftBin = join(binDir, "DustlessApp");
 

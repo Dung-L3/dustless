@@ -1,0 +1,9 @@
+{
+  "user": "e2e",
+  "path": "/e2e/sudoers.d/dustless-net",
+  "allowed": [
+    "/usr/sbin/networksetup -setdnsservers \"E2E\" Empty",
+    "/usr/sbin/ipconfig set en0 DHCP"
+  ],
+  "rule": "e2e ALL=(root) NOPASSWD: /usr/sbin/ipconfig set en0 DHCP\n"
+}

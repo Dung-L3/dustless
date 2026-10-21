@@ -66,8 +66,17 @@ public struct DustlessCLI: Sendable {
     }
 
     private func writeSelection(_ paths: [String]) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("dustless-only-\(UUID().uuidString).json")
+        #if DUSTLESS_UI_TESTING
+        guard let directory = Foundation.ProcessInfo.processInfo.environment["DUSTLESS_SELECTION_DIR"],
+              !directory.isEmpty else {
+            throw DustlessError.launchFailed("DUSTLESS_SELECTION_DIR is required in the UI-test app")
+        }
+        let base = URL(fileURLWithPath: directory, isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        #else
+        let base = FileManager.default.temporaryDirectory
+        #endif
+        let url = base.appendingPathComponent("dustless-only-\(UUID().uuidString).json")
         try JSONEncoder().encode(paths).write(to: url, options: .atomic)
         return url
     }

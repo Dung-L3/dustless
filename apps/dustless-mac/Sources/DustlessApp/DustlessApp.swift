@@ -30,11 +30,13 @@ struct DustlessApp: App {
                 Button(settings.t("rescan")) { Task { await store.rescan() } }
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(store.isBusy)
+                    .accessibilityIdentifier("menu.scan")
             }
             CommandMenu(settings.t("goMenu")) {
                 ForEach(Module.allCases) { module in
                     Button(settings.t(module.titleKey)) { router.select(module) }
                         .keyboardShortcut(module.shortcut)
+                        .accessibilityIdentifier("menu.module.\(module.rawValue)")
                 }
             }
         }
@@ -49,6 +51,7 @@ struct DustlessApp: App {
                 .environmentObject(settings)
         } label: {
             MenuBarLabel()
+                .accessibilityIdentifier("menubar.status")
         }
         .menuBarExtraStyle(.window)
     }
@@ -182,6 +185,7 @@ struct RootView: View {
                 }
                 .disabled(isScanning)
                 .help(settings.t("rescanHelp"))
+                .accessibilityIdentifier("toolbar.scan")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -191,6 +195,7 @@ struct RootView: View {
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 .help(settings.t("settingsOpen"))
+                .accessibilityIdentifier("toolbar.settings")
             }
         }
         .sheet(isPresented: $store.showingConfirmation) {

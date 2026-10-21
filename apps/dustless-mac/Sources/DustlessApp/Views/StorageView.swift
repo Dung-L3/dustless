@@ -126,7 +126,8 @@ struct StorageView: View {
     private var header: some View {
         PanelHeader(
             title: settings.t("storage"),
-            subtitle: space.volumeName?.isEmpty == false ? space.volumeName : nil
+            subtitle: space.volumeName?.isEmpty == false ? space.volumeName : nil,
+            identifier: "storage.header"
         ) {
             if let reclaimable {
                 reclaimableStat(reclaimable)
@@ -147,31 +148,42 @@ struct StorageView: View {
     }
 
     private func filterBar(shown: Int, total: Int) -> some View {
-        PanelFilterBar(placeholder: searchPlaceholder, text: searchBinding) {
-            Picker(settings.t("storage"), selection: $section) {
-                Text(settings.t("appsTitle")).tag(StorageSection.apps)
-                Text(settings.t("largeFilesTitle")).tag(StorageSection.files)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel(settings.t("storage"))
-            .onChange(of: section) { _, next in
-                if next == .files {
-                    Task { await store.ensureStorageFiles() }
+        PanelFilterBar(
+            placeholder: searchPlaceholder,
+            text: searchBinding,
+            filter: {
+                Picker(settings.t("storage"), selection: $section) {
+                    Text(settings.t("appsTitle"))
+                        .tag(StorageSection.apps)
+                        .accessibilityIdentifier("storage.section.apps")
+                    Text(settings.t("largeFilesTitle"))
+                        .tag(StorageSection.files)
+                        .accessibilityIdentifier("storage.section.files")
                 }
-            }
-        } trailing: {
-            HStack(spacing: PanelStyle.Space.s) {
-                if isInventoryLoading {
-                    ProgressView()
-                        .controlSize(.small)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel(settings.t("storage"))
+                .onChange(of: section) { _, next in
+                    if next == .files {
+                        Task { await store.ensureStorageFiles() }
+                    }
                 }
-                if total > 0 {
-                    countChip(shown, of: total, filtered: isInventoryFiltering)
-                        .accessibilityLabel(inventoryCountLabel(shown: shown, total: total))
+            },
+            trailing: {
+                HStack(spacing: PanelStyle.Space.s) {
+                    if isInventoryLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    if total > 0 {
+                        countChip(shown, of: total, filtered: isInventoryFiltering)
+                            .accessibilityLabel(inventoryCountLabel(shown: shown, total: total))
+                            .accessibilityIdentifier("storage.count")
+                    }
                 }
-            }
-        }
+            },
+            searchIdentifier: "storage.search"
+        )
     }
 
     private var searchBinding: Binding<String> {
@@ -219,12 +231,15 @@ struct StorageView: View {
                 message: settings.text(error),
                 title: settings.t("appsTitle"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchStorageApps() } }
+                action: { Task { await store.fetchStorageApps() } },
+                identifier: "storage.apps.state",
+                actionIdentifier: "storage.apps.retry"
             )
         } else if store.storageApps.isEmpty {
             PanelStateView(
                 kind: store.isLoadingStorageApps ? .loading : .empty,
-                message: store.isLoadingStorageApps ? settings.t("busyApps") : settings.t("appsEmpty")
+                message: store.isLoadingStorageApps ? settings.t("busyApps") : settings.t("appsEmpty"),
+                identifier: "storage.apps.state"
             )
             .frame(minHeight: 120)
         } else if visible.isEmpty {
@@ -253,12 +268,15 @@ struct StorageView: View {
                 message: settings.text(error),
                 title: settings.t("largeFilesTitle"),
                 actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchStorageFiles() } }
+                action: { Task { await store.fetchStorageFiles() } },
+                identifier: "storage.files.state",
+                actionIdentifier: "storage.files.retry"
             )
         } else if store.storageLargeFiles.isEmpty {
             PanelStateView(
                 kind: store.isLoadingStorageFiles ? .loading : .empty,
-                message: store.isLoadingStorageFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty")
+                message: store.isLoadingStorageFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty"),
+                identifier: "storage.files.state"
             )
             .frame(minHeight: 120)
         } else if visible.isEmpty {
@@ -494,6 +512,7 @@ struct AppRow: View {
                 .disabled(isUninstalling)
                 .help(settings.t("appsUninstallHelp", ["name": app.name]))
                 .accessibilityLabel(settings.t("appsUninstallNamed", ["name": app.name]))
+                .accessibilityIdentifier("storage.app.uninstall.\(app.bundleId)")
         }
         .padding(.horizontal, PanelStyle.Space.m)
         .padding(.vertical, PanelStyle.Space.s)
@@ -541,6 +560,7 @@ struct LargeFileRow: View {
                 .disabled(isTrashing)
                 .help(settings.t("largeFilesTrashHelp", ["name": file.name]))
                 .accessibilityLabel(settings.t("largeFilesTrashHelp", ["name": file.name]))
+                .accessibilityIdentifier("storage.file.trash.\(file.path)")
         }
         .padding(.horizontal, PanelStyle.Space.m)
         .padding(.vertical, PanelStyle.Space.s)
@@ -587,12 +607,14 @@ struct LargeFileTrashSheet: View {
             HStack(spacing: PanelStyle.Space.m) {
                 Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("storage.trash.cancel")
                 Spacer()
                 Button(role: .destructive, action: onConfirm) {
                     Text(settings.t("appsMoveToTrash"))
                         .frame(minWidth: 160)
                 }
                 .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("storage.trash.confirm")
             }
             .padding(PanelStyle.Space.l)
             .background(.ultraThinMaterial)
@@ -672,16 +694,19 @@ struct UninstallConfirmationSheet: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(settings.t("confirmTotal", ["amount": ByteFormat.string(totalBytes)]))
+            .accessibilityIdentifier("storage.uninstall.total")
 
             HStack(spacing: PanelStyle.Space.m) {
                 Button(settings.t("confirmCancel"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("storage.uninstall.cancel")
                 Spacer()
                 Button(role: .destructive, action: onConfirm) {
                     Text(settings.t("appsPurgeAction"))
                         .frame(minWidth: 160)
                 }
                 .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("storage.uninstall.confirm")
             }
         }
         .padding(PanelStyle.Space.l)
@@ -784,6 +809,7 @@ struct StorageResultCard: View {
             .foregroundStyle(.secondary)
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
+            .accessibilityIdentifier("storage.result.close")
         }
     }
 
@@ -826,6 +852,7 @@ struct StorageResultCard: View {
         .padding(.vertical, PanelStyle.Space.s)
         .padding(.horizontal, 2)
         .pathContextMenu(outcome.path)
+        .accessibilityIdentifier("storage.outcome.\(outcome.status.rawValue).\(outcome.path)")
     }
 
     private func symbol(for status: UninstallOutcome.Status) -> String {
