@@ -54,7 +54,7 @@ describe("apply --only-file deletes exactly the selected paths", () => {
     const result = applyJson(run.stdout);
     expect(result.outcomes.find((o) => o.path === npm())?.status).toBe("deleted");
     expect(result.outcomes.find((o) => o.path === bun())?.status).toBe("skipped");
-    expect(result.outcomes.find((o) => o.path === bun())?.detail).toMatch(/chọn/);
+    expect(result.outcomes.find((o) => o.path === bun())?.detail?.code).toBe("not_selected");
     expect(await exists(npm())).toBe(false);
     expect(await treeBytes(bun())).toBe(1 * MB);
   });

@@ -214,7 +214,7 @@ describe("mcp server over stdio", () => {
     expect(structured.totals["green"]).toEqual({ count: 1, bytes: planted });
     expect(structured.totals["blocked"]).toEqual({ count: 0, bytes: 0 });
     expect(structured.rules).toHaveLength(1);
-    const rule = structured.rules[0] ?? { rule_id: "", tier: "", count: 0, bytes: 0, blocked: false, note: "", paths: [""], paths_hidden: 0 };
+    const rule = structured.rules[0] ?? { rule_id: "", tier: "", count: 0, bytes: 0, blocked: false, note: [], paths: [""], paths_hidden: 0 };
     expect(rule.rule_id).toBe("npm.cacache");
     expect(rule.tier).toBe("green");
     expect(rule.count).toBe(1);

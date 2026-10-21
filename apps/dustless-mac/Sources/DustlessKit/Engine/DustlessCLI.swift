@@ -242,10 +242,21 @@ public struct DustlessCLI: Sendable {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    private struct SchemaEnvelope: Decodable {
+        let schemaVersion: Int?
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from result: EngineRun) throws -> T {
         do {
             return try JSONDecoder().decode(type, from: result.data)
         } catch {
+            if let envelope = try? JSONDecoder().decode(SchemaEnvelope.self, from: result.data),
+               let version = envelope.schemaVersion,
+               !EngineContract.isSupported(version) {
+                throw DustlessError.unreadableOutput(
+                    "the engine speaks schema version \(version), this app understands \(EngineContract.currentSchemaVersion)"
+                )
+            }
             if result.status == 0 {
                 let reason = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 throw DustlessError.unreadableOutput(reason.isEmpty ? String(describing: error) : reason)

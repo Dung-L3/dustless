@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "findings": [
     {
       "ruleId": "container.docker",
@@ -11,7 +12,7 @@
       "ageDays": 40,
       "verified": true,
       "blocked": false,
-      "note": ""
+      "note": []
     },
     {
       "ruleId": "gradle.version_cache",
@@ -24,7 +25,35 @@
       "ageDays": 41.5,
       "verified": true,
       "blocked": false,
-      "note": "mới 0.0 ngày, rule yêu cầu ≥ 30 ngày"
+      "note": [
+        {
+          "code": "min_age",
+          "params": {
+            "age": "0.0",
+            "min": "30"
+          }
+        }
+      ]
+    },
+    {
+      "ruleId": "project.node_modules",
+      "tier": "yellow",
+      "desc": "node_modules của project, bỏ qua nếu git còn thay đổi chưa commit",
+      "path": "/tmp/dustless-fixture-sandbox/work/svc/node_modules",
+      "bytes": 524290,
+      "mtime": 1700000002000,
+      "atime": 1700000004000,
+      "ageDays": 43,
+      "verified": false,
+      "blocked": true,
+      "note": [
+        {
+          "code": "verify_failed",
+          "params": {
+            "cause": "node_stale"
+          }
+        }
+      ]
     },
     {
       "ruleId": "npm.cacache",
@@ -32,12 +61,12 @@
       "desc": "npm cache tarball",
       "path": "/tmp/dustless-fixture-sandbox/.npm/_cacache",
       "bytes": 307200,
-      "mtime": 1700000002000,
-      "atime": 1700000004000,
-      "ageDays": 43,
+      "mtime": 1700000003000,
+      "atime": 1700000006000,
+      "ageDays": 44.5,
       "verified": true,
       "blocked": false,
-      "note": ""
+      "note": []
     },
     {
       "ruleId": "pip.cache",
@@ -45,12 +74,12 @@
       "desc": "pip wheel cache",
       "path": "/tmp/dustless-fixture-sandbox/.cache/pip",
       "bytes": 122880,
-      "mtime": 1700000003000,
-      "atime": 1700000006000,
-      "ageDays": 44.5,
+      "mtime": 1700000004000,
+      "atime": 1700000008000,
+      "ageDays": 46,
       "verified": true,
       "blocked": false,
-      "note": ""
+      "note": []
     },
     {
       "ruleId": "bun.cache",
@@ -58,12 +87,12 @@
       "desc": "Bun package cache",
       "path": "/tmp/dustless-fixture-sandbox/.bun/install/cache",
       "bytes": 92160,
-      "mtime": 1700000004000,
-      "atime": 1700000008000,
-      "ageDays": 46,
+      "mtime": 1700000005000,
+      "atime": 1700000010000,
+      "ageDays": 47.5,
       "verified": true,
       "blocked": false,
-      "note": ""
+      "note": []
     },
     {
       "ruleId": "gradle.wrapper",
@@ -71,12 +100,20 @@
       "desc": "Gradle wrapper đã tải về, tự tải lại khi build",
       "path": "/tmp/dustless-fixture-sandbox/.gradle/wrapper/dists",
       "bytes": 1,
-      "mtime": 1700000005000,
-      "atime": 1700000010000,
-      "ageDays": 47.5,
+      "mtime": 1700000006000,
+      "atime": 1700000012000,
+      "ageDays": 49,
       "verified": true,
       "blocked": false,
-      "note": "mới 0.0 ngày, rule yêu cầu ≥ 90 ngày"
+      "note": [
+        {
+          "code": "min_age",
+          "params": {
+            "age": "0.0",
+            "min": "90"
+          }
+        }
+      ]
     }
   ],
   "totals": {
@@ -93,8 +130,8 @@
       "bytes": 0
     },
     "blocked": {
-      "count": 0,
-      "bytes": 0
+      "count": 1,
+      "bytes": 524290
     }
   },
   "reclaimable": 3696641,
@@ -108,7 +145,7 @@
       "desc": "Android emulator AVD, tốn hàng GB mỗi cái",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.android/avd/*.avd"
+        "~/.android/avd/*.avd"
       ]
     },
     {
@@ -117,7 +154,7 @@
       "desc": "Android NDK, build native cần đúng phiên bản",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Android/sdk/ndk"
+        "~/Library/Android/sdk/ndk"
       ]
     },
     {
@@ -126,7 +163,7 @@
       "desc": "Ảnh hệ thống Android cho emulator",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Android/sdk/system-images"
+        "~/Library/Android/sdk/system-images"
       ]
     },
     {
@@ -135,7 +172,7 @@
       "desc": "Brave cache, không đụng profile",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Caches/com.brave.Browser"
+        "~/Library/Caches/com.brave.Browser"
       ]
     },
     {
@@ -144,7 +181,7 @@
       "desc": "Brave Software cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Caches/BraveSoftware"
+        "~/Library/Caches/BraveSoftware"
       ]
     },
     {
@@ -153,7 +190,7 @@
       "desc": "Chrome cache, không đụng profile",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Caches/Google/Chrome"
+        "~/Library/Caches/Google/Chrome"
       ]
     },
     {
@@ -162,7 +199,7 @@
       "desc": "Edge cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Caches/Microsoft Edge"
+        "~/Library/Caches/Microsoft Edge"
       ]
     },
     {
@@ -171,7 +208,7 @@
       "desc": "Firefox cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/Caches/Firefox/Profiles"
+        "~/Library/Caches/Firefox/Profiles"
       ]
     },
     {
@@ -180,7 +217,7 @@
       "desc": "Cargo registry cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.cargo/registry/cache"
+        "~/.cargo/registry/cache"
       ]
     },
     {
@@ -189,7 +226,7 @@
       "desc": "Colima VM disk, xoá là mất image và container",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.colima/_lima"
+        "~/.colima/_lima"
       ]
     },
     {
@@ -198,7 +235,7 @@
       "desc": "Go module cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/go/pkg/mod"
+        "~/go/pkg/mod"
       ]
     },
     {
@@ -208,7 +245,7 @@
       "reason": "absent",
       "pathPatterns": [
         "/opt/homebrew/var/homebrew/cache",
-        "/tmp/dustless-fixture-sandbox/Library/Caches/Homebrew"
+        "~/Library/Caches/Homebrew"
       ]
     },
     {
@@ -217,7 +254,7 @@
       "desc": "Package tải tạm qua npx, tái tạo khi chạy lại",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.npm/_npx"
+        "~/.npm/_npx"
       ]
     },
     {
@@ -226,7 +263,7 @@
       "desc": "pnpm content-addressable store",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/Library/pnpm/store"
+        "~/Library/pnpm/store"
       ]
     },
     {
@@ -237,19 +274,12 @@
       "pathPatterns": []
     },
     {
-      "ruleId": "project.node_modules",
-      "tier": "yellow",
-      "desc": "node_modules của project, bỏ qua nếu git còn thay đổi chưa commit",
-      "reason": "error",
-      "pathPatterns": []
-    },
-    {
       "ruleId": "pubcache.hosted",
       "tier": "green",
       "desc": "Dart pub cache, tái tạo bằng pub get",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.pub-cache/hosted"
+        "~/.pub-cache/hosted"
       ]
     },
     {
@@ -258,7 +288,7 @@
       "desc": "Puppeteer browser tải về",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.cache/puppeteer"
+        "~/.cache/puppeteer"
       ]
     },
     {
@@ -267,7 +297,7 @@
       "desc": "uv cache wheel và source build",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.cache/uv"
+        "~/.cache/uv"
       ]
     },
     {
@@ -276,7 +306,7 @@
       "desc": "Yarn cache",
       "reason": "absent",
       "pathPatterns": [
-        "/tmp/dustless-fixture-sandbox/.cache/yarn"
+        "~/.cache/yarn"
       ]
     }
   ],
@@ -284,7 +314,8 @@
     "absent": 18,
     "no_access": 0,
     "not_supported": 0,
-    "error": 2,
-    "red": 0
+    "error": 1,
+    "red": 0,
+    "protected": 0
   }
 }

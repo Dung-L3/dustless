@@ -67,6 +67,8 @@ workingHint
 yellowHint
 [oversize-files]
 [doc-line-references]
+docs/TESTING.md 34
+docs/RESEARCH-CLEANER-APPS.md 6
 README.md 43
 README.vi.md 44
 README.zh.md 44

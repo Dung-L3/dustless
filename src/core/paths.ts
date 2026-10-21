@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { lstatSync, realpathSync } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
-import type { Platform, Rule } from "../types.ts";
+import type { Platform, ReasonCode, Rule } from "../types.ts";
 
 export const platform: Platform =
   process.platform === "darwin"
@@ -337,10 +337,10 @@ export function realGuard(path: string): RealGuard {
   return { real };
 }
 
-export function refusalText(reason: RealRefusal): string {
-  if (reason === "red") return "từ chối: nằm trong danh sách đỏ";
-  if (reason === "unresolvable") return "từ chối: không xác minh được đường dẫn thực";
-  if (reason === "protected") return "từ chối: là HOME, thư mục cha của HOME hoặc gốc hệ thống";
-  if (reason === "symlinked") return "từ chối: đường dẫn đi qua liên kết tượng trưng";
-  return "từ chối: đường dẫn thay đổi trong lúc chờ xoá";
+export function refusalCode(reason: RealRefusal): ReasonCode {
+  if (reason === "red") return "red_list";
+  if (reason === "unresolvable") return "unresolvable";
+  if (reason === "protected") return "protected";
+  if (reason === "symlinked") return "symlink";
+  return "changed";
 }

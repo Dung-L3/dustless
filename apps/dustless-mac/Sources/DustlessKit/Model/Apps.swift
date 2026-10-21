@@ -31,11 +31,11 @@ public struct UninstallOutcome: Codable, Sendable, Identifiable, Hashable {
     public let path: String
     public let status: Status
     public let bytes: UInt64
-    public let detail: String
+    public let detail: Reason?
 
     public var id: String { path }
 
-    public init(path: String, status: Status, bytes: UInt64, detail: String) {
+    public init(path: String, status: Status, bytes: UInt64, detail: Reason?) {
         self.path = path
         self.status = status
         self.bytes = bytes

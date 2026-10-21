@@ -4,7 +4,17 @@ import { gradleVersionUnused } from "./gradle.ts";
 import { gitClean, gitIgnored } from "./git.ts";
 import { isLiveDependencyTree } from "./node.ts";
 
-export type VerifyResult = { ok: boolean; note: string };
+export type VerifyCause =
+  | "node_stale"
+  | "git_in_progress"
+  | "git_dirty"
+  | "git_unpushed"
+  | "git_unverifiable"
+  | "git_ignored"
+  | "git_unverifiable_ignore"
+  | "gradle_used";
+
+export type VerifyResult = { ok: boolean; cause?: VerifyCause; params?: Record<string, string> };
 
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, { at: number; result: VerifyResult }>();
@@ -27,11 +37,11 @@ function remember(key: string, result: VerifyResult): VerifyResult {
 export async function verify(rule: Rule, path: string): Promise<VerifyResult> {
   if (basename(path) === "node_modules") {
     const live = await isLiveDependencyTree(path);
-    if (!live) return { ok: false, note: "dependency tree looks stale against its package.json" };
+    if (!live) return { ok: false, cause: "node_stale" };
   }
   switch (rule.requireVerify) {
     case undefined:
-      return { ok: true, note: "no verification required" };
+      return { ok: true };
     case "gradle_version_unused": {
       const key = `gradle:${basename(path)}`;
       const hit = cached(key);

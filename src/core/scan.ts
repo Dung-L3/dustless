@@ -1,6 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { Finding, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
+import type { Finding, Reason, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
+import { SCHEMA_VERSION } from "../types.ts";
 import { isProtectedPath, isRedReal, matchesBasename, pathsForRule, patternsVerdict, platform, resolvePattern } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { verify } from "./verify/index.ts";
@@ -52,6 +53,7 @@ export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): 
   const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0, protected: 0 };
   for (const u of unscannable) unscannableSummary[u.reason] += 1;
   return {
+    schemaVersion: SCHEMA_VERSION,
     findings: found,
     totals,
     reclaimable: totals.green.bytes + totals.yellow.bytes,
@@ -140,13 +142,16 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
   const tree = await walk(path);
   if (tree.bytes === 0) return null;
   const ageDays = Math.max(0, (Date.now() - tree.mtime) / DAY);
-  const notes: string[] = [];
+  const notes: Reason[] = [];
   let tier: Tier = rule.tier;
   let verified = true;
   let blocked = false;
   if (rule.minAgeDays !== undefined && ageDays < rule.minAgeDays) {
     tier = "yellow";
-    notes.push(`mới ${ageDays.toFixed(1)} ngày, rule yêu cầu ≥ ${rule.minAgeDays} ngày`);
+    notes.push({
+      code: "min_age",
+      params: { age: ageDays.toFixed(1), min: String(rule.minAgeDays) },
+    });
   }
   if (rule.requireVerify) {
     const verdict = await verify(rule, path);
@@ -154,7 +159,7 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
     if (!verdict.ok) {
       tier = "yellow";
       blocked = true;
-      notes.push(`KHÔNG XÓA: ${verdict.note}`);
+      notes.push({ code: "verify_failed", params: { cause: verdict.cause ?? "unknown", ...(verdict.params ?? {}) } });
     }
   }
   return {
@@ -168,7 +173,7 @@ async function inspect(rule: Rule, path: string): Promise<Finding | null> {
     ageDays,
     verified,
     blocked,
-    note: notes.join(" · "),
+    note: notes,
   };
 }
 

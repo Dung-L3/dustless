@@ -20,6 +20,8 @@ const DOC_FILES = [
   "docs/NETWORK.md",
   "docs/PACKAGING.md",
   "docs/THREAT-MODEL.md",
+  "docs/TESTING.md",
+  "docs/RESEARCH-CLEANER-APPS.md",
 ];
 const DATA_TABLES = new Set(["apps/dustless-mac/Sources/DustlessKit/Model/Localization.swift"]);
 const DOC_LINE_REFERENCE = /\.(ts|swift|yaml|yml|nsi):[0-9]+/g;
