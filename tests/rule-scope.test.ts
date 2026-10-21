@@ -195,7 +195,7 @@ describe("the scan refuses a protected scope", () => {
   });
 
   test("a rule for the parent of $HOME yields no finding and is reported as protected", async () => {
-    await writeRules(`- id: test.parent\n  tier: green\n  desc: parent\n  paths: { all: "${dirname(HOME)}" }\n`);
+    await writeRules(`- id: test.parent\n  tier: green\n  desc: parent\n  paths: { all: ${JSON.stringify(dirname(HOME))} }\n`);
     const report = await scan({ roots: [sandbox] });
     expect(report.findings.some((f) => f.ruleId === "test.parent")).toBe(false);
     expect(report.unscannable.find((r) => r.ruleId === "test.parent")?.reason).toBe("protected");

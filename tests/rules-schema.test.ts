@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import type { Rule } from "../src/types.ts";
 import { defect, loadRules, scopeDefect } from "../src/core/rules.ts";
@@ -221,7 +221,7 @@ describe("rules schema", () => {
 
   test("a rule that reaches $HOME itself is rejected", () => {
     expect(defect(raw({ paths: { all: "~" } }), false)).toContain("$HOME");
-    expect(defect(raw({ paths: { all: process.env["HOME"] ?? "" } }), false)).toContain("$HOME");
+    expect(defect(raw({ paths: { all: homedir() } }), false)).toContain("$HOME");
   });
 
   test("a rule that reaches an ancestor of $HOME is rejected", () => {
