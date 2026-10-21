@@ -65,6 +65,19 @@ const fakePs = async (listing: string[], tasklist = false): Promise<{ restore: (
   };
 };
 
+const fakeNoListing = async (): Promise<{ restore: () => void }> => {
+  const empty = join(sandbox, "bin-empty");
+  await mkdir(empty, { recursive: true });
+  const prior = process.env["PATH"];
+  process.env["PATH"] = empty;
+  return {
+    restore: () => {
+      if (prior === undefined) delete process.env["PATH"];
+      else process.env["PATH"] = prior;
+    },
+  };
+};
+
 afterAll(async () => {
   if (originalXdg === undefined) delete process.env["XDG_CONFIG_HOME"];
   else process.env["XDG_CONFIG_HOME"] = originalXdg;
@@ -162,7 +175,7 @@ describe("the delete path re-verifies the finding", () => {
 });
 
 describe("the busy-process gate matches the real process names", () => {
-  test("an npm run in the process table skips the npm cache rule", async () => {
+  test.skipIf(process.platform === "win32")("an npm run in the process table skips the npm cache rule", async () => {
     const dir = join(sandbox, "npm-cache");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -186,7 +199,7 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
-  test("a bare node process does not block the npm cache rule", async () => {
+  test.skipIf(process.platform === "win32")("a bare node process does not block the npm cache rule", async () => {
     const dir = join(sandbox, "npm-cache-free");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -205,7 +218,7 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
-  test("the gradle daemon under java blocks the gradle cache rule", async () => {
+  test.skipIf(process.platform === "win32")("the gradle daemon under java blocks the gradle cache rule", async () => {
     const dir = join(sandbox, "gradle-cache");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -228,7 +241,7 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
-  test("a pnpm process under node blocks the pnpm store rule", async () => {
+  test.skipIf(process.platform === "win32")("a pnpm process under node blocks the pnpm store rule", async () => {
     const dir = join(sandbox, "pnpm-store");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "blob.bin"), "payload");
@@ -267,6 +280,22 @@ describe("the busy-process gate matches the real process names", () => {
     }
   });
 
+  test.skipIf(process.platform !== "win32")("a listing with image names only keeps the tool caches", async () => {
+    const dir = join(sandbox, "npm-cache-nameonly");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "blob.bin"), "payload");
+    await writeRules(
+      `- id: test.npm\n  tier: green\n  desc: npm\n  paths: { all: ${JSON.stringify(dir)} }\n  nativeCommand: npm cache verify\n`,
+    );
+    const result = await apply(report([finding(dir, { ruleId: "test.npm" })]), {
+      assumeYes: true,
+      tiers: { "test.npm": "green" },
+    });
+    expect(result.outcomes[0]?.status).toBe("skipped");
+    expect(result.outcomes[0]?.detail).toMatch(/không xác định được/);
+    expect(await exists(join(dir, "blob.bin"))).toBe(true);
+  });
+
   test("no process listing at all keeps the fail-closed behaviour", async () => {
     const dir = join(sandbox, "npm-cache-unknown");
     await mkdir(dir, { recursive: true });
@@ -274,7 +303,7 @@ describe("the busy-process gate matches the real process names", () => {
     await writeRules(
       `- id: test.npm\n  tier: green\n  desc: npm\n  paths: { all: ${JSON.stringify(dir)} }\n  nativeCommand: npm cache verify\n`,
     );
-    const seam = await fakePs([]);
+    const seam = await fakeNoListing();
     try {
       const result = await apply(report([finding(dir, { ruleId: "test.npm" })]), {
         assumeYes: true,
@@ -323,10 +352,26 @@ describe("the apply report separates deleted bytes from the volume delta", () =>
     expect(byPath(skipped)?.bytes).toBe(0);
     expect(byPath(failed)?.status).toBe("failed");
     expect(byPath(failed)?.bytes).toBe(0);
-    expect(byPath(locked)?.status).toBe("failed");
-    expect(byPath(locked)?.bytes).toBe(0);
     expect(result.deletedBytes).toBe(2048);
     expect(result.freed).toBe(Math.max(0, result.freeAfter - result.freeBefore));
+    await chmod(locked, 0o700);
+  });
+
+  test.skipIf(process.platform === "win32")("a delete that cannot succeed contributes no bytes", async () => {
+    const locked = join(sandbox, "locked-cache");
+    await mkdir(locked, { recursive: true });
+    await writeFile(join(locked, "blob.bin"), Buffer.alloc(2048, 3));
+    await chmod(locked, 0o500);
+    await writeRules(
+      `- id: test.locked\n  tier: green\n  desc: locked\n  paths: { all: ${JSON.stringify(locked)} }\n`,
+    );
+    const result = await apply(report([finding(locked, { bytes: 16384, ruleId: "test.locked" })]), {
+      assumeYes: true,
+      tiers: { "test.locked": "green" },
+    });
+    expect(result.outcomes[0]?.status).toBe("failed");
+    expect(result.outcomes[0]?.bytes).toBe(0);
+    expect(result.deletedBytes).toBe(0);
     await chmod(locked, 0o700);
   });
 });

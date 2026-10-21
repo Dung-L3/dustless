@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { lstat, readdir, statfs } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import type { ScanReport, Tier } from "../types.ts";
 import { HOME } from "./paths.ts";
 
@@ -53,8 +53,14 @@ export async function treeUsage(path: string): Promise<TreeUsage | null> {
   return { bytes, mtime };
 }
 
+function comparable(path: string): string {
+  return path.replace(/[\\/]+/g, "/").replace(/\/$/, "");
+}
+
 export function isNested(child: string, parent: string): boolean {
-  return child === parent || child.startsWith(parent.endsWith(sep) ? parent : parent + sep);
+  const inner = comparable(child);
+  const outer = comparable(parent);
+  return inner === outer || inner.startsWith(outer + "/");
 }
 
 export function accountedBytes(entries: MeasuredPath[]): number {

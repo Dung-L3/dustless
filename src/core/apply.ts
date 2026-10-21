@@ -26,9 +26,6 @@ const TOOL_PATTERNS: { tool: string; pattern: RegExp }[] = [
 
 const COMMAND_LINE_TOOLS = new Set(["npm", "npx", "yarn", "pnpm", "gradle"]);
 
-const WINDOWS_COMMAND_LINES =
-  "Get-CimInstance -ClassName Win32_Process | ForEach-Object { $_.CommandLine }";
-
 type ProcessEntry = { name: string; tools: Set<string> };
 type Listing = { entries: ProcessEntry[]; nameOnly: boolean };
 
@@ -224,13 +221,6 @@ async function runningCommands(): Promise<Listing | null> {
   if (posix.code === 0) {
     const entries = parseListing(posix.out, false);
     if (entries.length > 0) return { entries, nameOnly: false };
-  }
-  if (platform === "win") {
-    const shell = await exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_COMMAND_LINES]);
-    if (shell.code === 0) {
-      const entries = parseListing(shell.out, false);
-      if (entries.length > 0) return { entries, nameOnly: false };
-    }
   }
   const win = await exec("tasklist", ["/fo", "csv", "/nh"]);
   if (win.code === 0) {
