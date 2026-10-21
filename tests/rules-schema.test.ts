@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import type { Rule } from "../src/types.ts";
-import { defect, loadRules } from "../src/core/rules.ts";
+import { defect, loadRules, scopeDefect } from "../src/core/rules.ts";
 
 let dir: string;
 let xdg: string;
@@ -217,6 +217,39 @@ describe("rules schema", () => {
 
   test("a tier outside green and yellow is still rejected", () => {
     expect(defect({ id: "test.tier", tier: "red", desc: "d", paths: { all: "~/x" }, recoveryLabel: "download" }, true)).toContain("green");
+  });
+
+  test("a rule that reaches $HOME itself is rejected", () => {
+    expect(defect(raw({ paths: { all: "~" } }), false)).toContain("$HOME");
+    expect(defect(raw({ paths: { all: process.env["HOME"] ?? "" } }), false)).toContain("$HOME");
+  });
+
+  test("a rule that reaches an ancestor of $HOME is rejected", () => {
+    expect(defect(raw({ paths: { all: "~/.." } }), false)).not.toBeNull();
+    expect(defect(raw({ paths: { all: "/" } }), false)).not.toBeNull();
+  });
+
+  test("a rule whose wildcard lands on the direct children of $HOME is rejected", () => {
+    expect(defect(raw({ paths: { all: "~/*" } }), false)).toContain("paths.all");
+    expect(defect(raw({ paths: { all: "~/*/node_modules" } }), false)).toBeNull();
+  });
+
+  test("a rule that names a path below $HOME is accepted", () => {
+    expect(defect(raw({ paths: { all: "~/x" } }), false)).toBeNull();
+    expect(defect(raw({ paths: { all: "~/.cache/x" } }), false)).toBeNull();
+    expect(defect(raw({ paths: { all: ["/opt/homebrew/var/homebrew/cache", "~/.cache/y"] } }), false)).toBeNull();
+  });
+
+  test("a rule that escapes $HOME through .. is rejected", () => {
+    expect(defect(raw({ paths: { all: "~/../elsewhere" } }), false)).not.toBeNull();
+    expect(defect(raw({ paths: { all: "~/*/../elsewhere" } }), false)).not.toBeNull();
+  });
+
+  test("a hand-written rule with an over-broad scope never loads as a scannable rule", async () => {
+    const file = await writeRule(`- id: test.broad\n  tier: green\n  desc: d\n  paths: { all: "~/*" }\n`);
+    const rules = await loadRules(file);
+    expect(rules.find((rule) => rule.id === "test.broad")).toBeDefined();
+    expect(scopeDefect(rules.find((rule) => rule.id === "test.broad")?.paths)).not.toBeNull();
   });
 
   test("a non-string tier cannot smuggle a yellow finding past the gate", () => {

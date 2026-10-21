@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { writeOut } from "../core/output.ts";
 import { exists } from "../core/paths.ts";
-import { configDir, defect, loadRules, userRulesPath } from "../core/rules.ts";
+import { configDir, defect, loadRules, scopeDefect, userRulesPath } from "../core/rules.ts";
 import { flag, say, tierBadge } from "./context.ts";
 
 export async function runRule(sub: string, rest: string[]): Promise<number> {
@@ -41,6 +41,13 @@ export async function runRule(sub: string, rest: string[]): Promise<number> {
   }
   if (sub === "validate") {
     const rules = await loadRules(rest[0]);
+    const refused = rules
+      .map((rule) => ({ id: rule.id, problem: scopeDefect(rule.paths) }))
+      .filter((entry): entry is { id: string; problem: string } => Boolean(entry.problem));
+    if (refused.length) {
+      const source = rest[0] ?? ((await exists(userRulesPath())) ? userRulesPath() : "default-rules.yaml");
+      throw new Error(`${source}: rule không hợp lệ\n  - ${refused.map((entry) => `${entry.id}: ${entry.problem}`).join("\n  - ")}`);
+    }
     if (flag("json")) {
       await writeOut(`${JSON.stringify({ ok: true, rules: rules.length })}\n`);
       return 0;

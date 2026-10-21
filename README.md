@@ -160,9 +160,10 @@ keys beside `findings` and `totals` (`src/types.ts`, `ScanReport`):
 - `unscannable` — one entry per rule that produced no scannable path, each with `ruleId`, `tier`,
   `desc`, the `pathPatterns` that failed, and a `reason` of `absent` (the path does not exist),
   `no_access` (EACCES/EPERM — usually the missing Full Disk Access), `not_supported` (the rule has no
-  path for this platform), `red` (the path matched the permanent blocklist) or `error`
+  path for this platform), `red` (the path matched the permanent blocklist), `protected` (the rule's
+  scope reaches `$HOME`, an ancestor of it or the filesystem root) or `error`
   (`src/core/scan.ts`, `scan`).
-- `unscannableSummary` — the count per reason, with all five keys always present.
+- `unscannableSummary` — the count per reason, with all six keys always present.
 
 Those rules are excluded from `totals`, `reclaimable` and `freed`: the field can only ever add
 information, never a number. The macOS app models both fields and localizes the reason wording
@@ -264,7 +265,7 @@ A real rule:
 | `id` | Unique. Replaces a bundled rule with the same id. |
 | `tier` | `green` or `yellow`. Any other value is rejected at load (`src/core/rules.ts:60`). `red` and `blocked` are not assignable: RED is a path list, BLOCKED is a verdict. |
 | `desc` | One line, shown in `rule list`. |
-| `paths` | Keys are `mac`, `win`, `linux` or `all` (`src/core/rules.ts:7`). `~` expands to your home directory; on Windows `%VAR%` expands from the environment (`src/core/paths.ts:14`). Each value is a string or a list of strings. A `*` expands to the directories directly under its parent. |
+| `paths` | Keys are `mac`, `win`, `linux` or `all` (`src/core/rules.ts:7`). `~` expands to your home directory; on Windows `%VAR%` expands from the environment (`src/core/paths.ts:14`). Each value is a string or a list of strings. A `*` matches one path segment and may sit inside a segment (`*.avd`); a pattern may hold several of them, and each one must line up: `~/*/*/node_modules` matches `~/a/b/node_modules` and nothing else. The expansion is bounded — at most 12 path segments and 20 000 directory entries per pattern — and a pattern that reaches either bound is reported as unscannable instead of being quietly truncated. A pattern may not reach `$HOME`, an ancestor of `$HOME` (including `~/..`), the filesystem root, or a direct child of `$HOME` reached through a wildcard: `~/*` is refused, `~/.cache/x` is not (`patternVerdict` in `src/core/paths.ts`). |
 | `match` | Optional regex tested against the basename of each directory the path produced (`matchesBasename` in `src/core/paths.ts`). It runs in-process without a timeout, so a pathological pattern can slow a scan; only load rule files you trust. |
 | `minAgeDays` | If the newest file inside is younger than this, the finding is demoted from GREEN to YELLOW (`src/core/scan.ts:132`). |
 | `requireVerify` | Name of a cross-check: `gradle_version_unused`, `git_clean`, or `not_in_gitignore`. If it fails, the finding is demoted to YELLOW **and** marked BLOCKED (`src/core/scan.ts:136`). |
@@ -276,6 +277,14 @@ Per CONTRIBUTING, a new rule without a verification is a bug, not a feature; if 
 dustless rule validate
 dustless rule list
 ```
+
+A rule whose scope is too broad is refused, never quietly narrowed. `dustless rule add` exits `1` and
+writes nothing, `dustless rule validate` names the offending rule, and a scan reports the rule as
+unscannable with the reason `protected` instead of deleting anything. The refused shapes are `$HOME`
+itself, an ancestor of `$HOME` (`~/..`), the filesystem root, and any wildcard that can land on a
+direct child of `$HOME` — `~/*` would have wiped every one of them. A path that names one directory
+below `$HOME` (`~/.cache/x`) is accepted; the red list still decides what happens to `~/Documents`
+and the rest.
 
 ## Troubleshooting
 
