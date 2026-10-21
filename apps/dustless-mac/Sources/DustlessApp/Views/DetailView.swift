@@ -308,13 +308,7 @@ struct EngineErrorView: View {
                 .foregroundStyle(.orange)
             Text(settings.t("engineUnavailable"))
                 .font(PanelFont.emphasis(.semibold))
-            Text(message)
-                .font(PanelFont.mono(11))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 520)
+            errorMessage
             Button(settings.t("retry"), action: onRetry)
                 .controlSize(.large)
                 .disabled(isBusy)
@@ -325,5 +319,19 @@ struct EngineErrorView: View {
         }
         .padding(30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var errorMessage: some View {
+        ScrollView {
+            Text(message)
+                .font(PanelFont.mono(11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 520)
+                .help(message)
+        }
+        .frame(maxWidth: 520, maxHeight: 220)
     }
 }
