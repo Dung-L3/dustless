@@ -57,9 +57,9 @@ export async function gitIgnored(target: string): Promise<VerifyResult> {
   if (!root) return { ok: true, note: "not a git repo" };
   const exit = await gitExit(root, ["check-ignore", "-q", "--", resolve(target)]);
   if (exit === null) return { ok: false, note: "git check-ignore failed, cannot verify" };
-  return exit === 0
-    ? { ok: false, note: "path is ignored by git" }
-    : { ok: true, note: "path is tracked by git" };
+  if (exit === 1) return { ok: true, note: "path is not ignored by git" };
+  if (exit === 0) return { ok: false, note: "path is ignored by git" };
+  return { ok: false, note: `git check-ignore could not verify the path (exit ${exit})` };
 }
 
 async function git(cwd: string, args: string[]): Promise<{ output: string } | null> {

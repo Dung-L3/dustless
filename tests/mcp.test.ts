@@ -50,7 +50,7 @@ function fakeCore(over: Partial<Core> = {}): Core & { deleted: string[][] } {
           status: opts?.tiers?.[f.ruleId] === "skip" ? "skipped" : "deleted",
           bytes: f.bytes, detail: "",
         })),
-        freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+        deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
       };
     },
     ...over,
@@ -237,7 +237,7 @@ describe("apply safety", () => {
         seen.push(opts?.tiers);
         return {
           outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: "" })),
-          freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+          deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
         };
       },
     });
@@ -254,7 +254,7 @@ describe("apply safety", () => {
         seen.push(opts?.tiers);
         return {
           outcomes: report.findings.map((f) => ({ ruleId: f.ruleId, tier: f.tier, path: f.path, status: "deleted", bytes: f.bytes, detail: "" })),
-          freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
+          deletedBytes: 0, freed: 0, freeBefore: 0, freeAfter: 0, elapsedMs: 1,
         };
       },
     });

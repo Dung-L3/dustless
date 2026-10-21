@@ -4,6 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { apply } from "../core/apply.ts";
 import { writeOut } from "../core/output.ts";
 import { scan } from "../core/scan.ts";
+import { adjustScanAccounting } from "../core/space.ts";
 import type { ApplyReport, Finding, ScanReport, TierChoice } from "../types.ts";
 import { HUE, ICON, bold, bytesOf, dim, flag, paint, required, say, tierBadge } from "./context.ts";
 
@@ -39,11 +40,13 @@ async function printApply(result: ApplyReport): Promise<void> {
     say(`${mark} ${bytesOf(o.bytes).padStart(9)}  ${dim(o.ruleId)}  ${o.path}`);
     if (o.detail) say(`  ${dim(o.detail)}`);
   }
-  say(`\n${bold(`Đã thu hồi ${bytesOf(result.freed)}`)}`);
+  say(`\n${bold(`Đã xóa ${bytesOf(result.deletedBytes)}`)}`);
+  say(dim(`Dung lượng trống của volume tăng ${bytesOf(result.freed)}`));
 }
 
 const idleApply = (): ApplyReport => ({
   outcomes: [],
+  deletedBytes: 0,
   freed: 0,
   freeBefore: 0,
   freeAfter: 0,
@@ -51,7 +54,7 @@ const idleApply = (): ApplyReport => ({
 });
 
 export async function runScan(): Promise<number> {
-  await printScan(await scan());
+  await printScan(adjustScanAccounting(await scan()));
   return 0;
 }
 
@@ -72,7 +75,7 @@ async function readSelection(): Promise<Set<string> | undefined> {
 
 export async function runApply(): Promise<number> {
   const only = await readSelection();
-  const report = await scan();
+  const report = adjustScanAccounting(await scan());
   if (!flag("json")) await printScan(report);
   const deletable = report.findings.filter((f) => !f.blocked && f.tier !== "red");
   if (deletable.length === 0) {

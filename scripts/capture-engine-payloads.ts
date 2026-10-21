@@ -55,24 +55,27 @@ function pin(report: ScanReport, home: string): ScanReport {
 
 function deriveApply(report: ScanReport): ApplyReport {
   const statuses = ["deleted", "skipped", "failed"] as const;
-  const outcomes = report.findings.map((f, at) => ({
-    ruleId: f.ruleId,
-    tier: f.tier,
-    path: f.path,
-    status: f.blocked ? "skipped" : statuses[at % statuses.length] ?? "skipped",
-    bytes: f.bytes,
-    detail: f.blocked
-      ? "KHÔNG XÓA: cross-verification failed"
-      : `captured from scan finding ${at}, never executed`,
-  }));
-  const freed = outcomes
-    .filter((o) => o.status === "deleted")
-    .reduce((sum, o) => sum + o.bytes, 0);
+  const outcomes = report.findings.map((f, at) => {
+    const status = f.blocked ? "skipped" : statuses[at % statuses.length] ?? "skipped";
+    return {
+      ruleId: f.ruleId,
+      tier: f.tier,
+      path: f.path,
+      status,
+      bytes: status === "deleted" ? f.bytes : 0,
+      detail: f.blocked
+        ? "KHÔNG XÓA: cross-verification failed"
+        : `captured from scan finding ${at}, never executed`,
+    };
+  });
+  const deletedBytes = outcomes.filter((o) => o.status === "deleted").reduce((sum, o) => sum + o.bytes, 0);
+  const volumeDelta = 1_048_576;
   return {
     outcomes,
-    freed,
+    deletedBytes,
+    freed: volumeDelta,
     freeBefore: report.freeBefore,
-    freeAfter: report.freeBefore + freed,
+    freeAfter: report.freeBefore + volumeDelta,
     elapsedMs: 412,
   };
 }

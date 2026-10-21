@@ -88,11 +88,21 @@ consequences.
   `beforeDelete` hook before the second guard, so they prove the recheck and refusal path, not the
   post-recheck syscall window. A path spelled with different letter case on a case-insensitive
   filesystem can also be refused as `symlinked`; that errs in the direction of refusing a delete,
-  not of performing one. The busy-process gate is name-only. A first-token normalization of POSIX
-  titles was tried and rejected because ambient `npm exec` servers then blocked unrelated npm-cache
-  cleanup; Windows npm/npx appear as `node.exe`, pnpm usually as `node`, and Gradle's daemon as
-  `java` (entries 112–113). That affects cache cleanup only, and a failed process listing is
-  fail-closed (entry 110). On Windows a directory junction is treated as a removable leaf link; the
+  not of performing one. The busy-process gate reads the process command line (`ps -Ao args=`)
+  and recognises npm, npx, yarn, pnpm and Gradle by their own markers, so a tool that runs under
+  an interpreter is seen: `npm run build` is npm, `node …/pnpm.cjs install` is pnpm and the
+  `java … org.gradle.launcher.GradleMain` daemon is Gradle. A bare `node` or `java` is not a
+  tool and blocks nothing unless a rule names it, so no Node or Java process on the machine
+  blocks the product. `npm exec …` counts as npx rather than npm, because those long-lived
+  servers own the `_npx` cache and must not block an unrelated npm-cache cleanup. On Windows the
+  image-name listing cannot identify those tools at all, so the engine asks PowerShell for the
+  command lines; if only names are available, a rule that watches one of those tools is skipped
+  rather than deleted, because the condition cannot be verified. A failed process listing is
+  fail-closed (entries 110, 122 and 122's residual note). The delete path also re-checks the
+  finding itself before removing it (`revalidate` in `src/core/apply.ts`): the rule's
+  `minAgeDays` against the tree's newest mtime, the rule's `requireVerify` verdict re-run, and
+  the rule's `gitClean` flag — a cache touched after the scan, or a project that became dirty,
+  is skipped instead of deleted (entry 121). On Windows a directory junction is treated as a removable leaf link; the
   Windows-only `tests/windows-junction.test.ts` runs the source-level probe in a child Bun process
   with a throwaway `HOME`/`USERPROFILE` (not the compiled binary); it verifies that recursive apply
   removes the junction without following it, `moveToTrash` moves the leaf and preserves the target,
@@ -121,6 +131,14 @@ consequences.
   configuration, so this is a local denial-of-service, not a path into deletion; JavaScript has no
   per-regex timeout, so no claim is made that ReDoS is eliminated. Do not load rule files from an
   untrusted source.
+- **The rule fields are read, not just accepted.** `staleDays` and `gitClean` were validated by the
+  schema and then ignored, so a user rule that declared them got no protection at all; both are
+  enforced at the delete gate now (`revalidate` in `src/core/apply.ts`, entries 121 and 126), and a
+  rule that declares `requireVerify` has its verdict re-run there rather than trusted from the scan.
+  The git-backed verifier fails closed: `git check-ignore` exiting with anything but 0 or 1 means
+  the check could not run, and the path is refused (`gitIgnored` in `src/core/verify/git.ts`,
+  entry 125). A rule file can still ask for more than the product considers safe — that is the
+  point of a user rule — but it can no longer ask for a check that silently passes.
 
 ## 4. MCP prompt injection
 
@@ -147,10 +165,14 @@ consequences.
 - **Mitigation:** **not implemented yet.** There is no `schemaVersion` in the engine's JSON
   (`src/types.ts`) and nothing in the Swift decoder (`DustlessCLI.decode` in
   `apps/dustless-mac/Sources/DustlessKit/Engine/DustlessCLI.swift`) checks one; it decodes by shape
-  alone. **What would close it:** a `schemaVersion` on the engine's top-level payloads, bumped
-  whenever the contract changes (invariant 8 already re-captures fixtures on any output change), and
-  a major-version check in `decode` that refuses an unsupported major and surfaces it as
-  `DustlessError.unreadableOutput` instead of a half-decoded report.
+  alone. The apply payload grew a required field (`deletedBytes`, the bytes actually deleted, next
+  to `freed`, the volume free-space delta), so a payload from an older engine now fails to decode
+  and surfaces as `DustlessError.unreadableOutput` instead of being half-read — a loud failure in
+  the safe direction, and the app and the engine ship together. **What would close it:** a
+  `schemaVersion` on the engine's top-level payloads, bumped whenever the contract changes
+  (invariant 8 already re-captures fixtures on any output change), and a major-version check in
+  `decode` that refuses an unsupported major and surfaces it as `DustlessError.unreadableOutput`
+  instead of a half-decoded report.
 
 ## 6. Privilege escalation via the sudoers helper
 

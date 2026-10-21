@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
-import { listApps, uninstall } from "../core/apps/index.ts";
+import { homeAppDirs, listApps, uninstall } from "../core/apps/index.ts";
 import type { UninstallReport } from "../core/apps/types.ts";
 import { DEFAULT_MIN_SIZE, deleteLargeFile, findLargeFiles } from "../core/largefiles/index.ts";
 import { writeOut } from "../core/output.ts";
@@ -8,8 +8,7 @@ import { bold, bytesOf, dim, errorOut, flag, opt, paint, required, say } from ".
 
 function appDirs(): string[] | undefined {
   if (process.env["DUSTLESS_UI_TESTING"] !== "1") return undefined;
-  const raw = process.env["DUSTLESS_APPS_DIRS"];
-  return raw ? raw.split(":").filter(Boolean) : [];
+  return homeAppDirs(homedir());
 }
 
 async function printUninstall(report: UninstallReport): Promise<number> {

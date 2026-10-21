@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { discoverProjectRoots, gradleVersionUnused } from "../src/core/verify/gradle.ts";
-import { findRepoRoot, gitClean } from "../src/core/verify/git.ts";
+import { findRepoRoot, gitClean, gitIgnored } from "../src/core/verify/git.ts";
 import { verify } from "../src/core/verify/index.ts";
 import { isLiveDependencyTree, npmOrPnpmLinked } from "../src/core/verify/node.ts";
 import type { Rule } from "../src/types.ts";
@@ -240,6 +240,46 @@ describe("gitClean", () => {
 
   test("directory outside any repository passes", async () => {
     const result = await gitClean(await fixture());
+    expect(result.ok).toBe(true);
+    expect(result.note).toBe("not a git repo");
+  });
+});
+
+describe("gitIgnored", () => {
+  test("a path git does not ignore is allowed", async () => {
+    const repo = await initRepo();
+    await put(join(repo, "main.txt"), "hello\n");
+    await commitEverything(repo, "init");
+
+    const result = await gitIgnored(join(repo, "main.txt"));
+    expect(result.ok).toBe(true);
+    expect(result.note).toContain("not ignored");
+  });
+
+  test("a path git ignores is refused", async () => {
+    const repo = await initRepo();
+    await put(join(repo, ".gitignore"), "cache/\n");
+    await commitEverything(repo, "init");
+    await mkdir(join(repo, "cache"), { recursive: true });
+
+    const result = await gitIgnored(join(repo, "cache"));
+    expect(result.ok).toBe(false);
+    expect(result.note).toContain("ignored");
+  });
+
+  test("a broken .git/config cannot be verified and the path is blocked", async () => {
+    const repo = await initRepo();
+    await put(join(repo, "main.txt"), "hello\n");
+    await commitEverything(repo, "init");
+    await writeFile(join(repo, ".git", "config"), "[core\nthis is not valid\n");
+
+    const result = await gitIgnored(join(repo, "main.txt"));
+    expect(result.ok).toBe(false);
+    expect(result.note).toMatch(/could not verify/);
+  });
+
+  test("a directory outside any repository is not blocked", async () => {
+    const result = await gitIgnored(await fixture());
     expect(result.ok).toBe(true);
     expect(result.note).toBe("not a git repo");
   });

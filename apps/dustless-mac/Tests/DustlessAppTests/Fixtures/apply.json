@@ -13,7 +13,7 @@
       "tier": "yellow",
       "path": "/tmp/dustless-fixture-sandbox/.gradle/caches/9.0",
       "status": "skipped",
-      "bytes": 716800,
+      "bytes": 0,
       "detail": "captured from scan finding 1, never executed"
     },
     {
@@ -21,7 +21,7 @@
       "tier": "green",
       "path": "/tmp/dustless-fixture-sandbox/.npm/_cacache",
       "status": "failed",
-      "bytes": 307200,
+      "bytes": 0,
       "detail": "captured from scan finding 2, never executed"
     },
     {
@@ -37,7 +37,7 @@
       "tier": "green",
       "path": "/tmp/dustless-fixture-sandbox/.bun/install/cache",
       "status": "skipped",
-      "bytes": 92160,
+      "bytes": 0,
       "detail": "captured from scan finding 4, never executed"
     },
     {
@@ -45,12 +45,13 @@
       "tier": "yellow",
       "path": "/tmp/dustless-fixture-sandbox/.gradle/wrapper/dists",
       "status": "failed",
-      "bytes": 1,
+      "bytes": 0,
       "detail": "captured from scan finding 5, never executed"
     }
   ],
-  "freed": 2580480,
+  "deletedBytes": 2580480,
+  "freed": 1048576,
   "freeBefore": 316615888896,
-  "freeAfter": 316618469376,
+  "freeAfter": 316616937472,
   "elapsedMs": 412
 }

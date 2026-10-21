@@ -161,8 +161,13 @@ async function checkLocalizationKeys(baseline: Baseline, findings: Finding[]): P
     if (file.endsWith("Localization.swift")) continue;
     used += await readFile(file, "utf8");
   }
+  const composed = new Set<string>();
+  for (const match of used.matchAll(/"([^"\n]*?)\\\(/g)) {
+    if (match[1]) composed.add(match[1]);
+  }
   for (const key of keys) {
     if (used.includes(`"${key}"`)) continue;
+    if ([...composed].some((prefix) => key.startsWith(prefix))) continue;
     if (baseline.unusedKeys.has(key)) continue;
     findings.push({ file: "Localization.swift", message: `key "${key}" is never used` });
   }
