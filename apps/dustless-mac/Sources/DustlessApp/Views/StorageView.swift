@@ -69,7 +69,7 @@ struct StorageView: View {
             UninstallConfirmationSheet(
                 app: app,
                 onCancel: { control.sheet = nil },
-                onConfirm: { Task { await control.uninstall(app, store: store) } }
+                onConfirm: { purge in Task { await control.uninstall(app, purge: purge, store: store) } }
             )
         case .confirmFile(let file):
             LargeFileTrashSheet(
