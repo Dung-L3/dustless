@@ -39,7 +39,7 @@ struct MenuBarContent: View {
     }
 
     private var header: some View {
-        let provenance = settings.provenance(store.report, scannedAt: store.scannedAt)
+        let provenance = settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
         return VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
             HStack(spacing: PanelStyle.Space.s) {
                 Text("Dustless")
@@ -57,6 +57,10 @@ struct MenuBarContent: View {
                 .accessibilityIdentifier("menubar.provenance")
 
             failure
+
+            if let report = store.report {
+                UnscannableNotice(report: report, compact: true, identifier: "menubar.unscannable")
+            }
         }
     }
 
@@ -89,6 +93,8 @@ struct MenuBarContent: View {
         } label: {
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 11, weight: .medium))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
         .help(settings.t("refreshHelp"))
@@ -186,7 +192,7 @@ struct MenuBarContent: View {
                 Button {
                     Task { await store.rescan() }
                 } label: {
-                    Text(settings.t("scanNow")).frame(maxWidth: .infinity)
+                    Text(scanLabel).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -208,16 +214,17 @@ struct MenuBarContent: View {
                     .accessibilityIdentifier("menubar.pick")
                 } else {
                     Button(action: reviewAndClean) {
-                        Text(settings.t("overviewReview", [
-                            "n": "\(store.selectedFindings.count)",
-                            "size": ByteFormat.string(store.selectedBytes),
-                        ]))
-                        .frame(maxWidth: .infinity)
+                        Text(settings.t("reviewAndDelete"))
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(!store.canClean)
                     .help(settings.t("reviewAndDeleteHelp"))
+                    .accessibilityLabel(settings.t("overviewReview", [
+                        "n": "\(store.selectedFindings.count)",
+                        "size": ByteFormat.string(store.selectedBytes),
+                    ]))
                     .transition(.opacity)
                     .accessibilityIdentifier("menubar.review")
                 }
@@ -239,6 +246,11 @@ struct MenuBarContent: View {
         }
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.selectedFindings.isEmpty)
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.crossfade), value: store.report == nil)
+    }
+
+    private var scanLabel: String {
+        if store.isBusy { return settings.t("scanningShort") }
+        return store.report == nil ? settings.t("scanNow") : settings.t("rescan")
     }
 
     private func reviewAndClean() {
@@ -374,6 +386,8 @@ struct MenuBarContent: View {
                 leave { openSettings() }
             } label: {
                 Image(systemName: "gearshape")
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .help(settings.t("settingsOpen"))
@@ -384,6 +398,8 @@ struct MenuBarContent: View {
                 NSApp.terminate(nil)
             } label: {
                 Image(systemName: "power")
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .help(settings.t("quitDustless"))

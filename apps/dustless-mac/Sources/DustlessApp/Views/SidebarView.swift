@@ -3,7 +3,6 @@ import SwiftUI
 
 enum SidebarItem: Hashable {
     case module(Module)
-    case tier(TierTab)
 }
 
 struct ModuleSidebar: View {
@@ -16,7 +15,7 @@ struct ModuleSidebar: View {
     var body: some View {
         List(selection: selectionBinding) {
             Section(settings.t("modules")) {
-                ForEach(Module.allCases.filter { $0 != .cleanup }) { module in
+                ForEach(Module.allCases) { module in
                     Label(settings.t(module.titleKey), systemImage: module.symbolName)
                         .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
                         .tag(SidebarItem.module(module))
@@ -26,7 +25,6 @@ struct ModuleSidebar: View {
             Section(settings.t("tiers")) {
                 ForEach(TierTab.allCases) { tab in
                     tierRow(tab)
-                        .tag(SidebarItem.tier(tab))
                 }
             }
         }
@@ -36,16 +34,10 @@ struct ModuleSidebar: View {
 
     private var selectionBinding: Binding<SidebarItem?> {
         Binding(
-            get: { selection == .cleanup ? .tier(store.tierTab) : .module(selection) },
+            get: { .module(selection) },
             set: { item in
-                switch item {
-                case .module(let module):
+                if case .module(let module) = item {
                     onSelect(module)
-                case .tier(let tab):
-                    store.tierTab = tab
-                    onSelect(.cleanup)
-                case .none:
-                    break
                 }
             }
         )
@@ -53,27 +45,34 @@ struct ModuleSidebar: View {
 
     private func tierRow(_ tab: TierTab) -> some View {
         let items = store.report.map { tab.findings(in: $0) } ?? []
-        let bytes = items.reduce(0) { $0 + $1.bytes }
         let title = settings.tabTitle(tab)
-        return HStack(spacing: 6) {
-            Image(systemName: tab.symbolName)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(tab.tint)
-            Text(title)
-                .font(PanelFont.body)
-            Spacer(minLength: 4)
-            Text("\(items.count)")
-                .font(PanelFont.caption)
-                .foregroundStyle(items.isEmpty ? Color.secondary.opacity(0.7) : tab.tint)
-            Text(ByteFormat.string(bytes))
-                .font(PanelFont.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: PanelStyle.byteColumnWidth, alignment: .trailing)
+        let isActive = selection == .cleanup && store.tierTab == tab
+        return Button {
+            store.tierTab = tab
+            onSelect(.cleanup)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: tab.symbolName)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(tab.tint)
+                Text(title)
+                    .font(PanelFont.body)
+                Spacer(minLength: 4)
+                Text("\(items.count)")
+                    .font(PanelFont.caption)
+                    .foregroundStyle(items.isEmpty ? Color.secondary.opacity(0.7) : tab.tint)
+            }
+            .frame(minHeight: PanelStyle.rowMinHeight)
+            .contentShape(.rect)
+            .background(
+                isActive ? Color.accentColor.opacity(0.12) : Color.clear,
+                in: .rect(cornerRadius: 5)
+            )
         }
-        .frame(minHeight: PanelStyle.rowMinHeight)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"])) · \(ByteFormat.string(bytes))")
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"]))")
         .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")
-        .accessibilityAddTraits(store.tierTab == tab && selection == .cleanup ? [.isSelected] : [])
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }

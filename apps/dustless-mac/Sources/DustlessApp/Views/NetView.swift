@@ -155,6 +155,7 @@ struct NetView: View {
                 .disabled(net.awdl.busy)
                 .help(settings.t("awdlInstall"))
                 .accessibilityLabel(settings.t("awdlInstall"))
+                .accessibilityHint(settings.t("awdlNeedsPrivilege"))
                 .accessibilityIdentifier("network.awdl.install")
             }
 
@@ -184,7 +185,6 @@ struct NetView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.small)
-                .accessibilityLabel(settings.t("networkOps"))
                 .accessibilityIdentifier("network.filter")
             },
             trailing: { EmptyView() },
@@ -206,10 +206,19 @@ struct NetView: View {
                     LazyVStack(spacing: PanelStyle.Space.s) {
                         ForEach(visibleOps) { opRow($0) }
                     }
+                    .padding(.bottom, PanelStyle.Space.s)
                 }
                 .frame(maxHeight: .infinity)
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            note
+        }
+    }
 
+    private var note: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
             Text(settings.t("networkNote"))
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
@@ -218,7 +227,11 @@ struct NetView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .help(settings.t("networkNote"))
                 .accessibilityLabel(settings.t("networkNote"))
+                .padding(.top, PanelStyle.Space.s)
+                .padding(.bottom, PanelStyle.Space.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(.ultraThinMaterial)
     }
 
     @ViewBuilder
@@ -259,6 +272,7 @@ struct NetView: View {
                 .disabled(net.privilegeBusy)
                 .help(settings.t("netRememberExplain"))
                 .accessibilityLabel(settings.t("netRemember"))
+                .accessibilityHint(settings.t("netRememberExplain"))
                 .accessibilityIdentifier("network.remember")
                 Text(settings.t("netRememberExplain"))
                     .font(PanelFont.caption)
@@ -340,6 +354,7 @@ struct NetView: View {
         .disabled(running || net.isBusy || net.privilegeBusy)
         .help(settings.t(op.helpKey))
         .accessibilityLabel(settings.t("networkRunNamed", ["name": settings.t(op.labelKey)]))
+        .accessibilityHint(op.isAdvanced ? settings.t("networkNote") : settings.t(op.helpKey))
         .accessibilityIdentifier("network.run.\(op.id)")
     }
 
