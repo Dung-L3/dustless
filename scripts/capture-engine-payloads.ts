@@ -1,7 +1,8 @@
 import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { age, cleanupAll, DAY, plant, REPO, sandbox, type Sandbox } from "../tests/e2e/harness.ts";
-import type { ApplyReport, Finding, ScanReport } from "../src/types.ts";
+import type { ApplyOutcome, ApplyReport, Finding, Reason, ScanReport } from "../src/types.ts";
+import { SCHEMA_VERSION } from "../src/types.ts";
 
 const OUT = join(REPO, "apps", "dustless-mac", "Tests", "DustlessAppTests", "Fixtures");
 const PINNED_MTIME = 1_700_000_000_000;
@@ -55,22 +56,24 @@ function pin(report: ScanReport, home: string): ScanReport {
 
 function deriveApply(report: ScanReport): ApplyReport {
   const statuses = ["deleted", "skipped", "failed"] as const;
-  const outcomes = report.findings.map((f, at) => {
+  const outcomes: ApplyOutcome[] = report.findings.map((f, at) => {
     const status = f.blocked ? "skipped" : statuses[at % statuses.length] ?? "skipped";
+    const detail: Reason | null = f.blocked
+      ? { code: "verify_failed", params: { cause: "unknown" } }
+      : { code: "not_selected", params: { at: String(at) } };
     return {
       ruleId: f.ruleId,
       tier: f.tier,
       path: f.path,
       status,
       bytes: status === "deleted" ? f.bytes : 0,
-      detail: f.blocked
-        ? "KHÔNG XÓA: cross-verification failed"
-        : `captured from scan finding ${at}, never executed`,
+      detail,
     };
   });
   const deletedBytes = outcomes.filter((o) => o.status === "deleted").reduce((sum, o) => sum + o.bytes, 0);
   const volumeDelta = 1_048_576;
   return {
+    schemaVersion: SCHEMA_VERSION,
     outcomes,
     deletedBytes,
     freed: volumeDelta,

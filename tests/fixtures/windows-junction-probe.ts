@@ -6,6 +6,7 @@ import { apply } from "../../src/core/apply.ts";
 import { moveToTrash } from "../../src/core/apps/index.ts";
 import { findLargeFiles } from "../../src/core/largefiles/index.ts";
 import type { Finding, ScanReport } from "../../src/types.ts";
+import { SCHEMA_VERSION } from "../../src/types.ts";
 
 const scenario = process.argv[2];
 const home = resolve(homedir());
@@ -32,12 +33,13 @@ function finding(path: string): Finding {
     ageDays: 999,
     verified: true,
     blocked: false,
-    note: "",
+    note: [],
   };
 }
 
 function report(findings: Finding[]): ScanReport {
   return {
+    schemaVersion: SCHEMA_VERSION,
     findings,
     totals: {
       green: { count: 0, bytes: 0 },
@@ -95,7 +97,7 @@ switch (scenario) {
     await symlink(red, junction, "junction");
     const outcome = await applyOne(join(junction, "canary.txt"));
     assert.equal(outcome.status, "failed");
-    assert.equal(outcome.detail, "từ chối: nằm trong danh sách đỏ");
+    assert.equal(outcome.detail?.code, "red_list");
     assert.equal(await exists(junction), true);
     assert.equal(await readFile(canary, "utf8"), "KEEP");
     break;
@@ -104,7 +106,7 @@ switch (scenario) {
     const s = await scene("through");
     const outcome = await applyOne(join(s.junction, "canary.txt"));
     assert.equal(outcome.status, "failed");
-    assert.equal(outcome.detail, "từ chối: đường dẫn đi qua liên kết tượng trưng");
+    assert.equal(outcome.detail?.code, "symlink");
     assert.equal(await exists(s.junction), true);
     assert.equal(await readFile(s.canary, "utf8"), s.content);
     break;

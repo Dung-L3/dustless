@@ -21,6 +21,49 @@ export type Rule = {
   gitClean?: boolean;
 };
 
+export type ReasonCode =
+  | "min_age"
+  | "stale_days"
+  | "verify_failed"
+  | "busy_process"
+  | "listing_unavailable"
+  | "not_determinable"
+  | "revalidate_age"
+  | "revalidate_verify"
+  | "not_selected"
+  | "needs_confirmation"
+  | "declined"
+  | "missing"
+  | "red_list"
+  | "home"
+  | "root"
+  | "protected"
+  | "symlink"
+  | "unresolvable"
+  | "changed"
+  | "io_error"
+  | "outside_roots"
+  | "not_executable"
+  | "not_a_regular_file"
+  | "engine_unavailable"
+  | "confirm_required"
+  | "not_an_app"
+  | "system_app"
+  | "not_allowed_dir"
+  | "denied_path"
+  | "no_bundle_id"
+  | "bad_bundle_id"
+  | "leftover_escapes_home"
+  | "not_a_leftover"
+  | "not_found"
+  | "moved_to_trash"
+  | "purged";
+
+export type Reason = {
+  code: ReasonCode;
+  params?: Record<string, string>;
+};
+
 export type Finding = {
   ruleId: string;
   tier: Tier;
@@ -32,7 +75,7 @@ export type Finding = {
   ageDays: number;
   verified: boolean;
   blocked: boolean;
-  note: string;
+  note: Reason[];
 };
 
 export type TierStat = { count: number; bytes: number };
@@ -57,6 +100,7 @@ export type UnscannableRule = {
 };
 
 export type ScanReport = {
+  schemaVersion: number;
   findings: Finding[];
   totals: Record<Tier, TierStat>;
   reclaimable: number;
@@ -75,10 +119,11 @@ export type ApplyOutcome = {
   path: string;
   status: ApplyStatus;
   bytes: number;
-  detail: string;
+  detail: Reason | null;
 };
 
 export type ApplyReport = {
+  schemaVersion: number;
   outcomes: ApplyOutcome[];
   deletedBytes: number;
   freed: number;
@@ -88,3 +133,6 @@ export type ApplyReport = {
 };
 
 export type TierChoice = Record<string, "green" | "yellow" | "skip">;
+
+export const SCHEMA_VERSION = 2;
+export const SCHEMA_MAJOR = Math.floor(SCHEMA_VERSION / 10);

@@ -75,7 +75,7 @@ struct EngineProcessContractTests {
         try String(contentsOf: capture.appendingPathComponent(name), encoding: .utf8)
     }
 
-    private let applyReport = #"{"outcomes":[],"deletedBytes":0,"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
+    private let applyReport = #"{"schemaVersion":2,"outcomes":[],"deletedBytes":0,"freed":0,"freeBefore":0,"freeAfter":0,"elapsedMs":1}"#
 
     @Test func theCleanCarriesExactlyTheSelectedPaths() async throws {
         let capture = try captureDir()
@@ -143,12 +143,12 @@ struct EngineProcessContractTests {
     }
 
     private let purgedReport = #"""
-    {"outcomes":[{"path":"/Applications/Test.app","status":"purged","bytes":2048,"detail":"permanently deleted"}],
+    {"schemaVersion":2,"outcomes":[{"path":"/Applications/Test.app","status":"purged","bytes":2048,"detail":{"code":"purged"}}],
      "summary":{"trashed":0,"purged":1,"skipped":0,"failed":0,"totalBytes":2048}}
     """#
 
     private let failedPurgeReport = #"""
-    {"outcomes":[{"path":"/Applications/Root.app","status":"failed","bytes":0,"detail":"EACCES: permission denied"}],
+    {"schemaVersion":2,"outcomes":[{"path":"/Applications/Root.app","status":"failed","bytes":0,"detail":{"code":"io_error","params":{"code":"EACCES","message":"permission denied"}}}],
      "summary":{"trashed":0,"purged":0,"skipped":0,"failed":1,"totalBytes":0}}
     """#
 

@@ -76,8 +76,8 @@ struct StorageResultCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .multilineTextAlignment(.leading)
-                if !outcome.detail.isEmpty {
-                    Text(outcome.detail)
+                if let detail = outcome.detail {
+                    Text(ReasonText.text(detail, lang: settings.language))
                         .font(PanelFont.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)

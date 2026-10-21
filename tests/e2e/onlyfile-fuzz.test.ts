@@ -302,7 +302,7 @@ describe("A. --only-file fuzz properties", () => {
 describe("B. uninstall bundle-id traversal fuzz", () => {
   type AppJson = { bundleId: string; name: string; path: string; bytes: number; relatedPaths: string[] };
   type UninstallJson = {
-    outcomes: { path: string; status: string; bytes: number; detail: string }[];
+    outcomes: { path: string; status: string; bytes: number; detail: { code: string } | null }[];
     summary: { trashed: number; purged: number; skipped: number; failed: number; totalBytes: number };
   };
 
@@ -419,7 +419,7 @@ describe("B. uninstall bundle-id traversal fuzz", () => {
           expect(report.summary.purged).toBe(0);
           expect(report.summary.trashed).toBe(0);
           expect(report.summary.failed).toBeGreaterThanOrEqual(1);
-          expect(report.outcomes.some(o => o.status === "failed" && o.detail.includes("not a valid identifier"))).toBe(true);
+          expect(report.outcomes.some(o => o.status === "failed" && o.detail?.code === "bad_bundle_id")).toBe(true);
         }
       } else if (kind === "benign") {
         const apps = await appsViaCli();

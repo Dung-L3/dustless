@@ -29,37 +29,37 @@ export async function findRepoRoot(start: string): Promise<string | null> {
 
 export async function gitClean(target: string): Promise<VerifyResult> {
   const root = await findRepoRoot(target);
-  if (!root) return { ok: true, note: "not a git repo" };
+  if (!root) return { ok: true };
 
   const gitDir = await resolveGitDir(root);
   if (gitDir !== null) {
     for (const marker of IN_PROGRESS_MARKERS) {
       if (await exists(join(gitDir, marker))) {
-        return { ok: false, note: `git operation in progress: ${marker}` };
+        return { ok: false, cause: "git_in_progress", params: { marker } };
       }
     }
   }
 
   const status = await git(root, ["status", "--porcelain"]);
-  if (status === null) return { ok: false, note: "git status failed, cannot verify" };
-  if (status.output !== "") return { ok: false, note: "git has uncommitted changes" };
+  if (status === null) return { ok: false, cause: "git_unverifiable" };
+  if (status.output !== "") return { ok: false, cause: "git_dirty" };
 
   const unpushed = await git(root, ["log", "@{u}..HEAD", "--oneline"]);
   if (unpushed !== null && unpushed.output !== "") {
-    return { ok: false, note: "git has unpushed commits" };
+    return { ok: false, cause: "git_unpushed" };
   }
 
-  return { ok: true, note: "git working tree is clean" };
+  return { ok: true };
 }
 
 export async function gitIgnored(target: string): Promise<VerifyResult> {
   const root = await findRepoRoot(target);
-  if (!root) return { ok: true, note: "not a git repo" };
+  if (!root) return { ok: true };
   const exit = await gitExit(root, ["check-ignore", "-q", "--", resolve(target)]);
-  if (exit === null) return { ok: false, note: "git check-ignore failed, cannot verify" };
-  if (exit === 1) return { ok: true, note: "path is not ignored by git" };
-  if (exit === 0) return { ok: false, note: "path is ignored by git" };
-  return { ok: false, note: `git check-ignore could not verify the path (exit ${exit})` };
+  if (exit === null) return { ok: false, cause: "git_unverifiable_ignore" };
+  if (exit === 1) return { ok: true };
+  if (exit === 0) return { ok: false, cause: "git_ignored" };
+  return { ok: false, cause: "git_unverifiable_ignore", params: { exit: String(exit) } };
 }
 
 async function git(cwd: string, args: string[]): Promise<{ output: string } | null> {

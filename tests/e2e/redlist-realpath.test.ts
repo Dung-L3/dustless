@@ -134,9 +134,9 @@ describe("real-path red filtering through the compiled binary", () => {
     ]) {
       const run = await s.box.run(["largefiles", "--delete", target, "--confirm", "--json"]);
       expect(run.code).toBe(1);
-      const report = JSON.parse(run.stdout) as { outcomes: Array<{ status: string; detail: string }> };
+      const report = JSON.parse(run.stdout) as { outcomes: Array<{ status: string; detail: { code: string } | null }> };
       expect(report.outcomes[0]?.status).toBe("failed");
-      expect(report.outcomes[0]?.detail).toContain("red list");
+      expect(report.outcomes[0]?.detail?.code).toBe("red_list");
       expect(await exists(s.portal)).toBe(true);
       expect(await exists(s.portalTrailing)).toBe(true);
       await assertCanary(s);

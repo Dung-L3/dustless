@@ -1,6 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { homedir, release, version } from "node:os";
 import { exists, HOME } from "../core/paths.ts";
+import { describeReason } from "../core/messages.ts";
 import { userRulesPath } from "../core/rules.ts";
 import { accountedBytes, isNested } from "../core/space.ts";
 import type { ApplyReport, Finding, Rule, ScanReport, Tier, TierChoice, TierStat } from "../types.ts";
@@ -215,14 +216,20 @@ async function applyTool(core: Core, args: Record<string, unknown>): Promise<Too
     `Deleted ${result.outcomes.length - notDeleted.length} of ${result.outcomes.length} finding(s) (${formatBytes(result.deletedBytes)}). ` +
       `Freed ${formatBytes(result.freed)} of volume space in ${result.elapsedMs}ms.`,
     table(["rule_id", "tier", "status", "bytes", "path", "detail"], result.outcomes.map((outcome) => [
-      outcome.ruleId, outcome.tier, outcome.status, formatBytes(outcome.bytes), displayPath(outcome.path), outcome.detail || "-",
+      outcome.ruleId, outcome.tier, outcome.status, formatBytes(outcome.bytes), displayPath(outcome.path),
+      outcome.detail ? describeReason(outcome.detail) : "-",
     ])),
     notDeleted.length ? `${notDeleted.length} finding(s) were NOT deleted - see the detail column.` : "All requested findings were deleted.",
   ].join("\n\n");
   return ok(body, {
     freed: result.freed, free_before: result.freeBefore, free_after: result.freeAfter, elapsed_ms: result.elapsedMs,
     deleted: result.outcomes.filter((outcome) => outcome.status === "deleted").map((outcome) => ({ rule_id: outcome.ruleId, path: outcome.path, bytes: outcome.bytes })),
-    not_deleted: notDeleted.map((outcome) => ({ rule_id: outcome.ruleId, path: outcome.path, status: outcome.status, detail: outcome.detail })),
+    not_deleted: notDeleted.map((outcome) => ({
+      rule_id: outcome.ruleId,
+      path: outcome.path,
+      status: outcome.status,
+      detail: outcome.detail ? describeReason(outcome.detail) : "",
+    })),
   });}
 
 async function listRulesTool(core: Core, args: Record<string, unknown>): Promise<ToolResult> {

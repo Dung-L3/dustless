@@ -23,7 +23,7 @@ struct EngineContractTests {
         #expect(report.totals.green.count == 3)
         #expect(report.totals.yellow.count == 3)
         #expect(report.totals.red.count == 0)
-        #expect(report.totals.blocked.count == 0)
+        #expect(report.totals.blocked.count == 1)
         #expect(report.totals.green.bytes == 522_240)
         #expect(report.totals.yellow.bytes == 3_174_401)
     }

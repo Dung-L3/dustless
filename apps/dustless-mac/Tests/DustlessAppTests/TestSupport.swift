@@ -13,7 +13,7 @@ private func findingJSON(
 ) -> Data {
     Data("""
     {"ruleId":"r","tier":"\(tier)","desc":"d","path":"\(path)","bytes":\(bytes),
-     "mtime":0,"atime":0,"ageDays":10,"verified":\(!blocked),"blocked":\(blocked),"note":""}
+     "mtime":0,"atime":0,"ageDays":10,"verified":\(!blocked),"blocked":\(blocked),"note":[]}
     """.utf8)
 }
 
