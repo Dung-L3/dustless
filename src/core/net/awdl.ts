@@ -1,9 +1,13 @@
 import type { Platform } from "../../types.ts";
 import { platform } from "../paths.ts";
+import { sudoersPath, sudoersRule } from "./privilege.ts";
 import { isRoot, systemRun, type Runner } from "./run.ts";
 
+export { validSudoersUser } from "./privilege.ts";
+
 export const AWDL_INTERFACE = "awdl0";
-export const IFCONFIG = process.env["DUSTLESS_IFCONFIG"] || "/sbin/ifconfig";
+export const IFCONFIG = "/sbin/ifconfig";
+export const IFCONFIG_ALLOWLIST: readonly string[] = [IFCONFIG];
 export const AWDL_PRIVILEGE_PATH = "/etc/sudoers.d/dustless-awdl";
 
 export type AwdlState = "on" | "off" | "absent";
@@ -32,14 +36,19 @@ export type AwdlOptions = {
   run?: Runner;
   isRootUser?: () => boolean;
   platform?: Platform;
+  ifconfig?: string;
 };
 
 const ROOT_HINT =
   "cần quyền root — cài quy tắc sudo giới hạn trong app Dustless, hoặc chạy lại bằng sudo";
 
-export async function readAwdlState(run: Runner, p: Platform): Promise<AwdlState> {
+export async function readAwdlState(
+  run: Runner,
+  p: Platform,
+  ifconfig: string = IFCONFIG,
+): Promise<AwdlState> {
   if (p !== "mac") return "absent";
-  const res = await run(IFCONFIG, [AWDL_INTERFACE]);
+  const res = await run(ifconfig, [AWDL_INTERFACE]);
   if (!res.ok) return /does not exist/i.test(res.err) ? "absent" : "off";
   return /^\s*status:\s*active/m.test(res.out) ? "on" : "off";
 }
@@ -47,10 +56,11 @@ export async function readAwdlState(run: Runner, p: Platform): Promise<AwdlState
 export async function awdlStatus(opts: AwdlOptions = {}): Promise<AwdlReport> {
   const run = opts.run ?? systemRun;
   const p = opts.platform ?? platform;
+  const ifconfig = opts.ifconfig ?? IFCONFIG;
   return {
     platform: p,
     interface: p === "mac" ? AWDL_INTERFACE : null,
-    state: await readAwdlState(run, p),
+    state: await readAwdlState(run, p, ifconfig),
     changed: false,
     outcome: null,
   };
@@ -60,6 +70,7 @@ export async function setAwdl(on: boolean, opts: AwdlOptions = {}): Promise<Awdl
   const run = opts.run ?? systemRun;
   const root = opts.isRootUser ?? isRoot;
   const p = opts.platform ?? platform;
+  const ifconfig = opts.ifconfig ?? IFCONFIG;
 
   if (p !== "mac") {
     return {
@@ -73,10 +84,10 @@ export async function setAwdl(on: boolean, opts: AwdlOptions = {}): Promise<Awdl
 
   const verb = on ? "up" : "down";
   const res = root()
-    ? await run(IFCONFIG, [AWDL_INTERFACE, verb])
-    : await run("sudo", ["-n", IFCONFIG, AWDL_INTERFACE, verb]);
+    ? await run(ifconfig, [AWDL_INTERFACE, verb])
+    : await run("sudo", ["-n", ifconfig, AWDL_INTERFACE, verb]);
 
-  const state = await readAwdlState(run, p);
+  const state = await readAwdlState(run, p, ifconfig);
   if (res.ok) {
     return {
       platform: p,
@@ -98,27 +109,18 @@ export async function setAwdl(on: boolean, opts: AwdlOptions = {}): Promise<Awdl
     changed: false,
     outcome: {
       status: needsConsent ? "refused" : "failed",
-      detail: needsConsent ? ROOT_HINT : res.err.trim() || `${IFCONFIG} ${AWDL_INTERFACE} ${verb} failed`,
+      detail: needsConsent ? ROOT_HINT : res.err.trim() || `${ifconfig} ${AWDL_INTERFACE} ${verb} failed`,
     },
   };
 }
 
-export function awdlPrivilege(user: string): AwdlPrivilege {
-  const allowed = [`${IFCONFIG} ${AWDL_INTERFACE} down`, `${IFCONFIG} ${AWDL_INTERFACE} up`];
+export function awdlPrivilege(user: string, ifconfig: string = IFCONFIG): AwdlPrivilege {
+  const path = sudoersPath(ifconfig, IFCONFIG_ALLOWLIST);
+  const allowed = [`${path} ${AWDL_INTERFACE} down`, `${path} ${AWDL_INTERFACE} up`];
   return {
     user,
     path: AWDL_PRIVILEGE_PATH,
     allowed,
-    rule: `${user} ALL=(root) NOPASSWD: ${allowed.join(", ")}\n`,
+    rule: sudoersRule(user, allowed),
   };
-}
-
-export function validSudoersUser(user: string): boolean {
-  return (
-    /^[A-Za-z0-9._-]{1,32}$/.test(user) &&
-    !user.startsWith("-") &&
-    user !== "." &&
-    user !== ".." &&
-    user.toLowerCase() !== "all"
-  );
 }

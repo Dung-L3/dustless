@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { exec, sandbox, type Sandbox } from "./harness.ts";
+import { BINARY, exec, sandbox, type Sandbox } from "./harness.ts";
 import { currentPlatform } from "./harness.ts";
 
 type AwdlReport = {
@@ -13,6 +13,13 @@ type AwdlReport = {
 };
 
 type AwdlPrivilege = { user: string; path: string; allowed: string[]; rule: string };
+
+const HOSTILE_IFCONFIG = "/tmp/evil\nmac ALL=(root) NOPASSWD: /bin/sh\n#";
+
+const FIXED_RULE =
+  "e2etester ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up\n";
+
+const RUNNING_AS_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
 
 function reportOf(stdout: string): AwdlReport {
   return JSON.parse(stdout) as AwdlReport;
@@ -54,29 +61,30 @@ exit 1
 async function installFakeIfconfig(
   home: string,
   variant: "pass" | "fail" | "consent",
-): Promise<{ log: string; ifconfig: string }> {
+): Promise<{ sudoLog: string; ifconfigLog: string; ifconfig: string }> {
   const bin = join(home, ".bin");
   await mkdir(bin, { recursive: true });
-  const log = join(bin, "calls.log");
+  const sudoLog = join(bin, "sudo.log");
+  const ifconfigLog = join(bin, "ifconfig.log");
   const ifconfig = join(bin, "ifconfig.sh");
   const sudo = join(bin, "sudo");
   const body =
-    variant === "fail" ? IFCONFIG_FAIL(log) : IFCONFIG_FAKE(log);
+    variant === "fail" ? IFCONFIG_FAIL(ifconfigLog) : IFCONFIG_FAKE(ifconfigLog);
   await writeFile(ifconfig, body);
   await chmod(ifconfig, 0o755);
-  await writeFile(sudo, variant === "consent" ? SUDO_CONSENT(log) : SUDO_PASS(log, ifconfig));
+  await writeFile(sudo, variant === "consent" ? SUDO_CONSENT(sudoLog) : SUDO_PASS(sudoLog, ifconfig));
   await chmod(sudo, 0o755);
-  return { log, ifconfig };
+  return { sudoLog, ifconfigLog, ifconfig };
 }
 
-function envFor(home: string, ifconfig: string): Record<string, string> {
+function envFor(home: string): Record<string, string> {
   return {
     PATH: `${join(home, ".bin")}:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: home,
     USER: "e2etester",
     NO_COLOR: "1",
     TMPDIR: home,
-    DUSTLESS_IFCONFIG: ifconfig,
+    DUSTLESS_IFCONFIG: HOSTILE_IFCONFIG,
   };
 }
 
@@ -99,22 +107,29 @@ function assertReportShape(run: { stdout: string }): void {
   ]);
 }
 
+describe("the shipped engine binary", () => {
+  test("carries no environment override that could pick the executable", async () => {
+    const binary = await readFile(BINARY);
+    expect(binary.includes(Buffer.from("DUSTLESS_IFCONFIG"))).toBe(false);
+  });
+});
+
 describe("awdl status and privilege payloads (read-only) — macOS only", () => {
   let box: Sandbox;
-  let log: string;
-  let ifconfig: string;
+  let sudoLog: string;
+  let ifconfigLog: string;
   beforeAll(async () => {
     box = await sandbox("awdl-status");
     const installed = await installFakeIfconfig(box.home, "pass");
-    log = installed.log;
-    ifconfig = installed.ifconfig;
+    sudoLog = installed.sudoLog;
+    ifconfigLog = installed.ifconfigLog;
   });
   afterAll(async () => {
     await box.dispose();
   });
 
   test.skipIf(process.platform !== "darwin")("radio status reports the documented payload shape with no privilege command", async () => {
-    const run = await exec(["awdl", "--json"], envFor(box.home, ifconfig));
+    const run = await exec(["awdl", "--json"], envFor(box.home));
     expect(run.code).toBe(0);
     expect(run.stderr).toBe("");
     assertReportShape(run);
@@ -124,121 +139,121 @@ describe("awdl status and privilege payloads (read-only) — macOS only", () => 
     expect(payload.changed).toBe(false);
     expect(payload.outcome).toBeNull();
     expect(["on", "off", "absent"]).toContain(payload.state);
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([`ifconfig ${ifconfig} awdl0`]);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([]);
   });
 
   test.skipIf(process.platform !== "darwin")("two consecutive status reads are shaped the same and change nothing", async () => {
-    const first = reportOf((await exec(["awdl", "--json"], envFor(box.home, ifconfig))).stdout);
-    const second = reportOf((await exec(["awdl", "--json"], envFor(box.home, ifconfig))).stdout);
+    const first = reportOf((await exec(["awdl", "--json"], envFor(box.home))).stdout);
+    const second = reportOf((await exec(["awdl", "--json"], envFor(box.home))).stdout);
     expect(second.changed).toBe(false);
     expect(second.outcome).toBeNull();
     expect(second.platform).toBe(first.platform);
     expect(second.interface).toBe(first.interface);
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `ifconfig ${ifconfig} awdl0`,
-      `ifconfig ${ifconfig} awdl0`,
-      `ifconfig ${ifconfig} awdl0`,
-    ]);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([]);
   });
 
-  test.skipIf(process.platform !== "darwin")("--print-privilege returns the compiled two-rule sudoers payload without installing anything", async () => {
-    const run = await exec(["awdl", "--print-privilege", "--json"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin")("--print-privilege returns the fixed two-rule sudoers payload without installing anything", async () => {
+    const run = await exec(["awdl", "--print-privilege", "--json"], envFor(box.home));
     expect(run.code).toBe(0);
     expect(run.stderr).toBe("");
     const payload = JSON.parse(run.stdout) as AwdlPrivilege;
     expect(Object.keys(payload).sort()).toEqual(["allowed", "path", "rule", "user"]);
     expect(payload.user).toBe("e2etester");
     expect(payload.path).toBe("/etc/sudoers.d/dustless-awdl");
-    expect(payload.allowed).toEqual([`${ifconfig} awdl0 down`, `${ifconfig} awdl0 up`]);
-    expect(payload.rule).toBe(
-      `e2etester ALL=(root) NOPASSWD: ${ifconfig} awdl0 down, ${ifconfig} awdl0 up\n`,
-    );
-    const human = await exec(["awdl", "--print-privilege"], envFor(box.home, ifconfig));
+    expect(payload.allowed).toEqual(["/sbin/ifconfig awdl0 down", "/sbin/ifconfig awdl0 up"]);
+    expect(payload.rule).toBe(FIXED_RULE);
+    expect(payload.rule).not.toContain("evil");
+    expect(payload.rule).not.toContain("/bin/sh");
+    expect(payload.rule.split("\n")).toHaveLength(2);
+    const human = await exec(["awdl", "--print-privilege"], envFor(box.home));
     expect(human.code).toBe(0);
     expect(human.stdout).toBe(payload.rule);
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `ifconfig ${ifconfig} awdl0`,
-      `ifconfig ${ifconfig} awdl0`,
-      `ifconfig ${ifconfig} awdl0`,
-    ]);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([]);
   });
 });
 
-describe("awdl --off through the fake ifconfig — macOS only", () => {
+describe("awdl --off through the fake sudo — macOS only", () => {
   let box: Sandbox;
-  let log: string;
+  let sudoLog: string;
+  let ifconfigLog: string;
   let ifconfig: string;
   beforeAll(async () => {
     box = await sandbox("awdl-off");
     const installed = await installFakeIfconfig(box.home, "pass");
-    log = installed.log;
+    sudoLog = installed.sudoLog;
+    ifconfigLog = installed.ifconfigLog;
     ifconfig = installed.ifconfig;
   });
   afterAll(async () => {
     await box.dispose();
   });
 
-  test.skipIf(process.platform !== "darwin")("the fake sudo receives exactly the documented command and the fake ifconfig runs awdl0 down", async () => {
-    const run = await exec(["awdl", "--off", "--json"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("the fake sudo receives exactly the documented command and the fake ifconfig runs awdl0 down", async () => {
+    const run = await exec(["awdl", "--off", "--json"], envFor(box.home));
     expect(run.code).toBe(0);
     assertReportShape(run);
     const payload = reportOf(run.stdout);
     expect(payload.platform).toBe("mac");
     expect(payload.interface).toBe("awdl0");
     expect(payload.changed).toBe(true);
-    expect(payload.state).toBe("off");
     expect(payload.outcome).toEqual({
       status: "ran",
       detail: "awdl0 down — Wi-Fi stays stable",
     });
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `sudo -n ${ifconfig} awdl0 down`,
+    expect(["on", "off", "absent"]).toContain(payload.state);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([
+      "sudo -n /sbin/ifconfig awdl0 down",
+    ]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([
       `ifconfig ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0`,
     ]);
   });
 
-  test.skipIf(process.platform !== "darwin")("human mode prints the ran marker and detail", async () => {
-    const run = await exec(["awdl", "--off"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("human mode prints the ran marker and detail", async () => {
+    const run = await exec(["awdl", "--off"], envFor(box.home));
     expect(run.code).toBe(0);
     expect(run.stdout).toContain("dustless awdl");
     expect(run.stdout).toContain("awdl0 down — Wi-Fi stays stable");
   });
 
-  test.skipIf(process.platform !== "darwin")("both the toggle and the state read ran the sandboxed fake, never /sbin/ifconfig", async () => {
-    const lines = arrange((await readLog(log)).split("\n"));
-    expect(lines).toEqual([
-      `sudo -n ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0`,
-      `sudo -n ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0`,
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("every escalation named the fixed system path and the sandboxed fake ran instead", async () => {
+    const sudoLines = arrange((await readLog(sudoLog)).split("\n"));
+    const fakeLines = arrange((await readLog(ifconfigLog)).split("\n"));
+    expect(sudoLines).toEqual([
+      "sudo -n /sbin/ifconfig awdl0 down",
+      "sudo -n /sbin/ifconfig awdl0 down",
     ]);
-    for (const line of lines) {
-      expect(line.startsWith("ifconfig /sbin/ifconfig") || line.startsWith("sudo -n /sbin/ifconfig")).toBe(false);
+    expect(fakeLines).toEqual([
+      `ifconfig ${ifconfig} awdl0 down`,
+      `ifconfig ${ifconfig} awdl0 down`,
+    ]);
+    for (const line of fakeLines) {
+      expect(line.startsWith("ifconfig /sbin/ifconfig")).toBe(false);
     }
-    expect(lines.filter((line) => line.includes(`ifconfig ${ifconfig} awdl0 down`)).length).toBe(2);
-    expect(lines.filter((line) => line === `ifconfig ${ifconfig} awdl0`).length).toBe(2);
   });
 });
 
-describe("awdl --on through the fake ifconfig — macOS only", () => {
+describe("awdl --on through the fake sudo — macOS only", () => {
   let box: Sandbox;
-  let log: string;
+  let sudoLog: string;
+  let ifconfigLog: string;
   let ifconfig: string;
   beforeAll(async () => {
     box = await sandbox("awdl-on");
     const installed = await installFakeIfconfig(box.home, "pass");
-    log = installed.log;
+    sudoLog = installed.sudoLog;
+    ifconfigLog = installed.ifconfigLog;
     ifconfig = installed.ifconfig;
   });
   afterAll(async () => {
     await box.dispose();
   });
 
-  test.skipIf(process.platform !== "darwin")("the fake ifconfig executes only awdl0 up and the outcome is ran", async () => {
-    const run = await exec(["awdl", "--on", "--json"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("the fake ifconfig executes only awdl0 up and the outcome is ran", async () => {
+    const run = await exec(["awdl", "--on", "--json"], envFor(box.home));
     expect(run.code).toBe(0);
     const payload = reportOf(run.stdout);
     expect(payload.changed).toBe(true);
@@ -246,67 +261,74 @@ describe("awdl --on through the fake ifconfig — macOS only", () => {
       status: "ran",
       detail: "awdl0 up — AirDrop/Handoff available",
     });
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `sudo -n ${ifconfig} awdl0 up`,
+    expect(["on", "off", "absent"]).toContain(payload.state);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([
+      "sudo -n /sbin/ifconfig awdl0 up",
+    ]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([
       `ifconfig ${ifconfig} awdl0 up`,
-      `ifconfig ${ifconfig} awdl0`,
     ]);
   });
 });
 
 describe("awdl --off refused when sudo demands a password — macOS only", () => {
   let box: Sandbox;
-  let log: string;
-  let ifconfig: string;
+  let sudoLog: string;
+  let ifconfigLog: string;
   beforeAll(async () => {
     box = await sandbox("awdl-refused");
     const installed = await installFakeIfconfig(box.home, "consent");
-    log = installed.log;
-    ifconfig = installed.ifconfig;
+    sudoLog = installed.sudoLog;
+    ifconfigLog = installed.ifconfigLog;
   });
   afterAll(async () => {
     await box.dispose();
   });
 
-  test.skipIf(process.platform !== "darwin")("the outcome is refused, nothing beyond the fake sudo probe and the faked state read ran, exit code 0", async () => {
-    const run = await exec(["awdl", "--off", "--json"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("the outcome is refused, nothing beyond the fake sudo probe ran, exit code 0", async () => {
+    const run = await exec(["awdl", "--off", "--json"], envFor(box.home));
     expect(run.code).toBe(0);
     const payload = reportOf(run.stdout);
     expect(payload.changed).toBe(false);
     expect(payload.outcome?.status).toBe("refused");
     expect(payload.outcome?.detail).toContain("cần quyền root");
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `sudo -n ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0`,
+    expect(["on", "off", "absent"]).toContain(payload.state);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([
+      "sudo -n /sbin/ifconfig awdl0 down",
     ]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([]);
   });
 });
 
-describe("awdl --off failed when ifconfig itself fails — macOS only", () => {
+describe("awdl --off failed when the command fails — macOS only", () => {
   let box: Sandbox;
-  let log: string;
+  let sudoLog: string;
+  let ifconfigLog: string;
   let ifconfig: string;
   beforeAll(async () => {
     box = await sandbox("awdl-failed");
     const installed = await installFakeIfconfig(box.home, "fail");
-    log = installed.log;
+    sudoLog = installed.sudoLog;
+    ifconfigLog = installed.ifconfigLog;
     ifconfig = installed.ifconfig;
   });
   afterAll(async () => {
     await box.dispose();
   });
 
-  test.skipIf(process.platform !== "darwin")("the outcome is failed with the ifconfig stderr as detail and exit code 1", async () => {
-    const run = await exec(["awdl", "--off", "--json"], envFor(box.home, ifconfig));
+  test.skipIf(process.platform !== "darwin" || RUNNING_AS_ROOT)("the outcome is failed with the command stderr as detail and exit code 1", async () => {
+    const run = await exec(["awdl", "--off", "--json"], envFor(box.home));
     expect(run.code).toBe(1);
     const payload = reportOf(run.stdout);
     expect(payload.changed).toBe(false);
     expect(payload.outcome?.status).toBe("failed");
     expect(payload.outcome?.detail).toBe("ifconfig: awdl0: operation not permitted");
-    expect(arrange((await readLog(log)).split("\n"))).toEqual([
-      `sudo -n ${ifconfig} awdl0 down`,
+    expect(["on", "off", "absent"]).toContain(payload.state);
+    expect(arrange((await readLog(sudoLog)).split("\n"))).toEqual([
+      "sudo -n /sbin/ifconfig awdl0 down",
+    ]);
+    expect(arrange((await readLog(ifconfigLog)).split("\n"))).toEqual([
       `ifconfig ${ifconfig} awdl0 down`,
-      `ifconfig ${ifconfig} awdl0`,
     ]);
   });
 });
@@ -364,6 +386,7 @@ describe("awdl clean refusal on non-macOS — Linux/Windows only", () => {
       TMPDIR: box.home,
       USER: "e2etester",
       NO_COLOR: "1",
+      DUSTLESS_IFCONFIG: HOSTILE_IFCONFIG,
     });
     expect(run.code).toBe(0);
     expect(run.stderr).toBe("");
@@ -371,6 +394,8 @@ describe("awdl clean refusal on non-macOS — Linux/Windows only", () => {
     expect(Object.keys(payload).sort()).toEqual(["allowed", "path", "rule", "user"]);
     expect(payload.user).toBe("e2etester");
     expect(payload.path).toBe("/etc/sudoers.d/dustless-awdl");
+    expect(payload.allowed).toEqual(["/sbin/ifconfig awdl0 down", "/sbin/ifconfig awdl0 up"]);
+    expect(payload.rule).toBe(FIXED_RULE);
   });
 
   test.skipIf(process.platform === "darwin")("awdl --print-privilege refuses cleanly when USER is unusable", async () => {
