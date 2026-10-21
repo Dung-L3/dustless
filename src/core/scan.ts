@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { Finding, Rule, ScanReport, Tier, TierStat, UnscannableReason, UnscannableRule } from "../types.ts";
-import { isRedReal, matchesBasename, pathsForRule, platform, resolvePattern } from "./paths.ts";
+import { isProtectedPath, isRedReal, matchesBasename, pathsForRule, patternsVerdict, platform, resolvePattern } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { verify } from "./verify/index.ts";
 import { freeSpace } from "./space.ts";
@@ -49,7 +49,7 @@ export async function scan(opts: { roots?: string[]; minBytes?: number } = {}): 
     });
   }
   unscannable.sort((a, b) => a.ruleId.localeCompare(b.ruleId));
-  const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0 };
+  const unscannableSummary: Record<UnscannableReason, number> = { absent: 0, no_access: 0, not_supported: 0, error: 0, red: 0, protected: 0 };
   for (const u of unscannable) unscannableSummary[u.reason] += 1;
   return {
     findings: found,
@@ -73,8 +73,15 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
       unscannableMap?.set(rule.id, { rule, reasons: new Map([[ "not_supported", new Set(patterns) ]]), hasScannablePath: false });
       continue;
     }
+    const verdict = patternsVerdict(patterns);
+    if (!verdict.ok) {
+      const reason: UnscannableReason = verdict.kind === "protected" ? "protected" : "not_supported";
+      unscannableMap?.set(rule.id, { rule, reasons: new Map([[reason, new Set(patterns)]]), hasScannablePath: false });
+      continue;
+    }
     const results = await Promise.all(patterns.map((pattern) => resolvePattern(pattern)));
     let hasAnyPath = false;
+    const protectedPaths = new Set<string>();
     const ruleData = unscannableMap?.get(rule.id) ?? { rule, reasons: new Map<UnscannableReason, Set<string>>(), hasScannablePath: false };
     for (const result of results) {
       if (result.error) {
@@ -90,6 +97,13 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
             ruleData.reasons.set("red", set);
             continue;
           }
+          if (isProtectedPath(path)) {
+            const set = ruleData.reasons.get("protected") ?? new Set();
+            set.add(path);
+            ruleData.reasons.set("protected", set);
+            protectedPaths.add(path);
+            continue;
+          }
           hasAnyPath = true;
           ruleData.hasScannablePath = true;
         }
@@ -100,6 +114,7 @@ async function candidates(rules: Rule[], roots?: string[], unscannableMap?: Map<
     const hits = results.flatMap((r) => r.paths);
     for (const path of hits) {
       if (seen.has(path) || isRedReal(path)) continue;
+      if (protectedPaths.has(path)) continue;
       if (!matchesBasename(path, rule.match)) continue;
       if (prefixes && !withinRoots(path, prefixes)) continue;
       seen.add(path);

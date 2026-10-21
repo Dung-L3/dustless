@@ -179,14 +179,23 @@ consequences.
 - **Asset:** root on the machine.
 - **Attack:** get the installed sudo rule to allow a command other than the ones the toggle needs,
   so a passwordless root command is available to anyone who can run the engine.
-- **Mitigation:** the installed rule is exactly the steps the engine runs, derived from them and
-  never written out a second time — `netPrivilege` (`src/core/net/privilege.ts`) builds from the
-  command steps, `awdlPrivilege` (`src/core/net/awdl.ts`) names exactly `${IFCONFIG} ${AWDL_INTERFACE}
-  up` and `down`. `sudoersArg` refuses an argument containing `"`, `#`, `*`, `?`, `[`, `]`, `\` or a
-  newline — a wildcard or comment starter is refused, never escaped — and `validSudoersUser` refuses
-  a name that is not `[A-Za-z0-9._-]{1,32}`, a leading `-`, `.`, `..` or `ALL`. The file is validated
-  with `visudo -cf` before it is installed. `tests/net.test.ts` pins the derived rule and its
-  absolute paths.
+- **Mitigation:** every sudoers rule is built in one place and validated there — `sudoersRule`,
+  `sudoersArg`, `sudoersPath` and `validSudoersUser` in `src/core/net/privilege.ts`.
+  `netPrivilege` builds from the command steps; `awdlPrivilege` (`src/core/net/awdl.ts`) names
+  exactly `/sbin/ifconfig awdl0 up` and `/sbin/ifconfig awdl0 down`, and the executable it names
+  is a fixed constant checked against an allowlist that holds `/sbin/ifconfig` and nothing else —
+  no environment value can reach the rule. `sudoersArg` refuses an argument containing a newline,
+  a carriage return, a NUL, `"`, `#`, `*`, `?`, `[`, `]`, `\` or any of `; | & $ > < ( ) { } ! ' `
+  — a wildcard, a comment starter or a command separator is refused, never escaped — and
+  `sudoersPath` additionally refuses whitespace inside a path, a path that is not absolute and any
+  path outside the allowlist. `validSudoersUser` refuses a name that is not `[A-Za-z0-9._-]{1,32}`,
+  a leading `-`, `.`, `..` or `ALL`. The file is validated with `visudo -cf` before it is installed,
+  and the macOS app re-checks the rule — destination path, the two allowed commands and the account
+  name — against what it expects before it installs it as root, so a payload that is not the
+  expected rule is refused instead of written. `tests/net.test.ts` and `tests/awdl.test.ts` pin
+  the derived rules and their absolute paths, and `tests/e2e/awdl.test.ts` runs the compiled binary
+  with a hostile `DUSTLESS_IFCONFIG` in its environment and asserts that the printed rule and the
+  executed command are the fixed ones.
 - **Residual risk:** the rules are `NOPASSWD` and live in `/etc/sudoers.d`, so any process that can
   already act as the user can run exactly those commands without a prompt. That is the intended cost
   of the toggle, and the commands change only the interface state they name.

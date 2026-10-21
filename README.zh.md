@@ -150,8 +150,8 @@ macOS 的 TCC 会对所有没有完全磁盘访问权限的进程隐藏某些目
 
 现在扫描会说明它没能看到什么，而不是保持沉默。`scan --json` 在 `findings` 和 `totals` 之外多带两个键（`src/types.ts`，`ScanReport`）：
 
-- `unscannable` —— 每个未产出任何可扫描路径的规则一条记录，包含 `ruleId`、`tier`、`desc`、失败的 `pathPatterns`，以及 `reason`：`absent`（路径不存在）、`no_access`（EACCES/EPERM —— 通常是缺少完全磁盘访问权限）、`not_supported`（该规则在当前平台没有路径）、`red`（路径命中永久封锁清单）或 `error`（`src/core/scan.ts`，`scan`）。
-- `unscannableSummary` —— 每种 reason 的数量，五个键始终存在。
+- `unscannable` —— 每个未产出任何可扫描路径的规则一条记录，包含 `ruleId`、`tier`、`desc`、失败的 `pathPatterns`，以及 `reason`：`absent`（路径不存在）、`no_access`（EACCES/EPERM —— 通常是缺少完全磁盘访问权限）、`not_supported`（该规则在当前平台没有路径）、`red`（路径命中永久封锁清单）、`protected`（规则的路径范围触及 `$HOME`、它的父目录或文件系统根目录）或 `error`（`src/core/scan.ts`，`scan`）。
+- `unscannableSummary` —— 每种 reason 的数量，六个键始终存在。
 
 这些规则不计入 `totals`、`reclaimable` 和 `freed`：这个字段只会增加信息，绝不会增加数字。macOS 应用为这两个字段建模，并对 reason 的措辞做了本地化（`apps/dustless-mac/Sources/DustlessKit/Model/Reports.swift` 中的 `UnscannableRule`、`UnscannableSummary` 和 `UnscannableText`）。
 
@@ -250,7 +250,7 @@ agent 绝不能自作主张地设置 `confirm: true`。这里的判断标准不�
 | `id` | 唯一。替换同 `id` 的内置规则。 |
 | `tier` | `green` 或 `yellow`。其他值在加载时被拒绝（`src/core/rules.ts:60`）。`red` 和 `blocked` 无法赋值：RED 是一份路径清单，BLOCKED 是一个判定。 |
 | `desc` | 一行说明，显示在 `rule list` 中。 |
-| `paths` | key 为 `mac`、`win`、`linux` 或 `all`（`src/core/rules.ts:7`）。`~` 展开为你的主目录；在 Windows 上 `%VAR%` 从环境变量展开（`src/core/paths.ts:14`）。每个值是一个字符串或字符串列表。`*` 展开为它父目录下的各个子目录。 |
+| `paths` | key 为 `mac`、`win`、`linux` 或 `all`（`src/core/rules.ts:7`）。`~` 展开为你的主目录；在 Windows 上 `%VAR%` 从环境变量展开（`src/core/paths.ts:14`）。每个值是一个字符串或字符串列表。`*` 匹配恰好一个路径段，也可以位于段内（`*.avd`）；一个 pattern 可以包含多个 `*`，每个都必须对上一个路径段：`~/*/*/node_modules` 匹配 `~/a/b/node_modules`，且不匹配别的。展开是有界的 —— 每个 pattern 最多 12 个路径段、20 000 个目录项 —— 触到任一边界的 pattern 会被报告为 unscannable，而不是被悄悄截断。pattern 不得触及 `$HOME`、`$HOME` 的父目录（包括 `~/..`）、文件系统根目录，也不得通过通配符选中 `$HOME` 的直接子目录：`~/*` 会被拒绝，`~/.cache/x` 不会（`src/core/paths.ts` 中的 `patternVerdict`）。 |
 | `match` | 可选正则，作用于该 path 产生的每个目录的 basename（`src/core/paths.ts:90`）。 |
 | `minAgeDays` | 如果其中最新的文件比这个时间更年轻，finding 会从 GREEN 降级为 YELLOW（`src/core/scan.ts:132`）。 |
 | `requireVerify` | 一项交叉验证的名称：`gradle_version_unused`、`git_clean` 或 `not_in_gitignore`。若失败，finding 会降级为 YELLOW **并且**被标记为 BLOCKED（`src/core/scan.ts:136`）。 |
@@ -262,6 +262,8 @@ agent 绝不能自作主张地设置 `confirm: true`。这里的判断标准不�
 dustless rule validate
 dustless rule list
 ```
+
+范围过宽的规则会被拒绝，绝不会被悄悄缩小。`dustless rule add` 以 `1` 退出且不写入任何内容，`dustless rule validate` 会指出出错规则的 id，而一次 scan 会把该规则报告为 unscannable，reason 为 `protected`，而不是删除任何东西。被拒绝的形态是：`$HOME` 本身、`$HOME` 的父目录（`~/..`）、文件系统根目录，以及任何可能落到 `$HOME` 直接子目录上的通配符 —— `~/*` 会把那些目录全部清空。只指名 `$HOME` 之下某一个目录的路径（`~/.cache/x`）仍被接受；`~/Documents` 之类依旧由红名单决定。
 
 ## 故障排查
 

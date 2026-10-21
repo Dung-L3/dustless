@@ -21,6 +21,9 @@ struct OverviewView: View {
         } content: {
             ScrollView {
                 VStack(alignment: .leading, spacing: PanelStyle.Space.l) {
+                    if let error = store.engineError {
+                        engineErrorCard(error)
+                    }
                     if !freeStats.isEmpty { freeSpace }
                     if let report = store.report { tiers(report) }
                     if let blocked = blocked { coverage(blocked) }
@@ -38,7 +41,39 @@ struct OverviewView: View {
     }
 
     private var provenance: String {
-        settings.provenance(store.report, scannedAt: store.scannedAt)
+        settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
+    }
+
+    private func engineErrorCard(_ error: L10nText) -> some View {
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(settings.t("engineUnavailable"))
+                        .font(PanelFont.emphasis())
+                    Text(settings.text(error))
+                        .font(PanelFont.mono(11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .help(settings.text(error))
+                }
+                Spacer(minLength: 0)
+            }
+            Button(settings.t("retry")) {
+                Task { await store.rescan() }
+            }
+            .controlSize(.small)
+            .disabled(store.isBusy)
+            .help(settings.t("rescanHelp"))
+            .accessibilityIdentifier("overview.retry")
+        }
+        .padding(PanelStyle.Space.m)
+        .panelCard(PanelStyle.rowFill)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("overview.engineError")
     }
 
     private var hero: some View {
@@ -56,7 +91,7 @@ struct OverviewView: View {
                 .font(PanelFont.hero)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(store.report == nil ? settings.t("overviewNoScan") : settings.t("reclaimableHelp"))
+            Text(heroHint)
                 .font(PanelFont.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -68,6 +103,11 @@ struct OverviewView: View {
     }
 
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
+
+    private var heroHint: String {
+        if store.report != nil { return settings.t("reclaimableHelp") }
+        return store.engineError == nil ? settings.t("overviewNoScan") : settings.t("engineUnavailable")
+    }
 
     private func countUp(to target: Double) async {
         guard !reduceMotion, target > 0, shownReclaimable < target else {

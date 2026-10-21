@@ -69,8 +69,9 @@ mac ALL=(root) NOPASSWD: /usr/sbin/networksetup -setdnsservers Wi-Fi Empty, /usr
 Every path is absolute and every argument is exact — no wildcards, no shell, no argument
 passthrough. A service name containing spaces (`USB 10/100/1000 LAN`) is double-quoted in the rule
 so sudoers matches the single argument the engine actually passes; a service name containing `"`
-or `#` is refused rather than escaped, and so is one containing a sudoers wildcard (`* ? [ ] \`),
-because a rule with a wildcard in it no longer pins one command. The service name is resolved from
+or `#` is refused rather than escaped, and so is one containing a newline, a sudoers wildcard
+(`* ? [ ] \`) or a shell metacharacter (`; | & $ > < ( ) { } ! ' \``), because a rule with a
+wildcard or a command separator in it no longer pins one command. The service name is resolved from
 `-listallhardwareports`, then from `-listnetworkserviceorder` for a device the first list omits; if
 neither list knows it, `--print-privilege` prints an error and exits `1` rather than a rule whose
 commands `networksetup` rejects every time. Anything outside those four commands is still refused, and
@@ -149,7 +150,10 @@ one place in Dustless that escalates, and it is scoped deliberately:
 
 - The privilege rule lives at `/etc/sudoers.d/dustless-awdl` and permits **exactly two commands**,
   each absolute and exact — `/sbin/ifconfig awdl0 down` and `/sbin/ifconfig awdl0 up`. No wildcards,
-  no shell, no argument passthrough.
+  no shell, no argument passthrough. The executable is a fixed constant the engine checks against
+  an allowlist holding `/sbin/ifconfig` and nothing else, so the rule is a single line naming one
+  system path, and nothing on the machine — an environment variable included — can change what it
+  names.
 - It is written by the macOS app's one-time "AirDrop toggle" setup (an admin prompt), or by hand
   from the output of `--print-privilege`. Remove it any time with
   `sudo rm /etc/sudoers.d/dustless-awdl`.

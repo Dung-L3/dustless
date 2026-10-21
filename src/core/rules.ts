@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Rule } from "../types.ts";
-import { exists } from "./paths.ts";
+import { exists, patternVerdict } from "./paths.ts";
 
 const PLATFORM_KEYS = ["all", "mac", "win", "linux"];
 const TIERS = ["green", "yellow"];
@@ -44,7 +44,7 @@ function normalize(raw: unknown, file: string, requireRecovery: boolean): Rule[]
   const rules: Rule[] = [];
   for (const item of raw) {
     const rule = (item ?? {}) as Record<string, unknown>;
-    const problem = defect(rule, requireRecovery);
+    const problem = schemaDefect(rule, requireRecovery);
     if (problem) broken.push(`${String(rule["id"] ?? "<thiếu id>")}: ${problem}`);
     else rules.push(rule as unknown as Rule);
   }
@@ -53,7 +53,27 @@ function normalize(raw: unknown, file: string, requireRecovery: boolean): Rule[]
   return rules.filter((rule) => !seen.has(rule.id) && !!seen.add(rule.id));
 }
 
+export function scopeDefect(paths: unknown): string | null {
+  if (typeof paths !== "object" || paths === null || Array.isArray(paths)) return null;
+  for (const [key, value] of Object.entries(paths)) {
+    const list = Array.isArray(value) ? value : [value];
+    for (const entry of list) {
+      if (typeof entry !== "string" || !entry.trim()) continue;
+      const verdict = patternVerdict(entry);
+      if (verdict.ok) continue;
+      return `paths.${key}: ${verdict.reason}`;
+    }
+  }
+  return null;
+}
+
 export function defect(rule: Record<string, unknown>, requireRecovery: boolean): string | null {
+  const schema = schemaDefect(rule, requireRecovery);
+  if (schema) return schema;
+  return scopeDefect(rule["paths"]);
+}
+
+function schemaDefect(rule: Record<string, unknown>, requireRecovery: boolean): string | null {
   if (typeof rule["id"] !== "string" || !rule["id"]) return "thiếu id";
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(rule["id"])) return "id chỉ được chứa chữ, số, dấu chấm, gạch dưới và gạch ngang";
   if (typeof rule["desc"] !== "string" || !rule["desc"]) return "thiếu desc";
