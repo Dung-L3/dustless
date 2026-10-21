@@ -32,12 +32,12 @@ final class StorageControl: ObservableObject {
 
     private var nextAlert: (titleKey: String, message: L10nText)?
 
-    func uninstall(_ app: InstalledApp, store: ScanStore) async {
+    func uninstall(_ app: InstalledApp, purge: Bool, store: ScanStore) async {
         isUninstalling = true
         defer { isUninstalling = false }
         do {
             let cli = try DustlessCLI.resolve()
-            let report = try await cli.uninstallApp(path: app.path, purge: true)
+            let report = try await cli.uninstallApp(path: app.path, purge: purge)
             result = StorageResult(report: report, titleKey: "appsUninstalled")
             sheet = nil
             store.removeStorageApp(atPath: app.path)

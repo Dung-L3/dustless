@@ -38,12 +38,20 @@ enum MemCategoryFilter: String, CaseIterable, Identifiable {
     }
 }
 
+struct PendingStop {
+    let pid: Int
+    let name: String
+    let force: Bool
+    let sigkill: Bool
+}
+
 struct MemoryView: View {
     @EnvironmentObject private var store: ScanStore
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var killResults: [Int: KillStatus] = [:]
+    @State private var pendingStop: PendingStop?
     @State private var isStopping = false
     @State private var collapsed: Set<String>?
     @State private var query = ""
@@ -64,6 +72,31 @@ struct MemoryView: View {
         } content: {
             processList(groups, summary: countSummary(groups: groups, matched: matched))
         }
+        .confirmationDialog(
+            settings.t("memoryStopConfirmTitle"),
+            isPresented: Binding(
+                get: { pendingStop != nil },
+                set: { if !$0 { pendingStop = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(settings.t("memoryStopConfirmAction"), role: .destructive) {
+                guard let pending = pendingStop else { return }
+                pendingStop = nil
+                killProcess(pid: pending.pid, force: pending.force, sigkill: pending.sigkill)
+            }
+            Button(settings.t("confirmCancel"), role: .cancel) {
+                pendingStop = nil
+            }
+        } message: {
+            Text(stopMessage)
+        }
+        .accessibilityIdentifier("memory.stop.confirm")
+    }
+
+    private var stopMessage: String {
+        guard let pending = pendingStop else { return "" }
+        return settings.t("memoryStopConfirmBody", ["name": pending.name, "pid": "\(pending.pid)"])
     }
 
     private func countSummary(groups: [ProcessGroup], matched: [ProcessGroup]) -> String? {
@@ -341,7 +374,7 @@ struct MemoryView: View {
         if let status = killResults[proc.pid] {
             statusView(status, for: proc)
         } else {
-            Button(action: { killProcess(pid: proc.pid, force: false, sigkill: false) }) {
+            Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: false, sigkill: false) }) {
                 Image(systemName: "stop.circle.fill")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(DestructiveStyle.red)
@@ -354,7 +387,7 @@ struct MemoryView: View {
             .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityIdentifier("memory.stop.\(proc.pid)")
             .contextMenu {
-                Button(action: { killProcess(pid: proc.pid, force: true, sigkill: true) }) {
+                Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: true, sigkill: true) }) {
                     Label(
                         settings.t("memoryForceStopNamed", ["name": proc.name]),
                         systemImage: "exclamationmark.octagon.fill"
