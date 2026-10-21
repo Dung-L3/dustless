@@ -6,14 +6,44 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish
+        description: "Existing tag to publish, for example v0.5.0"
         required: true
+        type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.3.13"
+
 jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - id: resolve
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          git fetch --tags --force
+          git rev-parse --verify "refs/tags/$TAG"
+      - run: bun install --frozen-lockfile
+      - name: The tag, the package and the docs must agree
+        run: bun scripts/check-release.ts "${{ steps.resolve.outputs.tag }}"
+
   build:
+    name: build (${{ matrix.out }})
+    needs: guard
     strategy:
       fail-fast: false
       matrix:
@@ -21,53 +51,197 @@ jobs:
           - os: macos-latest
             out: dustless-macos-arm64
             target: bun-darwin-arm64
+            run: ./dist/dustless
           - os: macos-latest
             out: dustless-macos-x64
             target: bun-darwin-x64
+            run: arch -x86_64 ./dist/dustless
           - os: ubuntu-latest
             out: dustless-linux-x64
             target: bun-linux-x64
+            run: ./dist/dustless
           - os: windows-latest
             out: dustless-windows-x64.exe
             target: bun-windows-x64
+            run: ./dist/dustless.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - name: Build
         run: bun run build
         env:
           OUTFILE: dist/${{ matrix.out }}
           BUN_TARGET: ${{ matrix.target }}
-
+      - name: Smoke test the artifact that will be published
+        shell: bash
+        run: |
+          ${{ matrix.run }} --version
+          ${{ matrix.run }} scan --json > /dev/null
+          ${{ matrix.run }} rule list --json > /dev/null
+          ${{ matrix.run }} doctor || true
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.out }}
           path: dist/${{ matrix.out }}
           if-no-files-found: error
 
-  release:
-    needs: build
+  bundle-macos:
+    name: bundle-macos (macos)
+    needs: guard
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Build the app bundle and the disk image
+        run: |
+          bun run bundle:mac
+          bun run dmg
+      - name: The bundle must carry a working engine
+        run: |
+          codesign --verify --deep dist/Dustless.app
+          dist/Dustless.app/Contents/Resources/dustless version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dustless-macos-app
+          path: |
+            dist/Dustless.app
+            dist/Dustless-*.dmg
+          if-no-files-found: error
+
+  bundle-windows:
+    name: bundle-windows (windows)
+    needs: guard
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Locate NSIS
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) {
+            Write-Host "NSIS not preinstalled; installing with Chocolatey"
+            choco install nsis -y --no-progress
+            $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $found) { throw "makensis not found after install" }
+          Write-Host "makensis: $found"
+          "MAKENSIS=$found" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build the Windows engine
+        env:
+          OUTFILE: dist/dustless.exe
+          BUN_TARGET: bun-windows-x64
+        run: bun run build
+      - name: Copy the committed icon
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/icons | Out-Null
+          Copy-Item brand/generated/dustless.ico dist/icons/dustless.ico
+      - name: Build the installer and the portable archive
+        run: |
+          bun run installer:win
+          bun run package:win
+      - name: Install, run, then uninstall in a throwaway location
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist -Filter "Dustless-*-setup.exe" | Select-Object -First 1).FullName
+          if (-not $exe) { throw "installer was not produced" }
+          if ((Get-Item $exe).Length -lt 20MB) { throw "installer is suspiciously small" }
+          $sig = [System.IO.File]::ReadAllBytes($exe)[0..1]
+          if ($sig[0] -ne 0x4D -or $sig[1] -ne 0x5A) { throw "installer is not a Windows PE" }
+          $dir = "$env:LOCALAPPDATA\Programs\Dustless"
+          Start-Process -FilePath $exe -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+          if (-not (Test-Path "$dir\dustless.exe")) { throw "silent install did not place the engine" }
+          if (-not (Test-Path "$dir\Uninstall.exe")) { throw "uninstaller was not written" }
+          Write-Host "installed engine reports: $(& "$dir\dustless.exe" version)"
+          $json = & "$dir\dustless.exe" scan --json
+          if ($LASTEXITCODE -ne 0) { throw "scan failed after install" }
+          if (-not ($json | ConvertFrom-Json).PSObject.Properties.Name.Contains("findings")) { throw "scan --json has no findings key" }
+          Start-Process -FilePath "$dir\Uninstall.exe" -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\dustless.exe") { throw "uninstall left the engine behind" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dustless-windows
+          path: |
+            dist/Dustless-*-setup.exe
+            dist/dustless-*-windows-x64.zip
+          if-no-files-found: error
+
+  checksums:
+    name: checksums
+    needs: [guard, build, bundle-macos, bundle-windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Collect every built binary
+      - name: Collect every artifact
         run: |
           mkdir -p out
-          find artifacts -type f -name 'dustless*' -exec cp {} out/ \;
+          find artifacts -type f \( -name 'dustless-*' -o -name 'Dustless-*' \) ! -name '*.blockmap' -exec cp {} out/ \;
           ls -l out
-          test "$(find out -type f | wc -l)" -eq 4
-
-      - uses: softprops/action-gh-release@v2
+          test "$(find out -type f | wc -l)" -ge 7
+      - name: SHA256SUMS
+        run: |
+          cd out
+          sha256sum $(ls | sort) > SHA256SUMS
+          cat SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          files: out/*
-          fail_on_unmatched_files: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          name: release-assets
+          path: out
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: [guard, checksums]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: out
+      - name: Every published file must have a checksum
+        run: |
+          cd out
+          test -f SHA256SUMS
+          sha256sum -c SHA256SUMS
+          ls -l
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.guard.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          notes=$(mktemp)
+          printf 'Dustless %s\n\n' "$TAG" > "$notes"
+          printf -- '- Engine binaries for macOS, Linux and Windows\n' >> "$notes"
+          printf -- '- The macOS app bundle and a drag to install disk image\n' >> "$notes"
+          printf -- '- A per user Windows installer and a portable archive\n' >> "$notes"
+          printf -- '- SHA256SUMS for every file\n' >> "$notes"
+          gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag out/* || \
+          gh release upload "$TAG" --clobber out/*
+          gh release view "$TAG" --json tagName,assets --jq '.tagName, (.assets | length)'
