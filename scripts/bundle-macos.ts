@@ -1,5 +1,6 @@
 import { chmod, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { APP_SRC, DIST, ROOT, fail, readVersion, run, runInherit } from "./lib.ts";
 
@@ -31,6 +32,31 @@ function infoPlist(version: string): string {
 </dict>
 </plist>
 `;
+}
+
+function runEngine(engine: string, args: string[], timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(engine, args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      resolve({ code: -1, stdout: "", stderr: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ code: -1, stdout, stderr: error.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? -1, stdout, stderr });
+    });
+  });
 }
 
 const version = await readVersion();
@@ -71,5 +97,16 @@ if (signed.code !== 0) fail(`codesign failed: ${signed.stderr.trim()}`);
 
 const verified = await run("codesign", ["--verify", "--deep", APP]);
 if (verified.code !== 0) fail(`codesign --verify failed: ${verified.stderr.trim()}`);
+
+const bundledEngine = join(APP, "Contents", "Resources", "dustless");
+const probe = await runEngine(bundledEngine, ["version"], 20_000);
+if (probe.code !== 0) {
+  fail(`the bundled engine did not answer \`version\`: ${probe.stderr.trim() || probe.stdout.trim() || `exit ${probe.code}`}`);
+}
+const reported = probe.stdout.trim();
+if (!reported) fail("the bundled engine printed no version");
+if (reported !== version) {
+  fail(`the bundled engine reports ${reported} but the app is ${version} — rebuild it with \`bun run build\``);
+}
 
 console.log(`done ${APP} in ${((Date.now() - started) / 1000).toFixed(1)}s (version ${version}, ad-hoc signed)`);
