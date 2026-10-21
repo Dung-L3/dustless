@@ -3,6 +3,7 @@ import { lstat, mkdir, mkdtemp, readdir, rm, symlink, truncate, utimes, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertTempRoot, cleanupAll, exec, sandbox, type Sandbox } from "./e2e/harness.ts";
+import type { Reason } from "../src/types.ts";
 
 const MiB = 1024 * 1024;
 const FILM = 300 * MiB;
@@ -11,7 +12,7 @@ const NOTES = 150 * MiB;
 const PINNED = new Date("2023-04-05T06:07:08Z");
 
 type LargeFile = { path: string; size: number; mtime: number };
-type Outcome = { path: string; status: string; bytes: number; detail: string };
+type Outcome = { path: string; status: string; bytes: number; detail: Reason | null };
 type Report = { outcomes: Outcome[]; summary: { trashed: number; failed: number; totalBytes: number } };
 
 const exists = async (path: string): Promise<boolean> => await lstat(path).then(() => true, () => false);
@@ -122,7 +123,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", film, "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toBe("confirm required");
+    expect(report.outcomes[0]?.detail?.code).toBe("confirm_required");
     expect(await exists(film)).toBe(true);
   });
 
@@ -151,7 +152,7 @@ describe("largefiles --delete", () => {
       );
       const report = JSON.parse(run.stdout) as Report;
       expect(run.code).toBe(1);
-      expect(report.outcomes[0]?.detail).toBe("outside the scanned roots");
+    expect(report.outcomes[0]?.detail?.code).toBe("outside_roots");
       expect(await exists(victim)).toBe(true);
     } finally {
       await rm(outside, { recursive: true, force: true });
@@ -165,7 +166,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", link, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toBe("refusing symlink");
+    expect(report.outcomes[0]?.detail?.code).toBe("symlink");
     expect(await exists(target)).toBe(true);
   });
 
@@ -175,7 +176,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", link, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toMatch(/HOME/);
+    expect(report.outcomes[0]?.detail?.code).toBe("protected");
     expect(await exists(box.home)).toBe(true);
   });
 
@@ -185,7 +186,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", join(alias, "backup.tar"), "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
+    expect(report.outcomes[0]?.detail?.code).toBe("symlink");
     expect(await exists(join(box.home, "Downloads", "backup.tar"))).toBe(true);
   });
 
@@ -194,7 +195,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", dir, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toBe("not a regular file");
+    expect(report.outcomes[0]?.detail?.code).toBe("not_a_regular_file");
     expect(await exists(dir)).toBe(true);
     expect(await exists(join(dir, "backup.tar"))).toBe(true);
   });
@@ -205,7 +206,7 @@ describe("largefiles --delete", () => {
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
     expect(report.outcomes[0]?.status).toBe("failed");
-    expect(report.outcomes[0]?.detail).toMatch(/red list/);
+    expect(report.outcomes[0]?.detail?.code).toBe("red_list");
     expect(await exists(doc)).toBe(true);
     expect((await lstat(doc)).size).toBe(NOTES);
   });
@@ -215,7 +216,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", pack, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(run.code).toBe(1);
-    expect(report.outcomes[0]?.detail).toMatch(/red list/);
+    expect(report.outcomes[0]?.detail?.code).toBe("red_list");
     expect(await exists(pack)).toBe(true);
   });
 
@@ -224,7 +225,7 @@ describe("largefiles --delete", () => {
     const run = await box.run(["largefiles", "--delete", ghost, "--confirm", "--json"]);
     const report = JSON.parse(run.stdout) as Report;
     expect(report.outcomes[0]?.status).toBe("skipped");
-    expect(report.outcomes[0]?.detail).toBe("does not exist");
+    expect(report.outcomes[0]?.detail?.code).toBe("not_found");
     expect(report.summary).toMatchObject({ skipped: 1, failed: 0 });
   });
 

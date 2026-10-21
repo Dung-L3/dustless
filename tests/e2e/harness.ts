@@ -4,6 +4,8 @@ import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, write
 import { tmpdir } from "node:os";
 import { join, isAbsolute, relative, resolve, sep } from "node:path";
 
+import type { Reason } from "../../src/types.ts";
+
 export const REPO = resolve(import.meta.dir, "..", "..");
 export const BINARY = join(REPO, "dist", process.platform === "win32" ? "dustless.exe" : "dustless");
 export const DAY = 86_400_000;
@@ -112,10 +114,11 @@ export type Finding = {
   ageDays: number;
   verified: boolean;
   blocked: boolean;
-  note: string;
+  note: Reason[];
 };
 
 export type ScanReport = {
+  schemaVersion: number,
   findings: Finding[];
   totals: Record<string, { count: number; bytes: number }>;
   reclaimable: number;
@@ -132,10 +135,11 @@ export type Outcome = {
   path: string;
   status: "deleted" | "skipped" | "failed";
   bytes: number;
-  detail: string;
+  detail: Reason | null;
 };
 
 export type ApplyReport = {
+  schemaVersion: number,
   outcomes: Outcome[];
   freed: number;
   freeBefore: number;

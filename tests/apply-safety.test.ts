@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "no
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Finding, ScanReport } from "../src/types.ts";
+import { SCHEMA_VERSION } from "../src/types.ts";
 import { apply } from "../src/core/apply.ts";
 import { userRulesPath } from "../src/core/rules.ts";
 import { accountedBytes, adjustScanAccounting } from "../src/core/space.ts";
@@ -26,11 +27,12 @@ const finding = (path: string, overrides: Partial<Finding> = {}): Finding => ({
   ageDays: 999,
   verified: true,
   blocked: false,
-  note: "",
+  note: [],
   ...overrides,
 });
 
 const report = (findings: Finding[]): ScanReport => ({
+  schemaVersion: SCHEMA_VERSION,
   findings,
   totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
   reclaimable: 0,
@@ -105,7 +107,7 @@ describe("the delete path re-verifies the finding", () => {
     });
 
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/chạm sau lúc quét/);
+    expect(result.outcomes[0]?.detail?.code).toBe("revalidate_age");
     expect(await exists(join(dir, "blob.bin"))).toBe(true);
   });
 
@@ -169,7 +171,8 @@ describe("the delete path re-verifies the finding", () => {
 
     const dirty = await apply(report([finding(dirtyBuild)]), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(dirty.outcomes[0]?.status).toBe("skipped");
-    expect(dirty.outcomes[0]?.detail).toMatch(/git/);
+    expect(dirty.outcomes[0]?.detail?.code).toBe("revalidate_verify");
+    expect(dirty.outcomes[0]?.detail?.params?.["cause"]).toBe("git_dirty");
     expect(await exists(join(dirtyBuild, "blob.bin"))).toBe(true);
   });
 });
@@ -189,7 +192,7 @@ describe("the busy-process gate matches the real process names", () => {
         tiers: { "test.npm": "green" },
       });
       expect(result.outcomes[0]?.status).toBe("skipped");
-      expect(result.outcomes[0]?.detail).toMatch(/đang chạy/);
+    expect(result.outcomes[0]?.detail?.code).toBe("busy_process");
       expect(await exists(join(dir, "blob.bin"))).toBe(true);
       const argv = await readFile(seam.argv, "utf8");
       expect(argv).toContain("args=");
@@ -234,7 +237,7 @@ describe("the busy-process gate matches the real process names", () => {
         tiers: { "test.gradle": "green" },
       });
       expect(result.outcomes[0]?.status).toBe("skipped");
-      expect(result.outcomes[0]?.detail).toMatch(/gradle đang chạy/);
+    expect(result.outcomes[0]?.detail?.code).toBe("busy_process");
       expect(await exists(join(dir, "blob.bin"))).toBe(true);
     } finally {
       seam.restore();
@@ -309,7 +312,7 @@ describe("the busy-process gate matches the real process names", () => {
         tiers: { "test.npm": "green" },
       });
       expect(result.outcomes[0]?.status).toBe("skipped");
-      expect(result.outcomes[0]?.detail).toMatch(/không liệt kê được/);
+    expect(result.outcomes[0]?.detail?.code).toBe("listing_unavailable");
       expect(await exists(join(dir, "blob.bin"))).toBe(true);
     } finally {
       seam.restore();
@@ -426,7 +429,7 @@ describe("the rule fields that used to be inert now protect the delete", () => {
     const result = await apply(report([finding(dir)]), { assumeYes: true, tiers: { "test.cache": "green" } });
 
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/rule yêu cầu ≥ 30 ngày/);
+    expect(result.outcomes[0]?.detail?.code).toBe("stale_days");
     expect(await exists(join(dir, "blob.bin"))).toBe(true);
   });
 
@@ -473,7 +476,8 @@ describe("the rule fields that used to be inert now protect the delete", () => {
     const result = await apply(report([finding(out)]), { assumeYes: true, tiers: { "test.cache": "green" } });
 
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/git/);
+    expect(result.outcomes[0]?.detail?.code).toBe("revalidate_verify");
+    expect(result.outcomes[0]?.detail?.params?.["cause"]).toBe("git_dirty");
     expect(await exists(join(out, "blob.bin"))).toBe(true);
   });
 });
@@ -502,7 +506,8 @@ describe("a git check that cannot run blocks the finding", () => {
     const result = await apply(report([finding(cache)]), { assumeYes: true, tiers: { "test.cache": "green" } });
 
     expect(result.outcomes[0]?.status).toBe("skipped");
-    expect(result.outcomes[0]?.detail).toMatch(/could not verify/);
+    expect(result.outcomes[0]?.detail?.code).toBe("revalidate_verify");
+    expect(result.outcomes[0]?.detail?.params?.["cause"]).toBe("git_unverifiable_ignore");
     expect(await exists(join(cache, "blob.bin"))).toBe(true);
   });
 });

@@ -1,7 +1,8 @@
 import { lstat, rm } from "node:fs/promises";
 import { basename, parse, resolve, sep } from "node:path";
-import type { ApplyOutcome, ApplyReport, Finding, Rule, ScanReport, TierChoice } from "../types.ts";
-import { HOME, isRed, realGuard, refusalText, platform } from "./paths.ts";
+import type { ApplyOutcome, ApplyReport, Finding, Reason, Rule, ScanReport, TierChoice } from "../types.ts";
+import { SCHEMA_VERSION } from "../types.ts";
+import { HOME, isRed, realGuard, refusalCode, platform } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { accountedBytes, exec, freeSpace, treeUsage } from "./space.ts";
 import { verify } from "./verify/index.ts";
@@ -55,6 +56,7 @@ export async function apply(report: ScanReport, opts: Options = {}): Promise<App
   const freeAfter = await freeSpace();
   const deleted = outcomes.filter((outcome) => outcome.status === "deleted");
   return {
+    schemaVersion: SCHEMA_VERSION,
     outcomes,
     deletedBytes: accountedBytes(deleted.map((outcome) => ({ path: outcome.path, bytes: outcome.bytes }))),
     freed: Math.max(0, freeAfter - report.freeBefore),
@@ -77,7 +79,7 @@ async function run(
     path: target,
     status: "skipped",
     bytes: 0,
-    detail: "",
+    detail: null,
   };
   const guard = refusal(target);
   if (guard) {
@@ -86,11 +88,11 @@ async function run(
     return outcome;
   }
   if (finding.blocked) {
-    outcome.detail = `KIỆM SOÁT CHẶN: ${finding.note || "kiểm chứng thất bại"}`;
+    outcome.detail = { code: "verify_failed", params: { cause: finding.note[0]?.params?.cause ?? "unknown" } };
     return outcome;
   }
   if (opts.only && !opts.only.has(target)) {
-    outcome.detail = "không được chọn: ngoài danh sách --only-file";
+    outcome.detail = { code: "not_selected" };
     return outcome;
   }
   const rule = rules.get(finding.ruleId);
@@ -99,27 +101,27 @@ async function run(
   if (declared.length > 0) {
     const running = await busy();
     if (running === null) {
-      outcome.detail = "không liệt kê được tiến trình đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng";
+      outcome.detail = { code: "listing_unavailable" };
       return outcome;
     }
     const watchers = declared.filter((name) =>
       running.entries.some((entry) => entry.name === name || entry.tools.has(name)),
     );
     if (watchers.length > 0) {
-      outcome.detail = `${watchers.join(", ")} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng`;
+      outcome.detail = { code: "busy_process", params: { names: watchers.join(", ") } };
       return outcome;
     }
   }
   const present = await lstat(target).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
   if (!present) {
-    outcome.detail = "bỏ qua: đường dẫn không còn tồn tại";
+    outcome.detail = { code: "missing" };
     return outcome;
   }
   const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
   const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
   const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
   if (action === "skip") {
-    outcome.detail = chosen ? "bỏ qua theo yêu cầu" : "bỏ qua: không được yêu cầu xoá";
+    outcome.detail = { code: "not_selected" };
     return outcome;
   }
   const recheck = await revalidate(finding, rule, target);
@@ -128,7 +130,7 @@ async function run(
     return outcome;
   }
   if (action === "yellow" && !opts.assumeYes && !(await confirm(finding, opts))) {
-    outcome.detail = opts.onPrompt ? "người dùng từ chối" : "cần xác nhận, chạy lại với --yes";
+    outcome.detail = { code: opts.onPrompt ? "declined" : "needs_confirmation" };
     return outcome;
   }
   const failure = await remove(target, opts.beforeDelete);
@@ -138,75 +140,77 @@ async function run(
   return outcome;
 }
 
-async function revalidate(finding: Finding, rule: Rule | undefined, target: string): Promise<string> {
-  if (!rule) return "";
+async function revalidate(finding: Finding, rule: Rule | undefined, target: string): Promise<Reason | null> {
+  if (!rule) return null;
   const ageFloor = rule.minAgeDays;
   const staleFloor = rule.staleDays;
   const needsVerify = rule.requireVerify !== undefined;
   const needsGit = rule.gitClean === true;
-  if (ageFloor === undefined && staleFloor === undefined && !needsVerify && !needsGit) return "";
+  if (ageFloor === undefined && staleFloor === undefined && !needsVerify && !needsGit) return null;
 
   const measured = finding.mtime > 0;
   const needsTree = staleFloor !== undefined || (ageFloor !== undefined && measured);
   const tree = needsTree ? await treeUsage(target) : null;
   if (needsTree && tree === null) {
-    return "bỏ qua: không đọc được cây thư mục để kiểm tra lại";
+    return { code: "unresolvable" };
   }
   if (tree && staleFloor !== undefined) {
     const age = Math.max(0, (Date.now() - tree.mtime) / DAY);
     if (age < staleFloor) {
-      return `bỏ qua: mới ${age.toFixed(1)} ngày, rule yêu cầu ≥ ${staleFloor} ngày`;
+      return { code: "stale_days", params: { age: age.toFixed(1), min: String(staleFloor) } };
     }
   }
   if (tree && ageFloor !== undefined && measured && tree.mtime > finding.mtime) {
     const age = Math.max(0, (Date.now() - tree.mtime) / DAY);
     if (age < ageFloor) {
-      return `bỏ qua: cây cache đã bị chạm sau lúc quét (mới ${age.toFixed(1)} ngày, rule yêu cầu ≥ ${ageFloor} ngày)`;
+      return { code: "revalidate_age", params: { age: age.toFixed(1), min: String(ageFloor) } };
     }
   }
   if (needsGit) {
     const clean = await gitClean(target);
-    if (!clean.ok) return `bỏ qua: ${clean.note}`;
+    if (!clean.ok) return { code: "revalidate_verify", params: { cause: clean.cause ?? "unknown" } };
   }
   if (needsVerify) {
     const verdict = await verify(rule, target);
-    if (!verdict.ok) return `bỏ qua: ${verdict.note}`;
+    if (!verdict.ok) return { code: "revalidate_verify", params: { cause: verdict.cause ?? "unknown" } };
   }
-  return "";
+  return null;
 }
 
-function refusal(path: string): string {
+function refusal(path: string): Reason | null {
   const full = resolve(path);
-  if (isRed(full)) return "từ chối: nằm trong danh sách đỏ";
-  if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) return "từ chối: là HOME hoặc thư mục cha của HOME";
-  if (full === parse(full).root) return "từ chối: filesystem root";
-  return "";
+  if (isRed(full)) return { code: "red_list" };
+  if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) return { code: "home" };
+  if (full === parse(full).root) return { code: "root" };
+  return null;
 }
 
 async function confirm(finding: Finding, opts: Options): Promise<boolean> {
   return (await opts.onPrompt?.(finding)) ?? false;
 }
 
-async function remove(path: string, beforeDelete?: () => void | Promise<void>): Promise<string> {
+async function remove(path: string, beforeDelete?: () => void | Promise<void>): Promise<Reason | null> {
   const target = resolve(path);
   const first = realGuard(target);
-  if ("refused" in first) return refusalText(first.refused);
+  if ("refused" in first) return { code: refusalCode(first.refused) };
   await beforeDelete?.();
   const attempts = platform === "win" ? 4 : 1;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const again = realGuard(target);
-    if ("refused" in again) return refusalText(again.refused);
-    if (again.real !== first.real) return refusalText("changed");
+    if ("refused" in again) return { code: refusalCode(again.refused) };
+    if (again.real !== first.real) return { code: "changed" };
     try {
       await rm(target, { recursive: true, force: true });
-      return "";
+      return null;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? "EUNKNOWN";
-      if (attempt === attempts || !RETRYABLE.has(code)) return `${code}: ${(err as Error).message}`;
+      if (attempt === attempts || !RETRYABLE.has(code)) {
+        return { code: "io_error", params: { code, message: (err as Error).message } };
+      }
       await Bun.sleep(200 * 2 ** attempt);
     }
   }
-  return "";
+  return null;
 }
 
 async function runningCommands(): Promise<Listing | null> {

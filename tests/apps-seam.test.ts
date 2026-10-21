@@ -77,7 +77,7 @@ describe("the app install test seam can only narrow the uninstall scope", () => 
     expect(report.summary.trashed).toBe(0);
     expect(report.summary.purged).toBe(0);
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]?.detail).toMatch(/not in allowed app directories|denied/);
+    expect(report.outcomes[0]?.detail?.code).toBe("not_allowed_dir");
     expect(await exists(appPath)).toBe(true);
   });
 

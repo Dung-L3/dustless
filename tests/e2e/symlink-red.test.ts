@@ -92,7 +92,7 @@ describe("symlink-red: real escape test - red directory protected through symlin
     const outcome = report.outcomes.find(o => o.path === symlinkToRed);
     expect(outcome).toBeDefined();
     expect(outcome?.status).toBe("failed");
-    expect(outcome?.detail).toContain("red list");
+    expect(outcome?.detail?.code).toBe("red_list");
     expect(await exists(canaryFile)).toBe(true);
     const content = await readFile(canaryFile, "utf8");
     expect(content).toBe(canaryContent);
@@ -108,7 +108,7 @@ describe("symlink-red: real escape test - red directory protected through symlin
     const outcome = report.outcomes.find(o => o.path === symlinkToRedTrailingTarget);
     expect(outcome).toBeDefined();
     expect(outcome?.status).toBe("failed");
-    expect(outcome?.detail).toContain("red list");
+    expect(outcome?.detail?.code).toBe("red_list");
     expect(await exists(canaryFile)).toBe(true);
     const content = await readFile(canaryFile, "utf8");
     expect(content).toBe(canaryContent);

@@ -6,6 +6,7 @@ import { apply } from "../../src/core/apply.ts";
 import { moveToTrash } from "../../src/core/apps/index.ts";
 import { findLargeFiles } from "../../src/core/largefiles/index.ts";
 import type { Finding, ScanReport } from "../../src/types.ts";
+import { SCHEMA_VERSION } from "../../src/types.ts";
 
 const scenario = process.argv[2];
 const home = resolve(homedir());
@@ -32,12 +33,13 @@ function finding(path: string): Finding {
     ageDays: 999,
     verified: true,
     blocked: false,
-    note: "",
+    note: [],
   };
 }
 
 function report(findings: Finding[]): ScanReport {
   return {
+    schemaVersion: SCHEMA_VERSION,
     findings,
     totals: {
       green: { count: 0, bytes: 0 },

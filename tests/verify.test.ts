@@ -78,12 +78,13 @@ describe("gradleVersionUnused", () => {
 
     const unused = await gradleVersionUnused("8.12", [root]);
     expect(unused.ok).toBe(true);
-    expect(unused.note).toContain("scanned 1 projects");
+    expect(unused.params?.["scanned"]).toBe("1");
 
     const used = await gradleVersionUnused("8.14", [root]);
     expect(used.ok).toBe(false);
-    expect(used.note).toContain("uses Gradle 8.14");
-    expect(used.note).toContain(project);
+    expect(used.cause).toBe("gradle_used");
+    expect(used.params?.["version"]).toBe("8.14");
+    expect(used.params?.["projects"]).toContain(project);
   });
 
   test("wrapper reference buried in build/ios/SourcePackages is excluded", async () => {
@@ -97,7 +98,7 @@ describe("gradleVersionUnused", () => {
 
     const real = await gradleVersionUnused("8.14", [root]);
     expect(real.ok).toBe(false);
-    expect(real.note).toContain(project);
+    expect(real.params?.["projects"]).toContain(project);
   });
 
   test("every vendored build-output directory is excluded", async () => {
@@ -119,7 +120,7 @@ describe("gradleVersionUnused", () => {
 
     const result = await gradleVersionUnused("8.14", [root]);
     expect(result.ok).toBe(true);
-    expect(result.note).toContain("scanned 0 projects");
+    expect(result.params?.["scanned"]).toBe("0");
   });
 
   test("gradle.properties distributionUrl override pins the version", async () => {
@@ -197,7 +198,7 @@ describe("gitClean", () => {
 
     const result = await gitClean(repo);
     expect(result.ok).toBe(false);
-    expect(result.note).toContain("uncommitted");
+    expect(result.cause).toBe("git_dirty");
   });
 
   test("untracked file fails", async () => {
@@ -226,7 +227,8 @@ describe("gitClean", () => {
 
     const result = await gitClean(repo);
     expect(result.ok).toBe(false);
-    expect(result.note).toContain("MERGE_HEAD");
+    expect(result.cause).toBe("git_in_progress");
+    expect(result.params?.["marker"]).toBe("MERGE_HEAD");
   });
 
   test("in-progress rebase fails", async () => {
@@ -241,7 +243,7 @@ describe("gitClean", () => {
   test("directory outside any repository passes", async () => {
     const result = await gitClean(await fixture());
     expect(result.ok).toBe(true);
-    expect(result.note).toBe("not a git repo");
+    expect(result.cause).toBeUndefined();
   });
 });
 
@@ -253,7 +255,7 @@ describe("gitIgnored", () => {
 
     const result = await gitIgnored(join(repo, "main.txt"));
     expect(result.ok).toBe(true);
-    expect(result.note).toContain("not ignored");
+    expect(result.ok).toBe(true);
   });
 
   test("a path git ignores is refused", async () => {
@@ -264,7 +266,7 @@ describe("gitIgnored", () => {
 
     const result = await gitIgnored(join(repo, "cache"));
     expect(result.ok).toBe(false);
-    expect(result.note).toContain("ignored");
+    expect(result.cause).toBe("git_ignored");
   });
 
   test("a broken .git/config cannot be verified and the path is blocked", async () => {
@@ -275,23 +277,20 @@ describe("gitIgnored", () => {
 
     const result = await gitIgnored(join(repo, "main.txt"));
     expect(result.ok).toBe(false);
-    expect(result.note).toMatch(/could not verify/);
+    expect(result.cause).toBe("git_unverifiable_ignore");
   });
 
   test("a directory outside any repository is not blocked", async () => {
     const result = await gitIgnored(await fixture());
     expect(result.ok).toBe(true);
-    expect(result.note).toBe("not a git repo");
+    expect(result.cause).toBeUndefined();
   });
 });
 
 describe("verify", () => {
   test("rule without requireVerify needs no verification", async () => {
     const rule: Rule = { id: "test.noop", tier: "green", desc: "noop", paths: { all: "~/.cache" } };
-    expect(await verify(rule, "/tmp/whatever")).toEqual({
-      ok: true,
-      note: "no verification required",
-    });
+    expect(await verify(rule, "/tmp/whatever")).toEqual({ ok: true });
   });
 
   test("gradle rule verifies the cache directory basename", async () => {
@@ -303,7 +302,7 @@ describe("verify", () => {
       requireVerify: "gradle_version_unused",
     };
     const result = await verify(rule, "/tmp/does-not-exist/caches/8.12");
-    expect(typeof result.note).toBe("string");
+    expect(result.cause).toBeUndefined();
   });
 });
 

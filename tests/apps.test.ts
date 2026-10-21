@@ -168,7 +168,7 @@ describe("uninstall", () => {
       confirm: false,
     });
     expect(report.summary.failed).toBe(1 + target.relatedPaths.length);
-    expect(report.outcomes[0]!.detail).toBe("confirm required");
+    expect(report.outcomes[0]!.detail?.code).toBe("confirm_required");
   });
 
   test("refuses path outside sandbox home", async () => {
@@ -183,7 +183,7 @@ describe("uninstall", () => {
       confirm: true,
     });
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]!.detail).toMatch(/not in allowed app directories|denied/);
+    expect(report.outcomes[0]!.detail?.code).toBe("not_allowed_dir");
     await rm(outside, { recursive: true, force: true });
   });
 
@@ -199,7 +199,7 @@ describe("uninstall", () => {
       confirm: true,
     });
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]!.detail).toMatch(/not a \.app bundle|denied/);
+    expect(report.outcomes[0]!.detail?.code).toBe("not_an_app");
   });
 
   test.skipIf(process.platform === "win32")("refuses system app path", async () => {
@@ -213,7 +213,7 @@ describe("uninstall", () => {
       confirm: true,
     });
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]!.detail).toBe("system app refused");
+    expect(report.outcomes[0]!.detail?.code).toBe("system_app");
   });
 
   test("moves app and related paths to trash on confirm", async () => {
@@ -304,7 +304,7 @@ describe("uninstall", () => {
 
     const skipped = report.outcomes.filter((o) => o.status === "skipped");
     expect(skipped.length).toBe(1);
-    expect(skipped[0]!.detail).toBe("does not exist");
+    expect(skipped[0]!.detail?.code).toBe("not_found");
   });
 
   test("refuses unrelated paths not in relatedPaths list", async () => {
@@ -325,7 +325,7 @@ describe("uninstall", () => {
 
     const failed = report.outcomes.find((o) => o.path === otherApp.path);
     expect(failed?.status).toBe("failed");
-    expect(failed?.detail).toBe("not a valid leftover path for this app");
+    expect(failed?.detail?.code).toBe("not_a_leftover");
   });
 });
 
@@ -372,7 +372,7 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
     expect(report.summary.purged).toBe(0);
     expect(report.summary.trashed).toBe(0);
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]!.detail).toMatch(/bundle id/);
+    expect(report.outcomes[0]!.detail?.code).toBe("bad_bundle_id");
     expect(await survives()).toBe(true);
     expect(await stat(box.appPath).then(() => true, () => false)).toBe(true);
   });
@@ -400,7 +400,7 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
       const appPath = await createTestApp(id, name, join(box.home, "Applications"));
       const report = await uninstall({ home: box.home, appPath, relatedPaths: [caches], confirm: true, purge: true });
       expect({ id, purged: report.summary.purged, trashed: report.summary.trashed }).toEqual({ id, purged: 0, trashed: 0 });
-      expect(report.outcomes[0]!.detail).toMatch(/bundle id/);
+    expect(report.outcomes[0]!.detail?.code).toBe("bad_bundle_id");
       expect(await stat(join(caches, "precious.txt")).then(() => true, () => false)).toBe(true);
       expect(await stat(appPath).then(() => true, () => false)).toBe(true);
       await rm(appPath, { recursive: true, force: true });
@@ -413,7 +413,7 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
     const report = await uninstall({ home: box.home, appPath: good, relatedPaths: [box.victim], confirm: true });
     expect(report.summary.trashed).toBe(0);
     expect(report.summary.failed).toBe(1);
-    expect(report.outcomes[0]!.detail).toMatch(/escapes HOME/);
+    expect(report.outcomes[0]!.detail?.code).toBe("leftover_escapes_home");
     expect(await survives()).toBe(true);
     expect(await stat(good).then(() => true, () => false)).toBe(true);
   });

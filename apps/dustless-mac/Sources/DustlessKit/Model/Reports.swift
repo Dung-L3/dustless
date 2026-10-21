@@ -1,5 +1,29 @@
 import Foundation
 
+public struct Reason: Codable, Sendable, Hashable {
+    public let code: String
+    public let params: [String: String]?
+
+    public init(code: String, params: [String: String]? = nil) {
+        self.code = code
+        self.params = params
+    }
+}
+
+public enum ReasonText {
+    public static func text(_ reason: Reason?, lang: Lang) -> String {
+        guard let reason else { return "" }
+        let cause = reason.params?["cause"].map { L10n.render(lang, "reason.cause.\($0)", reason.params ?? [:]) }
+        var vars = reason.params ?? [:]
+        if let cause { vars["cause"] = cause }
+        return L10n.render(lang, "reason.\(reason.code)", vars)
+    }
+
+    public static func text(_ reasons: [Reason], lang: Lang) -> String {
+        reasons.map { text($0, lang: lang) }.joined(separator: " · ")
+    }
+}
+
 public struct Finding: Codable, Identifiable, Sendable, Hashable {
     public let ruleId: String
     public let tier: Tier
@@ -11,7 +35,7 @@ public struct Finding: Codable, Identifiable, Sendable, Hashable {
     public let ageDays: Double
     public let verified: Bool
     public let blocked: Bool
-    public let note: String
+    public let note: [Reason]
 
     public var id: String { path }
 }
@@ -82,6 +106,7 @@ public struct UnscannableSummary: Codable, Sendable, Hashable {
 }
 
 public struct ScanReport: Codable, Sendable {
+    public let schemaVersion: Int
     public let findings: [Finding]
     public let totals: TierTotals
     public let reclaimable: UInt64
@@ -91,7 +116,8 @@ public struct ScanReport: Codable, Sendable {
     public let unscannable: [UnscannableRule]
     public let unscannableSummary: UnscannableSummary
 
-    public init(findings: [Finding], totals: TierTotals, reclaimable: UInt64, freeBefore: UInt64, platform: String, scannedMs: Int, unscannable: [UnscannableRule], unscannableSummary: UnscannableSummary) {
+    public init(schemaVersion: Int = EngineContract.currentSchemaVersion, findings: [Finding], totals: TierTotals, reclaimable: UInt64, freeBefore: UInt64, platform: String, scannedMs: Int, unscannable: [UnscannableRule], unscannableSummary: UnscannableSummary) {
+        self.schemaVersion = schemaVersion
         self.findings = findings
         self.totals = totals
         self.reclaimable = reclaimable
@@ -150,12 +176,13 @@ public struct ApplyOutcome: Codable, Sendable, Identifiable {
     public let path: String
     public let status: ApplyStatus
     public let bytes: UInt64
-    public let detail: String
+    public let detail: Reason?
 
     public var id: String { path }
 }
 
 public struct ApplyReport: Codable, Sendable {
+    public let schemaVersion: Int
     public let outcomes: [ApplyOutcome]
     public let deletedBytes: UInt64
     public let freed: UInt64

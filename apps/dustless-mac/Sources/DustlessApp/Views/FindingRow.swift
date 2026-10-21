@@ -71,7 +71,7 @@ struct FindingRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 9))
-                        Text(finding.note)
+                        Text(ReasonText.text(finding.note, lang: settings.language))
                             .fixedSize(horizontal: false, vertical: true)
                             .lineLimit(nil)
                     }

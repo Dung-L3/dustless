@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "outcomes": [
     {
       "ruleId": "container.docker",
@@ -6,7 +7,12 @@
       "path": "/tmp/dustless-fixture-sandbox/Library/Containers/com.docker.docker",
       "status": "deleted",
       "bytes": 2457600,
-      "detail": "captured from scan finding 0, never executed"
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "0"
+        }
+      }
     },
     {
       "ruleId": "gradle.version_cache",
@@ -14,42 +20,80 @@
       "path": "/tmp/dustless-fixture-sandbox/.gradle/caches/9.0",
       "status": "skipped",
       "bytes": 0,
-      "detail": "captured from scan finding 1, never executed"
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "1"
+        }
+      }
+    },
+    {
+      "ruleId": "project.node_modules",
+      "tier": "yellow",
+      "path": "/tmp/dustless-fixture-sandbox/work/svc/node_modules",
+      "status": "skipped",
+      "bytes": 0,
+      "detail": {
+        "code": "verify_failed",
+        "params": {
+          "cause": "unknown"
+        }
+      }
     },
     {
       "ruleId": "npm.cacache",
       "tier": "green",
       "path": "/tmp/dustless-fixture-sandbox/.npm/_cacache",
-      "status": "failed",
-      "bytes": 0,
-      "detail": "captured from scan finding 2, never executed"
+      "status": "deleted",
+      "bytes": 307200,
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "3"
+        }
+      }
     },
     {
       "ruleId": "pip.cache",
       "tier": "green",
       "path": "/tmp/dustless-fixture-sandbox/.cache/pip",
-      "status": "deleted",
-      "bytes": 122880,
-      "detail": "captured from scan finding 3, never executed"
+      "status": "skipped",
+      "bytes": 0,
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "4"
+        }
+      }
     },
     {
       "ruleId": "bun.cache",
       "tier": "green",
       "path": "/tmp/dustless-fixture-sandbox/.bun/install/cache",
-      "status": "skipped",
+      "status": "failed",
       "bytes": 0,
-      "detail": "captured from scan finding 4, never executed"
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "5"
+        }
+      }
     },
     {
       "ruleId": "gradle.wrapper",
       "tier": "yellow",
       "path": "/tmp/dustless-fixture-sandbox/.gradle/wrapper/dists",
-      "status": "failed",
-      "bytes": 0,
-      "detail": "captured from scan finding 5, never executed"
+      "status": "deleted",
+      "bytes": 1,
+      "detail": {
+        "code": "not_selected",
+        "params": {
+          "at": "6"
+        }
+      }
     }
   ],
-  "deletedBytes": 2580480,
+  "deletedBytes": 2764801,
   "freed": 1048576,
   "freeBefore": 316615888896,
   "freeAfter": 316616937472,

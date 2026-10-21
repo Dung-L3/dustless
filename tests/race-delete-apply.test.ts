@@ -14,6 +14,7 @@ const { realGuard } = await import("../src/core/paths.ts");
 
 type Finding = import("../src/types.ts").Finding;
 type ScanReport = import("../src/types.ts").ScanReport;
+const { SCHEMA_VERSION } = await import("../src/types.ts");
 
 const roots: string[] = [home];
 
@@ -42,10 +43,11 @@ const finding = (path: string, bytes = 1024): Finding => ({
   ageDays: 999,
   verified: true,
   blocked: false,
-  note: "",
+  note: [],
 });
 
 const report = (findings: Finding[], freeBefore = 0): ScanReport => ({
+  schemaVersion: SCHEMA_VERSION,
   findings,
   totals: { green: { count: 0, bytes: 0 }, yellow: { count: 0, bytes: 0 }, red: { count: 0, bytes: 0 }, blocked: { count: 0, bytes: 0 } },
   reclaimable: 0,
@@ -84,7 +86,7 @@ describe("race delete apply", () => {
       },
     });
     expect(result.outcomes[0]?.status).toBe("failed");
-    expect(result.outcomes[0]?.detail).toMatch(/danh sách đỏ/);
+    expect(result.outcomes[0]?.detail?.code).toBe("red_list");
     expect(await readFile(join(red, "keep.txt"), "utf8")).toBe("keep");
   });
 
@@ -105,7 +107,7 @@ describe("race delete apply", () => {
       },
     });
     expect(result.outcomes[0]?.status).toBe("failed");
-    expect(result.outcomes[0]?.detail).toMatch(/đường dẫn thay đổi/);
+    expect(result.outcomes[0]?.detail?.code).toBe("changed");
     expect(await readFile(join(other, "data.txt"), "utf8")).toBe("payload");
   });
 
@@ -119,7 +121,7 @@ describe("race delete apply", () => {
     const target = join(link, "keep.txt");
     const result = await apply(report([finding(target)]), { assumeYes: true, tiers: { "test.cache": "green" } });
     expect(result.outcomes[0]?.status).toBe("failed");
-    expect(result.outcomes[0]?.detail).toMatch(/liên kết tượng trưng/);
+    expect(result.outcomes[0]?.detail?.code).toBe("symlink");
     expect(await readFile(join(victim, "keep.txt"), "utf8")).toBe("keep");
   });
 

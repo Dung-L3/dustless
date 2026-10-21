@@ -39,7 +39,7 @@ struct ConfirmDeleteSheet: View {
                                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                                         Image(systemName: "info.circle")
                                             .font(.system(size: 9))
-                                        Text(finding.note)
+                                        Text(ReasonText.text(finding.note, lang: settings.language))
                                             .fixedSize(horizontal: false, vertical: true)
                                             .lineLimit(nil)
                                     }
@@ -273,8 +273,8 @@ struct CleanupResultCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     .multilineTextAlignment(.leading)
-                if !outcome.detail.isEmpty {
-                    Text(outcome.detail)
+                if let detail = outcome.detail {
+                    Text(ReasonText.text(detail, lang: settings.language))
                         .font(PanelFont.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
