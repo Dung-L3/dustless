@@ -67,8 +67,6 @@ yellowHint
 [oversize-files]
 apps/dustless-mac/Sources/DustlessApp/Views/StorageView.swift 884
 apps/dustless-mac/Tests/DustlessAppTests/EngineContractTests.swift 836
-tests/core.test.ts 521
-tests/net.test.ts 515
 [doc-line-references]
 README.md 43
 README.vi.md 44
