@@ -60,8 +60,8 @@ try {
   await copyFile(EXE, join(stage, "dustless.exe"));
   await writeFile(join(stage, "README.txt"), readmeText());
   await rm(ZIP, { force: true });
-  const zipped = await run("zip", ["-r", "-X", ZIP, "dustless.exe", "README.txt"], { cwd: stage });
-  if (zipped.code !== 0) fail(`zip failed: ${zipped.stderr.trim()}`);
+  const zipped = await run("tar", ["-a", "-c", "-f", ZIP, "dustless.exe", "README.txt"], { cwd: stage });
+  if (zipped.code !== 0) fail(`the portable archive failed: ${zipped.stderr.trim()}`);
   console.log(`done ${ZIP} in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 } finally {
   await rm(stage, { recursive: true, force: true }).catch(() => undefined);
