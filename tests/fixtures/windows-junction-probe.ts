@@ -97,7 +97,7 @@ switch (scenario) {
     await symlink(red, junction, "junction");
     const outcome = await applyOne(join(junction, "canary.txt"));
     assert.equal(outcome.status, "failed");
-    assert.equal(outcome.detail, "từ chối: nằm trong danh sách đỏ");
+    assert.equal(outcome.detail?.code, "red_list");
     assert.equal(await exists(junction), true);
     assert.equal(await readFile(canary, "utf8"), "KEEP");
     break;
@@ -106,7 +106,7 @@ switch (scenario) {
     const s = await scene("through");
     const outcome = await applyOne(join(s.junction, "canary.txt"));
     assert.equal(outcome.status, "failed");
-    assert.equal(outcome.detail, "từ chối: đường dẫn đi qua liên kết tượng trưng");
+    assert.equal(outcome.detail?.code, "symlink");
     assert.equal(await exists(s.junction), true);
     assert.equal(await readFile(s.canary, "utf8"), s.content);
     break;
