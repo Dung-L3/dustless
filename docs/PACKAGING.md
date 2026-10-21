@@ -25,6 +25,7 @@ bun run dmg          # drag-to-install image -> dist/Dustless-<version>.dmg
 bun run package:win  # portable zip -> dist/dustless-<version>-windows-x64.zip
 bun run installer:win # NSIS setup -> dist/Dustless-<version>-setup.exe (needs makensis)
 bun run package      # runs the four build steps, best-effort
+bun run lint         # repository policy: no comments, file size, unused localization keys
 ```
 
 `bun scripts/icons.ts` is not wired into `package.json` and is deliberately
@@ -33,6 +34,11 @@ explicit: `dist/` is gitignored, so a clean checkout has no `dist/icons`, and
 
 `bun run package` runs every build step even if one fails and prints a pass/fail
 summary; it exits non-zero only if a step failed.
+
+`bun run lint` enforces the rules this repository documents for itself: no
+comments in code, the 500 line ceiling on logic files, no localization key that
+is never used, and no growth in the `path:line` references inside the docs.
+`bun scripts/check-repo.ts --write-baseline` rewrites the recorded baseline.
 
 ## Artifacts (measured on macOS 26.5.1, arm64, Bun 1.3.13, Swift 6.3.3 on 2026-10-19, at version 0.5.0)
 
@@ -160,14 +166,22 @@ The installer is per-user (`$LOCALAPPDATA\Programs\Dustless`), refuses anything
 older than Windows 10, and ships an uninstaller.
 `.github/workflows/windows-installer.yml` builds and verifies it on
 `windows-latest` (NSIS is preinstalled there, with a Chocolatey fallback) on
-every `v*` tag and on pull requests that touch `packaging/windows/`. That
-workflow checks the MZ header and size, silently installs, runs
-`dustless.exe version` and `scan --json`, uninstalls, and asserts the engine is
-gone, then attaches the setup exe to the release next to the portable zip.
+every pull request that touches `packaging/windows/`. That workflow checks the
+MZ header and size, silently installs, runs `dustless.exe version` and
+`scan --json`, uninstalls, and asserts the engine is gone.
+
+The published Windows installer and the portable zip are built by the release
+workflow itself, in the same job that smoke tests them, so there is no second
+workflow racing to upload into the same release. See `docs/RELEASING.md`.
 
 The portable `.zip` remains the no-installer route. There is no
 electron-builder path: this is a Bun-compiled binary, not an Electron app, and
 the NSIS script runs natively on Windows rather than under Wine.
+
+The CLI is distributed through GitHub Releases and through the macOS app bundle.
+It is not published to npm: the `dustless` package name on npm would have to
+carry one binary per platform, and a single macOS binary in a package installed
+on Linux or Windows is worse than no package at all.
 
 ## Notes
 
@@ -176,3 +190,6 @@ the NSIS script runs natively on Windows rather than under Wine.
 - All scripts are idempotent: they remove their own previous output before
   regenerating it.
 - `bun run typecheck` covers `src`, `tests`, and `scripts` (strict mode).
+- The version is `package.json`. `bun scripts/check-release.ts v0.5.0` fails
+  when the tag, `package.json`, `CHANGELOG.md` and the three READMEs disagree.
+  The release workflow runs it before it builds anything.
