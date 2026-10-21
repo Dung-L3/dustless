@@ -46,14 +46,17 @@ struct NetView: View {
     }
 
     private var header: some View {
-        PanelHeader(title: settings.t("networkTitle")) {
+        PanelHeader(title: settings.t("networkTitle"), identifier: "network.header") {
             HStack(spacing: PanelStyle.Space.s) {
                 if net.report?.soloRoute == true {
                     StatusChip(color: .orange, text: settings.t("networkSoloRoute"))
+                        .accessibilityIdentifier("network.soloRoute")
                 }
-                RefreshButton(isBusy: net.isLoading) {
-                    Task { await net.refresh() }
-                }
+                RefreshButton(
+                    isBusy: net.isLoading,
+                    action: { Task { await net.refresh() } },
+                    identifier: "network.refresh"
+                )
             }
         }
     }
@@ -77,6 +80,7 @@ struct NetView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(settings.t("networkState"))
+        .accessibilityIdentifier("network.connection")
     }
 
     private var dnsServers: String? {
@@ -103,6 +107,7 @@ struct NetView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(awdlStateText)
                         .font(PanelFont.emphasis())
+                        .accessibilityIdentifier("network.awdl.state")
                     Text(settings.t("awdlNote"))
                         .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
@@ -141,6 +146,7 @@ struct NetView: View {
                     .font(PanelFont.secondary)
                     .foregroundStyle(.secondary)
                     .help(settings.t("awdlInstalled"))
+                    .accessibilityIdentifier("network.awdl.installed")
             } else {
                 Button(settings.t("awdlInstall")) {
                     Task { await net.awdl.installPrivilege() }
@@ -149,6 +155,7 @@ struct NetView: View {
                 .disabled(net.awdl.busy)
                 .help(settings.t("awdlInstall"))
                 .accessibilityLabel(settings.t("awdlInstall"))
+                .accessibilityIdentifier("network.awdl.install")
             }
 
             let turningOn = !net.awdl.isOn
@@ -159,24 +166,30 @@ struct NetView: View {
             .disabled(net.awdl.busy || net.awdl.state == nil || net.awdl.state == .absent)
             .help(turningOn ? settings.t("awdlTurnOn") : settings.t("awdlTurnOff"))
             .accessibilityLabel(turningOn ? settings.t("awdlTurnOn") : settings.t("awdlTurnOff"))
+            .accessibilityIdentifier("network.awdl.toggle")
         }
         .fixedSize(horizontal: true, vertical: false)
     }
 
     private var filterBar: some View {
-        PanelFilterBar(placeholder: settings.t("networkSearchPrompt"), text: $query) {
-            Picker(settings.t("networkOps"), selection: $filter) {
-                ForEach(NetOpFilter.allCases) { option in
-                    Text(settings.t(option.titleKey)).tag(option)
+        PanelFilterBar(
+            placeholder: settings.t("networkSearchPrompt"),
+            text: $query,
+            filter: {
+                Picker(settings.t("networkOps"), selection: $filter) {
+                    ForEach(NetOpFilter.allCases) { option in
+                        Text(settings.t(option.titleKey)).tag(option)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .accessibilityLabel(settings.t("networkOps"))
-        } trailing: {
-            EmptyView()
-        }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .accessibilityLabel(settings.t("networkOps"))
+                .accessibilityIdentifier("network.filter")
+            },
+            trailing: { EmptyView() },
+            searchIdentifier: "network.search"
+        )
     }
 
     private var operations: some View {
@@ -228,6 +241,7 @@ struct NetView: View {
                     .foregroundStyle(.secondary)
                     .help(settings.t("netRememberExplain"))
                     .accessibilityLabel(settings.t("netRemembered"))
+                    .accessibilityIdentifier("network.remembered")
                 Spacer(minLength: PanelStyle.Space.s)
                 Button(settings.t("netForget")) {
                     Task { await net.removePrivilege() }
@@ -236,6 +250,7 @@ struct NetView: View {
                 .disabled(net.privilegeBusy)
                 .help(settings.t("netForget"))
                 .accessibilityLabel(settings.t("netForget"))
+                .accessibilityIdentifier("network.forget")
             } else {
                 Button(settings.t("netRemember")) {
                     Task { await net.installPrivilege() }
@@ -244,6 +259,7 @@ struct NetView: View {
                 .disabled(net.privilegeBusy)
                 .help(settings.t("netRememberExplain"))
                 .accessibilityLabel(settings.t("netRemember"))
+                .accessibilityIdentifier("network.remember")
                 Text(settings.t("netRememberExplain"))
                     .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
@@ -281,7 +297,7 @@ struct NetView: View {
                 }
 
                 if let outcome {
-                    statusGlyph(outcome)
+                    statusGlyph(outcome, op: op)
                 }
 
                 runButton(op)
@@ -324,16 +340,18 @@ struct NetView: View {
         .disabled(running || net.isBusy || net.privilegeBusy)
         .help(settings.t(op.helpKey))
         .accessibilityLabel(settings.t("networkRunNamed", ["name": settings.t(op.labelKey)]))
+        .accessibilityIdentifier("network.run.\(op.id)")
     }
 
     @ViewBuilder
-    private func statusGlyph(_ outcome: NetOutcome) -> some View {
+    private func statusGlyph(_ outcome: NetOutcome, op: NetOp) -> some View {
         let (symbol, tint) = Self.outcomeAppearance(outcome.status)
         Image(systemName: symbol)
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(tint)
             .help(outcome.detail)
             .accessibilityLabel(outcome.detail)
+            .accessibilityIdentifier("network.outcome.\(op.id)")
     }
 
     private static func outcomeAppearance(_ status: NetOutcomeStatus) -> (symbol: String, tint: Color) {
@@ -378,6 +396,7 @@ struct NetView: View {
                 .foregroundStyle(.secondary)
                 .help(settings.t("close"))
                 .accessibilityLabel(settings.t("close"))
+                .accessibilityIdentifier("network.error.dismiss")
             }
         }
     }

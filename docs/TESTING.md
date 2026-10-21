@@ -2,12 +2,88 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # everything: 372 tests, about 30s on this laptop
+bun test              # 393 tests, about 32s; 19 skips unless DUSTLESS_UI=1
+bun run test:ui       # real macOS app UI suite; see below
 ```
 
-No build step is needed. `tests/e2e` runs the compiled binary in
-`dist/`, and the e2e harness builds it before the first assertion, so you do not
-have to remember `bun run build` first.
+No build step is needed for the engine suite. `tests/e2e` runs the compiled
+binary in `dist/`, and the e2e harness builds it before the first assertion, so
+you do not have to remember `bun run build` first.
+
+## macOS app UI tests
+
+`bun run test:ui` drives the real SwiftUI app through the Accessibility API. It
+builds both the engine and a test-only app bundle (`dev.dustless.e2e`, process
+`DustlessE2E`), presses the controls a user would press, and asserts on the
+filesystem afterwards.
+
+Requirements: macOS, Xcode or the Command Line Tools (`swiftc`), and
+Accessibility trust for the terminal or process that starts the tests. Without
+that trust the driver cannot inspect another app's window; `DUSTLESS_UI=1` then
+fails with an explicit message instead of reporting a skipped suite. Plain
+`bun test` skips the nine UI cases because it does not set `DUSTLESS_UI=1`; that
+is the only skip condition for this file. Setting `DUSTLESS_UI=1` on a
+non-macOS host fails rather than skipping.
+
+XCUITest is not used: enabling UI automation makes `xcodebuild test` ask for
+administrator credentials or developer mode on this host, so it cannot run
+unattended. `tests/ui/AXDriver.swift` is a small compiled `AXUIElement` and
+`CGEvent` driver. The app is launched by its executable rather than through
+`open`, so the harness controls its environment.
+
+The suite covers launch and overview, sidebar and Go menu navigation, the
+menu-bar popover, settings persistence, Vietnamese language loading,
+network/AWDL actions through an intercepted engine, app uninstall and Move to
+Trash, cleanup cancel/delete with a real failed deletion, and stopping one
+sandboxed process while a sibling fixture process stays alive. Synthetic
+keyboard shortcuts are not asserted: posted key
+events were not reliably delivered as menu key equivalents in this harness, so
+the same routes are exercised through the Go menu instead of pretending the
+shortcut ran.
+
+### Sandbox guarantees
+
+Each case gets an `mkdtemp` root and launches the app with `HOME`,
+`CFFIXED_USER_HOME` and `TMPDIR` inside it. Preferences go to
+`DUSTLESS_PREFS_FILE`, not `UserDefaults` (`CFFIXED_USER_HOME` does not redirect
+`UserDefaults`), and privilege files are read from `DUSTLESS_SUDOERS_DIR`, never
+`/etc/sudoers.d`. The engine receives `DUSTLESS_APPS_DIRS` pointing only at the
+sandbox's `~/Applications`, so the Storage panel never lists or offers to
+uninstall a real app; without that seam the first run listed 23 real
+`/Applications` entries. The rules file also overrides every bundled rule id
+with a sandbox-only no-op path, so absolute defaults such as
+`/opt/homebrew/var/homebrew/cache` cannot become selectable findings. The
+cleanup case proves exactly two fixture findings are selected before it acts.
+Destructive cases assert the fixture's filesystem result: a bundle and its cache
+are gone, a sparse file is under the sandbox `.Trash`, one cleanup fixture is
+deleted and an immutable fixture is reported failed while an outside canary
+survives.
+
+The network case replaces the bundled engine with a wrapper
+(`DUSTLESS_E2E_INTERCEPT`) that answers only `net` and `awdl` commands from
+fixtures and delegates every other command to the real engine. It asserts the
+exact intercepted invocations and the fake AWDL state file. The tested net and
+AWDL actions never reach the privilege-install path (which uses `osascript`);
+that path is not exercised by the suite. No real route, DNS, AirDrop or
+privilege setting is touched.
+
+AppKit still autosaves window frames and the status-item position in
+`~/Library/Preferences/dev.dustless.e2e.plist`, outside the sandbox. That is a
+test-only bundle domain containing no production settings; the harness removes
+it before and after a run. The engine's cleanup selection file is redirected to
+`DUSTLESS_SELECTION_DIR` inside the sandbox, and the app's own settings use
+`DUSTLESS_PREFS_FILE`.
+
+Artifacts (screenshots and AX dumps on failure) go to `artifacts/ui/`, which is
+ignored. The test app is built at `artifacts/ui/build/` and copied to
+`artifacts/ui/app/`; the production `dist/Dustless.app` is not overwritten. The
+AX driver is built in `.ui-bin/`. Screenshots are window-only; if the window id
+is missing, the screenshot fails rather than capturing the desktop.
+
+CI runs the UI job with `continue-on-error: true` (`ui (macos, advisory)`).
+GitHub-hosted macOS runners do not guarantee an AX-trusted GUI session, so that
+job is not a merge gate; a local `bun run test:ui` on an AX-trusted machine is
+the evidence for UI coverage. Do not turn its failure into a skip.
 
 ## Browser-driven testing is deliberately not automated
 

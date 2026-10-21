@@ -17,6 +17,17 @@ enum PanelStyle {
     static let byteColumnWidth: CGFloat = 68
 }
 
+extension View {
+    @ViewBuilder
+    func axID(_ identifier: String?) -> some View {
+        if let identifier {
+            accessibilityIdentifier(identifier)
+        } else {
+            self
+        }
+    }
+}
+
 enum PanelFont {
     static let title = Font.system(size: 22, weight: .semibold)
     static let heading = Font.system(size: 16, weight: .semibold)
@@ -85,13 +96,14 @@ struct PanelFilterBar<Filter: View, Trailing: View>: View {
     @Binding var text: String
     @ViewBuilder let filter: () -> Filter
     @ViewBuilder let trailing: () -> Trailing
+    var searchIdentifier: String? = nil
 
     var body: some View {
         HStack(spacing: PanelStyle.Space.s) {
             filter()
             Spacer(minLength: PanelStyle.Space.s)
             trailing()
-            SearchField(placeholder: placeholder, text: $text)
+            SearchField(placeholder: placeholder, text: $text, identifier: searchIdentifier)
                 .frame(maxWidth: 220)
         }
     }
@@ -163,11 +175,13 @@ struct StatusChip: View {
 struct PanelHeader<Accessory: View>: View {
     let title: String
     var subtitle: String?
+    var identifier: String?
     @ViewBuilder var accessory: Accessory
 
-    init(title: String, subtitle: String? = nil, @ViewBuilder accessory: () -> Accessory) {
+    init(title: String, subtitle: String? = nil, identifier: String? = nil, @ViewBuilder accessory: () -> Accessory) {
         self.title = title
         self.subtitle = subtitle
+        self.identifier = identifier
         self.accessory = accessory()
     }
 
@@ -178,6 +192,7 @@ struct PanelHeader<Accessory: View>: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(PanelFont.title)
+                    .axID(identifier)
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(PanelFont.secondary)
@@ -193,14 +208,15 @@ struct PanelHeader<Accessory: View>: View {
 }
 
 extension PanelHeader where Accessory == EmptyView {
-    init(title: String, subtitle: String? = nil) {
-        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    init(title: String, subtitle: String? = nil, identifier: String? = nil) {
+        self.init(title: title, subtitle: subtitle, identifier: identifier) { EmptyView() }
     }
 }
 
 struct SearchField: View {
     let placeholder: String
     @Binding var text: String
+    var identifier: String? = nil
 
     @EnvironmentObject private var settings: AppSettings
 
@@ -214,6 +230,7 @@ struct SearchField: View {
                 .textFieldStyle(.plain)
                 .font(PanelFont.body)
                 .accessibilityLabel(placeholder)
+                .axID(identifier)
 
             if !text.isEmpty {
                 Button {
@@ -237,6 +254,7 @@ struct SearchField: View {
 struct RefreshButton: View {
     let isBusy: Bool
     let action: () -> Void
+    var identifier: String? = nil
 
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -262,6 +280,7 @@ struct RefreshButton: View {
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.crossfade), value: isBusy)
         .help(settings.t("refreshHelp"))
         .accessibilityLabel(settings.t("refresh"))
+        .axID(identifier)
     }
 }
 
@@ -285,6 +304,8 @@ struct PanelStateView: View {
     var title: String?
     var actionTitle: String?
     var action: (() -> Void)?
+    var identifier: String? = nil
+    var actionIdentifier: String? = nil
 
     var body: some View {
         VStack(spacing: 12) {
@@ -307,11 +328,13 @@ struct PanelStateView: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .controlSize(.large)
+                    .axID(actionIdentifier)
             }
         }
         .padding(PanelStyle.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
+        .axID(identifier)
     }
 
     private var messageLabel: some View {

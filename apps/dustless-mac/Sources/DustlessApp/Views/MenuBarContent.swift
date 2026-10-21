@@ -54,6 +54,7 @@ struct MenuBarContent: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help(provenance)
+                .accessibilityIdentifier("menubar.provenance")
 
             failure
         }
@@ -78,6 +79,7 @@ struct MenuBarContent: View {
                     .help(settings.text(error))
             }
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("menubar.failure")
         }
     }
 
@@ -91,6 +93,7 @@ struct MenuBarContent: View {
         .buttonStyle(.borderless)
         .help(settings.t("refreshHelp"))
         .accessibilityLabel(settings.t("refresh"))
+        .accessibilityIdentifier("menubar.refresh")
     }
 
     private var metrics: some View {
@@ -190,6 +193,7 @@ struct MenuBarContent: View {
                 .disabled(store.isBusy)
                 .help(settings.t("rescanHelp"))
                 .transition(.opacity)
+                .accessibilityIdentifier("menubar.scan")
             } else {
                 if store.selectedFindings.isEmpty {
                     Button {
@@ -201,6 +205,7 @@ struct MenuBarContent: View {
                     .controlSize(.large)
                     .help(settings.t("menuPickToClean"))
                     .transition(.opacity)
+                    .accessibilityIdentifier("menubar.pick")
                 } else {
                     Button(action: reviewAndClean) {
                         Text(settings.t("overviewReview", [
@@ -214,6 +219,7 @@ struct MenuBarContent: View {
                     .disabled(!store.canClean)
                     .help(settings.t("reviewAndDeleteHelp"))
                     .transition(.opacity)
+                    .accessibilityIdentifier("menubar.review")
                 }
 
                 Button {
@@ -228,6 +234,7 @@ struct MenuBarContent: View {
                 .controlSize(.large)
                 .disabled(store.isBusy)
                 .help(settings.t("rescanHelp"))
+                .accessibilityIdentifier("menubar.rescan")
             }
         }
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.selectedFindings.isEmpty)
@@ -278,6 +285,7 @@ struct MenuBarContent: View {
         .buttonStyle(.plain)
         .help(title)
         .accessibilityLabel(title)
+        .accessibilityIdentifier("menubar.module.\(module.rawValue)")
     }
 
     private func keyEquivalent(_ module: Module) -> String {
@@ -339,6 +347,7 @@ struct MenuBarContent: View {
             .controlSize(.small)
             .disabled(awdl.busy)
             .help(airDropHelp)
+            .accessibilityIdentifier("menubar.awdl.toggle")
         }
     }
 
@@ -357,6 +366,7 @@ struct MenuBarContent: View {
                 Text(settings.t("openDustless"))
             }
             .controlSize(.small)
+            .accessibilityIdentifier("menubar.open")
 
             Spacer(minLength: PanelStyle.Space.s)
 
@@ -368,6 +378,7 @@ struct MenuBarContent: View {
             .buttonStyle(.borderless)
             .help(settings.t("settingsOpen"))
             .accessibilityLabel(settings.t("settingsOpen"))
+            .accessibilityIdentifier("menubar.settings")
 
             Button {
                 NSApp.terminate(nil)
@@ -377,6 +388,7 @@ struct MenuBarContent: View {
             .buttonStyle(.borderless)
             .help(settings.t("quitDustless"))
             .accessibilityLabel(settings.t("quitDustless"))
+            .accessibilityIdentifier("menubar.quit")
         }
     }
 

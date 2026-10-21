@@ -27,31 +27,33 @@ final class AppSettings: ObservableObject {
         static let showInDock = "dustless.showInDock"
     }
 
+    private let store = SettingsStore()
+
     @Published var language: Lang {
-        didSet { UserDefaults.standard.set(language.rawValue, forKey: Key.language) }
+        didSet { store.set(language.rawValue, forKey: Key.language) }
     }
 
     @Published var appearance: AppAppearance {
         didSet {
-            UserDefaults.standard.set(appearance.rawValue, forKey: Key.appearance)
+            store.set(appearance.rawValue, forKey: Key.appearance)
             applyAppearance()
         }
     }
 
     @Published var showInDock: Bool {
         didSet {
-            UserDefaults.standard.set(showInDock, forKey: Key.showInDock)
+            store.set(showInDock, forKey: Key.showInDock)
             applyActivationPolicy()
         }
     }
 
     init() {
-        let stored = UserDefaults.standard.string(forKey: Key.language)
+        let stored = store.string(Key.language)
         language = stored.flatMap(Lang.init(rawValue:))
             ?? Lang.preferred(Locale.preferredLanguages.first ?? "en")
-        let storedAppearance = UserDefaults.standard.string(forKey: Key.appearance)
+        let storedAppearance = store.string(Key.appearance)
         appearance = storedAppearance.flatMap(AppAppearance.init(rawValue:)) ?? .system
-        showInDock = UserDefaults.standard.object(forKey: Key.showInDock) as? Bool ?? true
+        showInDock = store.object(Key.showInDock) as? Bool ?? true
         applyAppearance()
         applyActivationPolicy()
     }

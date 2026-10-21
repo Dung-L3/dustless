@@ -15,6 +15,7 @@ struct SettingsView: View {
                     }
                 }
                 .accessibilityLabel(settings.t("language"))
+                .accessibilityIdentifier("settings.language")
 
                 Picker(settings.t("theme"), selection: $settings.appearance) {
                     ForEach(AppAppearance.allCases) { mode in
@@ -24,12 +25,14 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .accessibilityLabel(settings.t("theme"))
                 .help(settings.t("themeHelp"))
+                .accessibilityIdentifier("settings.appearance")
 
                 Toggle(isOn: $settings.showInDock) {
                     Text(settings.t("showInDock"))
                 }
                 .help(settings.t("showInDockNote"))
                 .accessibilityLabel(settings.t("showInDock"))
+                .accessibilityIdentifier("settings.showInDock")
             } header: {
                 Text(settings.t("general"))
             } footer: {
@@ -52,6 +55,7 @@ struct SettingsView: View {
                 .disabled(!login.isSupported)
                 .help(settings.t("launchAtLoginHelp"))
                 .accessibilityLabel(settings.t("launchAtLogin"))
+                .accessibilityIdentifier("settings.launchAtLogin")
 
                 if case .unsupported(let reason) = login.state {
                     Label(settings.t(reason), systemImage: "info.circle")
@@ -87,11 +91,14 @@ struct SettingsView: View {
                 if awdl.privilegeInstalled {
                     Label(settings.t("awdlInstalled"), systemImage: "checkmark.seal.fill")
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.awdl.installed")
                     Button(settings.t("awdlRemove")) { Task { await awdl.removePrivilege() } }
                         .disabled(awdl.busy)
+                        .accessibilityIdentifier("settings.awdl.remove")
                 } else {
                     Button(settings.t("awdlInstall")) { Task { await awdl.installPrivilege() } }
                         .disabled(awdl.busy)
+                        .accessibilityIdentifier("settings.awdl.install")
                 }
 
                 if let error = awdl.error {
@@ -121,6 +128,7 @@ struct SettingsView: View {
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Dustless \(version)")
+                .accessibilityIdentifier("settings.version")
             } header: {
                 Text(settings.t("about"))
             }

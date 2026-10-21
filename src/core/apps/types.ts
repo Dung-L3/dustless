@@ -16,6 +16,7 @@ export type UninstallOptions = {
   appPath: string;
   relatedPaths: string[];
   confirm: boolean;
+  appDirs?: string[];
   purge?: boolean;
   trashDir?: string;
   beforeDelete?: () => void | Promise<void>;

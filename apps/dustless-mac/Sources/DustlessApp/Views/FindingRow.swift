@@ -22,6 +22,7 @@ struct FindingRow: View {
                 .help(settings.t(isSelected ? "includeInCleanup" : "excludeFromCleanup"))
                 .accessibilityLabel(settings.t(isSelected ? "includedLabel" : "excludedLabel"))
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                .accessibilityIdentifier("cleanup.toggle.\(finding.path)")
             } else {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -29,6 +30,7 @@ struct FindingRow: View {
                     .frame(width: 15, height: 18)
                     .help(settings.t("lockedTooltip"))
                     .accessibilityLabel(settings.t("lockedNeverDeleted"))
+                    .accessibilityIdentifier("cleanup.locked.\(finding.path)")
             }
 
             VStack(alignment: .leading, spacing: 5) {

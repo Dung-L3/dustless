@@ -1,0 +1,6 @@
+{
+  "user": "e2e",
+  "path": "/e2e/sudoers.d/dustless-awdl",
+  "allowed": ["/sbin/ifconfig awdl0 down", "/sbin/ifconfig awdl0 up"],
+  "rule": "e2e ALL=(root) NOPASSWD: /sbin/ifconfig awdl0 down, /sbin/ifconfig awdl0 up\n"
+}

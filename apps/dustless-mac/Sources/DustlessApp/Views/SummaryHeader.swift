@@ -52,6 +52,7 @@ struct SummaryHeader: View {
             }
             .disabled(isScanning)
             .help(settings.t("rescanHelp"))
+            .accessibilityIdentifier("cleanup.rescan")
         }
         .padding(.horizontal, PanelStyle.Space.l)
         .padding(.vertical, PanelStyle.Space.m)

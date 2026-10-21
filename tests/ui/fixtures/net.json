@@ -1,0 +1,16 @@
+{
+  "platform": "mac",
+  "iface": "en0",
+  "gateway": "192.168.1.1",
+  "dns": ["1.1.1.1", "8.8.8.8"],
+  "soloRoute": false,
+  "outcomes": [
+    {
+      "op": "flush-dns",
+      "status": "ran",
+      "detail": "e2e fixture outcome",
+      "before": "stale cache",
+      "after": "flushed"
+    }
+  ]
+}
