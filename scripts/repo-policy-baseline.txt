@@ -1,0 +1,77 @@
+[unused-localization-keys]
+applyErrorTitle
+blockedHint
+cleanHintNone
+cleanItemsMenu
+cleanNow
+cleanSelected
+confirmBody
+confirmGo
+confirmLockedCount
+confirmSelectedCount
+confirmTitle
+dark
+decisionA11y
+emptyBody
+emptyTitle
+errorBody
+errorTitle
+eyebrow
+footerNote
+foundMeta
+freeMeter
+freeSpace
+freeStat
+greenHint
+httpError
+itemOne
+kept
+light
+lockedReason
+memoryProcessCategory
+memoryProcessMem
+memoryProcessName
+memoryProcesses
+networkOpClearArpHelp
+networkOpFlushDnsHelp
+networkOpRenewDhcpHelp
+networkOpResetDnsHelp
+networkOpResetMtuHelp
+provenance
+redHint
+resultBody
+risk
+riskTabs
+ruleWide
+rulesActive
+safetyMeasured
+safetyReadOnly
+safetyRed
+scan.unscannable.banner
+scan.unscannable.reason.absent
+scan.unscannable.reason.error
+scan.unscannable.reason.no_access
+scan.unscannable.reason.not_supported
+scan.unscannable.reason.red
+scanning
+scanningHint
+selectedOf
+skipToFindings
+unverified
+volumeFree
+volumeTotal
+volumeUsed
+working
+workingHint
+yellowHint
+[oversize-files]
+apps/dustless-mac/Sources/DustlessApp/Views/StorageView.swift 884
+apps/dustless-mac/Tests/DustlessAppTests/EngineContractTests.swift 836
+tests/core.test.ts 521
+tests/net.test.ts 515
+[doc-line-references]
+README.md 43
+README.vi.md 44
+README.zh.md 44
+CONTRIBUTING.md 5
+docs/MCP.md 1
