@@ -29,7 +29,7 @@ struct UnscannableNotice: View {
                 } else {
                     HStack(alignment: .top, spacing: PanelStyle.Space.s) {
                         symbol
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text(headline(summary))
                                 .font(PanelFont.body)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -83,7 +83,7 @@ struct UnscannableNotice: View {
     }
 
     private var reasonLines: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 5) {
             ForEach(counts, id: \.reason) { part in
                 Text(settings.t("scan.unscannable.reasonLine", [
                     "reason": UnscannableText.reasonLabel(part.reason, lang: settings.language),
