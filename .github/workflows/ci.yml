@@ -108,28 +108,26 @@ jobs:
       - name: Build the disk image
         run: |
           df -h / /System/Volumes/Data
-          echo "=== diskimages2 helper state ==="
-          hdiutil info | head -25
-          echo "=== minimal scratch create (no -srcfolder, full output) ==="
-          rm -f /tmp/diag.dmg
-          hdiutil create /tmp/diag.dmg -volname Diag -size 5m -fs APFS 2>&1 | tail -20
-          if [ -f /tmp/diag.dmg ]; then
-            echo "minimal create SUCCEEDED: $(stat -f%z /tmp/diag.dmg) bytes"
-            sudo hdiutil detach -force /tmp/diag.dmg 2>/dev/null || true
-            rm -f /tmp/diag.dmg
-          else
-            echo "minimal create FAILED too: the create path itself is broken on this runner"
-          fi
-          echo "=== mounted volumes ==="
-          mount | grep -c "on /Volumes" || true
+          echo "attached images before the build: $(hdiutil info | sed -n '3p')"
           bun run dmg
       - name: The image must hold the app and the Applications link
         run: |
-          hdiutil attach dist/Dustless-*.dmg -nobrowse -readonly
-          ls -R /Volumes/Dustless
-          test -d /Volumes/Dustless/Dustless.app
-          test -L /Volumes/Dustless/Applications
-          hdiutil detach /Volumes/Dustless
+          dev=$(sudo hdiutil attach dist/Dustless-*.dmg -nobrowse -nomount | awk '/Apple_HFS/ {print $1; exit}')
+          test -n "$dev" || { echo "attach -nomount printed no Apple_HFS device"; exit 1; }
+          echo "attached $dev"
+          mountpoint=$(mktemp -d /tmp/dmg-verify-XXXX)
+          sudo mount -r -t hfs "$dev" "$mountpoint"
+          ls -R "$mountpoint"
+          test -d "$mountpoint/Dustless.app"
+          test -L "$mountpoint/Applications"
+          test "$(readlink "$mountpoint/Applications")" = "/Applications"
+          version=$("$mountpoint/Dustless.app/Contents/Resources/dustless" version)
+          pkg_version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+          test "$version" = "$pkg_version"
+          echo "the image holds Dustless.app $version and the Applications link"
+          sudo umount "$mountpoint"
+          rm -rf "$mountpoint"
+          hdiutil detach "$dev"
 
   ui:
     name: ui (macos, advisory)

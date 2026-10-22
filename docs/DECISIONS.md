@@ -282,3 +282,22 @@ the create, prints the attached count after the cleanup, and leaves the create i
 healthy runners lose nothing, sick ones get the slots the image needs. Notarising nothing here: the
 depth is one disk and the work is throwaway, and the images are detached again by the next runner
 reimage anyway.
+
+152. The dmg build no longer consults Disk Arbitration, and the CI mount check mounts directly.
+The diagnostic run's numbers: after the twelve simulator runtime cryptexes were detached (see 151)
+the attached count fell from 15 to 3, and a 5 MB scratch create that had been malformed until then
+(its `-format` flag without `-fs` printed usage and ran nothing) succeeded in one second on a runner
+that had failed every image all evening, so the table was not the only broken organ. The create the
+release needs carries `-srcfolder`, and that form copies through a volume it mounts internally; every
+attempt still died with "No space left on device" at that mount, while a mount-free create ran
+cleanly, so the mount machinery itself — Disk Arbitration — is what the sick runners lose. The build
+now never consults it: an explicit-size HFS+ image is created (mount-free), attached with
+`-nomount`, mounted by `mount(2)`, filled with `ditto` plus the Applications link, unmounted with
+`umount`, detached, converted to UDZO, verified by checksum and `imageinfo`, then mounted read-only
+the same way to prove the app, the Applications link, the signature and the engine's version. Every
+claim the old create proved is proved still — the engine identity by hash against the bundle, the
+signature deep, the version, the link target — and the size check now reads the deliberately asked
+size instead of whatever a srcfolder-sizing pass decided. The CI step that had mounted through the
+same machinery was rewritten on the same primitives, so "the image must hold the app" is still a
+mount-proven statement, made without the organ that was broken. On healthy runners the recipe runs
+unchanged in meaning, and the day's evidence says the sick runners can now build the same image.
