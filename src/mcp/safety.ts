@@ -1,5 +1,5 @@
-import { parse, resolve, sep } from "node:path";
-import { HOME, realGuard } from "../core/paths.ts";
+import { parse, resolve } from "node:path";
+import { HOME, isHomeOrAncestor, realGuard } from "../core/paths.ts";
 import type { Finding, Tier } from "../types.ts";
 
 export const MAX_AGENT_DELETE_BYTES = 50 * 1024 ** 3;
@@ -85,7 +85,7 @@ export function assertPathDeletable(finding: Finding): void {
     throw new AgentRefusal(`${finding.path} could not be resolved to a real path.`);
   }
   const full = resolve(finding.path);
-  if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) {
+  if (isHomeOrAncestor(full)) {
     throw new AgentRefusal(`${finding.path} is HOME or a parent of HOME.`);
   }
   if (full === parse(full).root) {

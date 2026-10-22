@@ -16,7 +16,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DustlessAppTests",
-            dependencies: ["DustlessKit"],
+            dependencies: ["DustlessKit", "DustlessApp"],
             path: "Tests/DustlessAppTests",
             resources: [.copy("Fixtures")]
         )
