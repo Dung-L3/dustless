@@ -45,7 +45,16 @@ to publish anything macOS would refuse to open.
 **The screens can be looked at.** The real views render off screen into images, with no window server, no
 Accessibility trust and no launched application, so the UI has a check that runs everywhere. It found two
 defects no test had noticed: an engine error message that was cut off mid sentence, and a singular count
-printed with a plural noun.
+printed with a plural noun. Both are fixed in this release, with the rest of what the render pass and the
+new regression net caught: every bundled rule now has a localized description (the engine's own `desc`
+serves only a rule the user wrote), the engine error is shown once and never truncated, a rescan keeps the
+user's selection and says what disappeared, the privileged network rule is re-checked by the app before it
+is installed (the AirDrop rule already was), the schema version is checked before a report is decoded, the
+engine's output is read from files instead of pipes so overlapping launches cannot hold each other's
+descriptors open, and the storage panel's destructive buttons carry the same red as every other destructive
+control. The render suite renders 18 screens in three languages; the wider QA merge adds 49 Swift tests over
+the engine failure paths, the destructive paths (driven in a sandbox `HOME`) and the source-level contracts,
+plus three TypeScript tests, so the boundary the pixels alone cannot see is checked too.
 
 Versions 0.1.0 to 0.3.0 predate this file; their notes live in the GitHub releases. Versions 0.4.0 and
 0.5.0 are described in the notes of their own releases.
