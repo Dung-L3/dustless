@@ -68,6 +68,12 @@ dustless doctor     # confirm it runs and can read your caches
 
 `doctor` prints the platform, your home directory, the rules directory, the rule count, total and free bytes, and a readability probe for the key paths. It exits non-zero when a path it needs is unreadable (`src/cli/doctor.ts`).
 
+**Older releases.** Versions up to 0.3.0 have a rule scope defect: a rule whose path reaches the direct
+children of `$HOME` - `~/*` is the obvious one - can be created with `rule add`, and a scan of that rule
+lists every direct child of `$HOME` as reclaimable. Do not run a cleanup with a custom rule on 0.3.0 or
+earlier. The old binaries stay on the releases page unchanged, so the history is intact; the release notes
+of v0.3.0 carry the same warning.
+
 ### The macOS app
 
 The same release carries `Dustless-<version>.dmg`. Open it and drag **Dustless** into `/Applications`.

@@ -54,6 +54,18 @@ Both facts are stated in `docs/PACKAGING.md` and in the release notes. A Develop
 `xcrun notarytool submit --wait` plus a `staple` step, with `spctl -a` asserted in CI, is the only way to
 remove the warning; that needs a paid Apple Developer account and cannot be produced by this repository.
 
+## An older release with a known problem
+
+A published release is never rewritten: the tag, the binaries and the checksums stay exactly as they were
+published, so the history of what shipped stays readable. What changes is the **warning**.
+
+When a later audit finds a data loss risk in a published release, the release notes of that release get a
+warning at the top that says what the defect is, what it does, and which version fixes it. The README says
+the same thing next to the download instructions, in the three languages.
+
+The v0.3.0 release carries such a warning: a rule whose path reaches the direct children of `$HOME` can be
+created and then lists those children as reclaimable, and `apply` removes them permanently. v0.5.0 fixes it.
+
 ## After the tag
 
 1. Confirm the release page lists every artifact and that `SHA256SUMS` matches.
