@@ -1,0 +1,6 @@
+{
+  "green": { "count": 0, "bytes": 0 },
+  "yellow": { "count": 0, "bytes": 0 },
+  "red": { "count": 0, "bytes": 0 },
+  "blocked": { "count": 0, "bytes": 0 }
+}
