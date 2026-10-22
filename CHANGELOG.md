@@ -4,6 +4,51 @@
 
 Nothing yet.
 
+## 0.6.0
+
+The delete path re-checks the rule that produced a finding, the app renders the engine's reasons in the
+language the user chose, and the macOS release path is built and checked instead of being assembled by hand.
+
+**The delete path had three holes that the audit did not find.** The scope of a rule was checked when the
+rule was written and when the scan ran, but **not when the delete happened**, so a rule that was already in
+`rules.yaml` and reached the direct children of `$HOME` was still deleted, and a finding whose rule id was
+not in the rule set was deleted as well, with every rule-derived check skipped. The macOS red list covered
+four Apple identifiers and was case sensitive, so `~/.Trash`, `~/Library/Mobile Documents`,
+`~/Library/Containers/com.apple.*` and the Time Machine snapshots were deletable, and a differently cased
+path slipped past it. And the Gradle verification was served from a thirty second cache, so inside one
+process the delete trusted the verdict the scan had produced.
+
+**The sudoers validator was a deny-list.** It refused a set of characters and allowed everything else, so a tab
+in a network service name reached the rule, where sudo reads a tab as an argument separator; the rule was
+also validated by deleting the quoted regions before testing the rest, so a forbidden character inside a
+quoted region passed. The validator has a positive character set and checks the whole rule line now, and the
+Network rule's executable is allowlisted like the AirDrop one was.
+
+**$HOME could be spelled around.** macOS keeps the case a path was given, so `/users/mac` was neither
+`$HOME` nor an ancestor of it. The comparison folds case on the platforms whose volumes are case insensitive,
+and a relative `XDG_CONFIG_HOME` is ignored, so the rules file can no longer follow the working directory.
+
+**The app renders the engine's data in the user's language.** The engine sends a reason code with its
+parameters and the app renders it, so a Vietnamese or English sentence from the engine no longer appears
+inside an English or Chinese interface, and a sentence no longer mixes two languages.
+
+**Every permanent delete looks like one.** The button is a fixed red that does not follow the accent colour,
+so it can never be the green the product uses for "safe"; Return does not delete; removing an application
+moves it to the Trash and the permanent delete is a deliberate second choice; stopping a process and running
+a network operation ask first and say what they will do.
+
+**The macOS release path is real.** The bundle proves what it carries - the engine's hash, the architecture,
+the version, the plist, and that the menu-bar mark is a real image and not a solid square. The disk image is
+built, verified and mounted in CI on every pull request. The notarisation pipeline is implemented and refuses
+to publish anything macOS would refuse to open.
+
+**The screens can be looked at.** The real views render off screen into images, with no window server, no
+Accessibility trust and no launched application, so the UI has a check that runs everywhere. It found two
+defects no test had noticed: an engine error message that was cut off mid sentence, and a singular count
+printed with a plural noun.
+
+Versions 0.1.0 to 0.3.0 predate this file; their notes live in the GitHub releases. Versions 0.4.0 and
+0.5.0 are described in the notes of their own releases.
 ## 0.5.0
 
 The first release with the macOS app built by the release workflow, the required checks that actually

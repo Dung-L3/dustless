@@ -4,7 +4,7 @@
 
 **Disk cleanup for developer machines.** It measures every toolchain cache in its rule database, proves each one is unused by reading your real projects, and deletes only what passed.
 
-Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.5.0, is read from `package.json` at build time (`src/cli/context.ts`) — one number, one source.
+Dustless is a single compiled binary for macOS, Windows and Linux. No runtime, no daemon, no admin rights. The version, 0.6.0, is read from `package.json` at build time (`src/cli/context.ts`) — one number, one source.
 
 ---
 
@@ -211,7 +211,7 @@ Every command below is implemented in `src/cli.ts`.
 | `dustless rule validate [file]` | Parse and validate a rules file. Omit the path to validate the merged database. |
 | `dustless doctor` | Platform, home, config dir, rule count, total/free bytes, readability of key paths, Full Disk Access check. |
 | `dustless mcp` | Serve MCP over stdio for an AI agent. See [docs/MCP.md](docs/MCP.md). |
-| `dustless version` | Print `0.5.0`. `dustless help`, and a bare `dustless`, print usage. |
+| `dustless version` | Print `0.6.0`. `dustless help`, and a bare `dustless`, print usage. |
 
 ### Flags
 

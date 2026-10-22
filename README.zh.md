@@ -4,7 +4,7 @@
 
 **开发者机器的磁盘清理工具。** 它测量规则数据库里的每一个工具链缓存，通过读取你真实项目来证明每个缓存已无人使用，然后只删除通过验证的部分。
 
-Dustless 是单个已编译的二进制文件，支持 macOS、Windows 和 Linux。不需要运行时，不驻留后台，不需要管理员权限。版本号 0.5.0 在构建时从 `package.json` 读取（`src/cli/context.ts`）—— 一个数字，一个来源。
+Dustless 是单个已编译的二进制文件，支持 macOS、Windows 和 Linux。不需要运行时，不驻留后台，不需要管理员权限。版本号 0.6.0 在构建时从 `package.json` 读取（`src/cli/context.ts`）—— 一个数字，一个来源。
 
 ---
 
@@ -193,7 +193,7 @@ macOS 的 TCC 会对所有没有完全磁盘访问权限的进程隐藏某些目
 | `dustless rule validate [file]` | 解析并校验一个规则文件。省略路径则校验合并后的数据库。 |
 | `dustless doctor` | 平台、主目录、配置目录、规则数量、总容量/剩余容量、关键路径可读性、Full Disk Access 检查。 |
 | `dustless mcp` | 通过 stdio 提供 MCP 服务供 AI agent 使用。见 [docs/MCP.md](docs/MCP.md)。 |
-| `dustless version` | 打印 `0.5.0`。`dustless help` 以及直接运行 `dustless` 都会打印用法。 |
+| `dustless version` | 打印 `0.6.0`。`dustless help` 以及直接运行 `dustless` 都会打印用法。 |
 
 ### 标志
 
