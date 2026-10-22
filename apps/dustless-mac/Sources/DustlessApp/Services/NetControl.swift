@@ -97,6 +97,10 @@ final class NetControl: ObservableObject {
         }
         do {
             let privilege = try await DustlessCLI.resolve().netPrivilege()
+            guard Self.isExpectedRule(privilege) else {
+                privilegeError = L10nText("netPrivilegeUnexpected")
+                return false
+            }
             let staging = FileManager.default.temporaryDirectory
                 .appendingPathComponent("dustless-net-\(UUID().uuidString)")
             try privilege.rule.write(to: staging, atomically: true, encoding: .utf8)
@@ -150,6 +154,63 @@ final class NetControl: ObservableObject {
     private static let installTool = "/usr/bin/install"
     private static let visudoTool = "/usr/sbin/visudo"
     private static let rmTool = "/bin/rm"
+
+    private enum NetCommandShape {
+        case setDnsServers
+        case renewDhcp
+        case clearArp
+        case resetMtu
+
+        var all: [NetCommandShape] { [.setDnsServers, .renewDhcp, .clearArp, .resetMtu] }
+
+        func matches(_ command: String) -> Bool {
+            switch self {
+            case .setDnsServers:
+                return Self.matches(command, prefix: "/usr/sbin/networksetup -setdnsservers ", suffix: " Empty")
+            case .renewDhcp:
+                return Self.matches(command, prefix: "/usr/sbin/ipconfig set ", suffix: " DHCP")
+            case .clearArp:
+                return command == "/usr/sbin/arp -d -a"
+            case .resetMtu:
+                return Self.matches(command, prefix: "/usr/sbin/networksetup -setMTU ", suffix: " 1500")
+            }
+        }
+
+        private static func matches(_ command: String, prefix: String, suffix: String) -> Bool {
+            guard command.hasPrefix(prefix), command.hasSuffix(suffix) else { return false }
+            let middle = command.dropFirst(prefix.count).dropLast(suffix.count)
+            return isSafeArgument(String(middle))
+        }
+
+        private static func isSafeArgument(_ text: String) -> Bool {
+            if text.hasPrefix("\""), text.hasSuffix("\""), text.count > 2 {
+                let inner = String(text.dropFirst().dropLast())
+                return !inner.isEmpty && inner.allSatisfy { isPlain($0, spaces: true) }
+            }
+            return !text.isEmpty && text.allSatisfy { isPlain($0, spaces: false) }
+        }
+
+        private static func isPlain(_ character: Character, spaces: Bool) -> Bool {
+            guard character.isASCII else { return false }
+            if character.isLetter || character.isNumber { return true }
+            if "._-/".contains(character) { return true }
+            return spaces && character == " "
+        }
+    }
+
+    static func isExpectedRule(_ privilege: NetPrivilege) -> Bool {
+        guard privilege.path == privilegePath else { return false }
+        guard privilege.allowed.count == NetCommandShape.setDnsServers.all.count else { return false }
+        let user = privilege.user
+        guard !user.isEmpty else { return false }
+        guard user.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }) else {
+            return false
+        }
+        for shape in NetCommandShape.setDnsServers.all {
+            guard privilege.allowed.filter(shape.matches).count == 1 else { return false }
+        }
+        return privilege.rule == "\(user) ALL=(root) NOPASSWD: \(privilege.allowed.joined(separator: ", "))\n"
+    }
 
     private func runAdmin(_ shell: String) async throws {
         let literal = shell

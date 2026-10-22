@@ -14,21 +14,29 @@ struct UnscannableNotice: View {
             Group {
                 if showsDetail {
                     DisclosureGroup {
-                        ruleList
+                        VStack(alignment: .leading, spacing: 4) {
+                            reasonLines
+                            ruleList
+                        }
+                        .padding(.top, PanelStyle.Space.s)
                     } label: {
                         Text(headline(summary))
                             .font(PanelFont.body)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
+                            .accessibilityLabel(headline(summary))
                     }
                 } else {
                     HStack(alignment: .top, spacing: PanelStyle.Space.s) {
                         symbol
-                        Text(headline(summary))
-                            .font(PanelFont.body)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(headline(summary))
+                                .font(PanelFont.body)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                                .accessibilityLabel(headline(summary))
+                            reasonLines
+                        }
                         Spacer(minLength: 0)
                     }
                 }
@@ -37,7 +45,6 @@ struct UnscannableNotice: View {
             .background(compact ? Color.clear : PanelStyle.rowFill, in: .rect(cornerRadius: PanelStyle.radius))
             .frame(maxWidth: .infinity, alignment: .leading)
             .help(headline(summary))
-            .accessibilityLabel(headline(summary))
             .axID(identifier)
         }
     }
@@ -53,15 +60,12 @@ struct UnscannableNotice: View {
     }
 
     private func headline(_ summary: (count: Int, reasonLabels: [String])) -> String {
-        settings.t("scan.unscannable.banner", [
-            "count": "\(summary.count)",
-            "reasons": reasonCounts,
-        ])
+        settings.t("scan.unscannable.banner", ["count": settings.ruleCount(summary.count)])
     }
 
-    private var reasonCounts: String {
+    private var counts: [(reason: UnscannableReason, count: Int)] {
         let summary = report.unscannableSummary
-        var parts: [String] = []
+        var parts: [(reason: UnscannableReason, count: Int)] = []
         for reason in UnscannableReason.allCases {
             let count: Int
             switch reason {
@@ -73,30 +77,56 @@ struct UnscannableNotice: View {
             case .protected: count = summary.protected
             }
             guard count > 0 else { continue }
-            parts.append("\(UnscannableText.reasonLabel(reason, lang: settings.language)) (\(count))")
+            parts.append((reason: reason, count: count))
         }
-        return parts.joined(separator: ", ")
+        return parts
+    }
+
+    private var reasonLines: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(counts, id: \.reason) { part in
+                Text(settings.t("scan.unscannable.reasonLine", [
+                    "reason": UnscannableText.reasonLabel(part.reason, lang: settings.language),
+                    "count": "\(part.count)",
+                ]))
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var groups: [(reason: UnscannableReason, ruleIds: [String])] {
+        var order: [UnscannableReason] = []
+        var map: [UnscannableReason: [String]] = [:]
+        for rule in report.unscannable {
+            if map[rule.reason] == nil {
+                map[rule.reason] = []
+                order.append(rule.reason)
+            }
+            map[rule.reason]?.append(rule.ruleId)
+        }
+        return order.map { (reason: $0, ruleIds: map[$0] ?? []) }
     }
 
     private var ruleList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(report.unscannable, id: \.ruleId) { rule in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(rule.ruleId)
-                            .font(PanelFont.mono(10.5))
-                            .textSelection(.enabled)
-                        Text(UnscannableText.reasonLabel(rule.reason, lang: settings.language))
-                            .font(PanelFont.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }
-                    .accessibilityElement(children: .combine)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(groups, id: \.reason) { group in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(UnscannableText.reasonLabel(group.reason, lang: settings.language))
+                        .font(PanelFont.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 190, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(group.ruleIds.joined(separator: ", "))
+                        .font(PanelFont.mono(10))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .accessibilityElement(children: .combine)
             }
-            .padding(.top, PanelStyle.Space.s)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 160)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

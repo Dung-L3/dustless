@@ -61,17 +61,17 @@ struct FindingRow: View {
                     .multilineTextAlignment(.leading)
                     .accessibilityLabel(settings.t("pathA11y", ["path": finding.path]))
 
-                Text(finding.desc)
+                Text(RuleText.description(of: finding, lang: settings.language))
                     .font(PanelFont.secondary)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
 
-                if !finding.note.isEmpty {
+                if let reasonText {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 9))
-                        Text(ReasonText.text(finding.note, lang: settings.language))
+                        Text(reasonText)
                             .fixedSize(horizontal: false, vertical: true)
                             .lineLimit(nil)
                     }
@@ -86,6 +86,16 @@ struct FindingRow: View {
         .background(rowBackground)
         .contentShape(.rect)
         .pathContextMenu(finding.path)
+    }
+
+    private var reasonText: String? {
+        if !finding.note.isEmpty {
+            return ReasonText.text(finding.note, lang: settings.language)
+        }
+        if !deletable {
+            return settings.tierExplanation(finding.effectiveTier)
+        }
+        return nil
     }
 
     private var rowBackground: some View {

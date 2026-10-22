@@ -31,6 +31,11 @@ final class ScanStore: ObservableObject {
         var engineError: L10nText?
     }
 
+    struct SelectionChange {
+        let before: Int
+        let kept: Int
+    }
+
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
     @Published private(set) var scannedAt: Date?
@@ -58,6 +63,7 @@ final class ScanStore: ObservableObject {
     @Published private(set) var isLoadingStorageFiles = false
     @Published private(set) var storageAppsError: L10nText?
     @Published private(set) var storageFilesError: L10nText?
+    @Published private(set) var selectionChange: SelectionChange?
     private(set) var storageVolumesLoadedAt: Date?
     private(set) var storageAppsLoadedAt: Date?
     private(set) var storageFilesLoadedAt: Date?
@@ -79,6 +85,10 @@ final class ScanStore: ObservableObject {
         phase = preview.report == nil ? .idle : .ready
         memoryPhase = preview.memoryReport == nil ? .idle : .loaded
         storagePhase = .loaded
+        memoryLoadedAt = preview.memoryReport == nil ? nil : Date()
+        storageVolumesLoadedAt = preview.storageVolumes.isEmpty ? nil : Date()
+        storageAppsLoadedAt = preview.storageApps.isEmpty ? nil : Date()
+        storageFilesLoadedAt = preview.storageLargeFiles.isEmpty ? nil : Date()
     }
 
     var canClean: Bool {
@@ -113,11 +123,7 @@ final class ScanStore: ObservableObject {
             phase = .scanning
             busyMessage = L10nText("busyScanning")
             let report = try await cli.scan()
-            self.report = report
-            self.scannedAt = Date()
-            selection = report.initialSelection
-            lastApply = nil
-            showingCleanupResult = false
+            apply(report, keepsApply: false)
             busyMessage = nil
             phase = .ready
         } catch {
@@ -125,6 +131,25 @@ final class ScanStore: ObservableObject {
             engineError = Self.describe(error)
             busyMessage = nil
             phase = report == nil ? .idle : .ready
+        }
+    }
+
+    private func apply(_ report: ScanReport, keepsApply: Bool) {
+        let before = selection
+        let kept = before.intersection(Set(report.deletable.map(\.id)))
+        self.report = report
+        self.scannedAt = Date()
+        selection = kept
+        if keepsApply {
+            selectionChange = nil
+        } else {
+            selectionChange = kept.count == before.count
+                ? nil
+                : SelectionChange(before: before.count, kept: kept.count)
+        }
+        if !keepsApply {
+            lastApply = nil
+            showingCleanupResult = false
         }
     }
 
@@ -141,9 +166,7 @@ final class ScanStore: ObservableObject {
             lastApply = result
             showingCleanupResult = true
             let fresh = try await cli.scan()
-            report = fresh
-            scannedAt = Date()
-            selection = fresh.initialSelection
+            apply(fresh, keepsApply: true)
             busyMessage = nil
             phase = .ready
         } catch {
@@ -292,7 +315,18 @@ final class ScanStore: ObservableObject {
 
     static func describe(_ error: Error) -> L10nText {
         if let error = error as? DustlessError { return error.localized }
-        if let error = error as? BinaryLocationError { return error.localized }
+        if let error = error as? BinaryLocationError { return describe(error) }
         return L10nText("errGeneric", ["detail": error.localizedDescription])
+    }
+
+    static func describe(_ error: BinaryLocationError) -> L10nText {
+        switch error {
+        case .notFound, .notExecutable:
+            return error.localized
+        case .notAnEngine(let url, let reason):
+            if reason.contains("regular file") { return L10nText("errNotARegularFile", ["path": url.path]) }
+            if reason.contains("executable program") { return L10nText("errNotAnExecutable", ["path": url.path]) }
+            return L10nText("errNotAnEngine", ["path": url.path])
+        }
     }
 }

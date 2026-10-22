@@ -44,6 +44,7 @@ struct LargeFileTrashSheet: View {
                     Text(settings.t("appsMoveToTrash"))
                         .frame(minWidth: 160)
                 }
+                .tint(DestructiveStyle.red)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("storage.trash.confirm")
             }
@@ -106,7 +107,7 @@ struct UninstallConfirmationSheet: View {
                 .font(PanelFont.emphasis())
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text(settings.t(permanent ? "appsPurgeBody" : "appsRemoveBody", ["n": "\(app.relatedPaths.count)"]))
+            Text(settings.t(permanent ? "appsPurgeBody" : "appsRemoveBody", ["count": settings.relatedCount(app.relatedPaths.count)]))
                 .font(PanelFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

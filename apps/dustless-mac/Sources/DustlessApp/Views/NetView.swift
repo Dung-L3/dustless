@@ -2,37 +2,14 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-enum NetOpFilter: String, CaseIterable, Identifiable {
-    case all
-    case safe
-    case advanced
-
-    var id: String { rawValue }
-
-    var titleKey: String {
-        switch self {
-        case .all: "networkFilterAll"
-        case .safe: "networkFilterSafe"
-        case .advanced: "networkFilterAdvanced"
-        }
-    }
-
-    func matches(_ op: NetOp) -> Bool {
-        switch self {
-        case .all: true
-        case .safe: !op.isAdvanced
-        case .advanced: op.isAdvanced
-        }
-    }
-}
-
 struct NetView: View {
     @State private var pendingOp: NetOp?
+    @State private var pendingPrivilege = false
+    @State private var showAdvanced = false
     @ObservedObject var net: NetControl
     @EnvironmentObject private var settings: AppSettings
 
     @State private var query = ""
-    @State private var filter: NetOpFilter = .all
 
     var body: some View {
         PanelScaffold {
@@ -45,14 +22,14 @@ struct NetView: View {
             operations
         }
         .confirmationDialog(
-            settings.t("networkAdvancedConfirmTitle"),
+            settings.t("networkRunConfirmTitle", ["op": pendingOp.map { settings.t($0.labelKey) } ?? ""]),
             isPresented: Binding(
                 get: { pendingOp != nil },
                 set: { if !$0 { pendingOp = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button(settings.t("networkAdvancedConfirmAction"), role: .destructive) {
+            Button(settings.t("networkRunConfirmAction"), role: .destructive) {
                 guard let op = pendingOp else { return }
                 pendingOp = nil
                 Task { await net.run(op) }
@@ -61,14 +38,18 @@ struct NetView: View {
                 pendingOp = nil
             }
         } message: {
-            Text(advancedMessage)
+            Text(confirmMessage)
+        }
+        .awdlPrivilegeConfirm(isPresented: $pendingPrivilege) {
+            pendingPrivilege = false
+            Task { await net.awdl.installPrivilege() }
         }
         .accessibilityIdentifier("network.advanced.confirm")
     }
 
-    private var advancedMessage: String {
+    private var confirmMessage: String {
         guard let op = pendingOp else { return "" }
-        return settings.t("networkAdvancedConfirmBody", ["op": settings.t(op.labelKey)])
+        return settings.t("networkRunConfirmBody", ["effect": settings.t(op.helpKey)])
     }
 
     private var header: some View {
@@ -150,7 +131,7 @@ struct NetView: View {
             .padding(PanelStyle.Space.m)
             .panelCard()
 
-            if let error = net.awdl.error {
+            if let error = net.awdl.error, error != net.loadError {
                 errorLabel(error)
             }
         }
@@ -175,13 +156,13 @@ struct NetView: View {
                     .accessibilityIdentifier("network.awdl.installed")
             } else {
                 Button(settings.t("awdlInstall")) {
-                    Task { await net.awdl.installPrivilege() }
+                    pendingPrivilege = true
                 }
                 .controlSize(.small)
                 .disabled(net.awdl.busy)
-                .help(settings.t("awdlInstall"))
+                .help(settings.t("awdlPrivilegeExplain"))
                 .accessibilityLabel(settings.t("awdlInstall"))
-                .accessibilityHint(settings.t("awdlNeedsPrivilege"))
+                .accessibilityHint(settings.t("awdlPrivilegeExplain"))
                 .accessibilityIdentifier("network.awdl.install")
             }
 
@@ -202,17 +183,7 @@ struct NetView: View {
         PanelFilterBar(
             placeholder: settings.t("networkSearchPrompt"),
             text: $query,
-            filter: {
-                Picker(settings.t("networkOps"), selection: $filter) {
-                    ForEach(NetOpFilter.allCases) { option in
-                        Text(settings.t(option.titleKey)).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .accessibilityIdentifier("network.filter")
-            },
+            filter: { EmptyView() },
             trailing: { EmptyView() },
             searchIdentifier: "network.search"
         )
@@ -224,22 +195,47 @@ struct NetView: View {
 
             runErrors
 
-            if visibleOps.isEmpty {
+            if safeOps.isEmpty && advancedOps.isEmpty {
                 NoMatchesView()
                     .frame(minHeight: 120)
             } else {
                 ScrollView {
                     LazyVStack(spacing: PanelStyle.Space.s) {
-                        ForEach(visibleOps) { opRow($0) }
+                        ForEach(safeOps) { opRow($0) }
                     }
                     .padding(.bottom, PanelStyle.Space.s)
                 }
                 .frame(maxHeight: .infinity)
+                if !advancedOps.isEmpty {
+                    advancedArea
+                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             note
         }
+    }
+
+    private var advancedArea: some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { showAdvanced || !query.isEmpty },
+            set: { showAdvanced = $0 }
+        )) {
+            VStack(spacing: PanelStyle.Space.s) {
+                ForEach(advancedOps) { opRow($0) }
+            }
+            .padding(.top, PanelStyle.Space.s)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settings.t("networkAdvancedTitle"))
+                    .font(PanelFont.emphasis())
+                Text(settings.t("advancedHint"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("network.advanced")
     }
 
     private var note: some View {
@@ -266,7 +262,7 @@ struct NetView: View {
             errorLabel(error) { net.dismissRunError() }
         }
 
-        if let error = net.privilegeError {
+        if let error = net.privilegeError, error != net.loadError {
             errorLabel(error) { net.dismissPrivilegeError() }
         }
     }
@@ -303,7 +299,6 @@ struct NetView: View {
                 Text(settings.t("netRememberExplain"))
                     .font(PanelFont.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -326,8 +321,7 @@ struct NetView: View {
                     Text(settings.t(op.helpKey))
                         .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: PanelStyle.Space.s)
@@ -362,11 +356,7 @@ struct NetView: View {
     private func runButton(_ op: NetOp) -> some View {
         let running = net.isRunning(op)
         Button {
-            if op.isAdvanced {
-                pendingOp = op
-            } else {
-                Task { await net.run(op) }
-            }
+            pendingOp = op
         } label: {
             if running {
                 HStack(spacing: 5) {
@@ -408,10 +398,18 @@ struct NetView: View {
         }
     }
 
-    private var visibleOps: [NetOp] {
+    private var safeOps: [NetOp] {
+        filteredOps.filter { !$0.isAdvanced }
+    }
+
+    private var advancedOps: [NetOp] {
+        filteredOps.filter { $0.isAdvanced }
+    }
+
+    private var filteredOps: [NetOp] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return NetOp.allCases.filter { op in
-            filter.matches(op) && (needle.isEmpty || matches(needle, op))
+            needle.isEmpty || matches(needle, op)
         }
     }
 
@@ -420,18 +418,8 @@ struct NetView: View {
     }
 
     private func errorLabel(_ error: L10nText, onDismiss: (() -> Void)? = nil) -> some View {
-        let text = settings.text(error)
-        let label = Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(PanelFont.mono(11))
-            .foregroundStyle(.orange)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-            .lineLimit(2)
-            .truncationMode(.tail)
-            .help(text)
-            .accessibilityLabel(text)
-        return HStack(alignment: .top, spacing: PanelStyle.Space.s) {
-            label
+        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+            EngineErrorMessage(text: error)
             if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
