@@ -86,17 +86,48 @@ jobs:
           rm -rf apps/dustless-mac/.build
           rm -f dist/dustless
           df -h /
+      - name: Free the diskimage slots the boot image spends on simulator runtimes
+        run: |
+          # The runner boots with simulator runtime cryptexes attached. Their blocks in
+          # hdiutil info carry plain /dev/diskN lines (no "dev-entry" label in the
+          # DiskImages2 output), so take the top-level device of each simulator runtime
+          # image and detach it: this job uses no simulator. Measured in docs/DECISIONS.md 151.
+          sudo -n true || exit 0
+          hdiutil info | awk '
+            /^image-path/ { path=$NF }
+            /^[[:space:]]*\/dev\/disk[0-9]+([[:space:]]|$)/ { print path, $1 }
+          ' | grep -i SimulatorRuntime | awk '!seen[$2]++' | while read -r path dev; do
+            if sudo hdiutil detach -force "$dev" >/dev/null 2>&1; then
+              echo "detached $dev ($path)"
+            else
+              echo "detach of $dev failed (kept: $path)"
+            fi
+          done
+          echo "attached images after cleanup: $(hdiutil info | sed -n '3p')"
+
       - name: Build the disk image
         run: |
           df -h / /System/Volumes/Data
+          echo "attached images before the build: $(hdiutil info | sed -n '3p')"
           bun run dmg
       - name: The image must hold the app and the Applications link
         run: |
-          hdiutil attach dist/Dustless-*.dmg -nobrowse -readonly
-          ls -R /Volumes/Dustless
-          test -d /Volumes/Dustless/Dustless.app
-          test -L /Volumes/Dustless/Applications
-          hdiutil detach /Volumes/Dustless
+          dev=$(sudo hdiutil attach dist/Dustless-*.dmg -nobrowse -nomount | awk '/Apple_HFS/ {print $1; exit}')
+          test -n "$dev" || { echo "attach -nomount printed no Apple_HFS device"; exit 1; }
+          echo "attached $dev"
+          mountpoint=$(mktemp -d /tmp/dmg-verify-XXXX)
+          sudo mount -r -t hfs "$dev" "$mountpoint"
+          ls -R "$mountpoint"
+          test -d "$mountpoint/Dustless.app"
+          test -L "$mountpoint/Applications"
+          test "$(readlink "$mountpoint/Applications")" = "/Applications"
+          version=$("$mountpoint/Dustless.app/Contents/Resources/dustless" version)
+          pkg_version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+          test "$version" = "$pkg_version"
+          echo "the image holds Dustless.app $version and the Applications link"
+          sudo umount "$mountpoint"
+          rm -rf "$mountpoint"
+          hdiutil detach "$dev"
 
   ui:
     name: ui (macos, advisory)
