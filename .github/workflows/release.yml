@@ -144,6 +144,17 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
+      - name: Make sure the archiving tool is on the runner
+        shell: pwsh
+        run: |
+          if (-not (Get-Command zip -ErrorAction SilentlyContinue)) {
+            Write-Host "zip is not preinstalled; installing it with Chocolatey"
+            choco install zip -y --no-progress
+          }
+          $zip = Get-Command zip -ErrorAction SilentlyContinue
+          if (-not $zip) { throw "zip is still missing after the install" }
+          Write-Host "zip: $($zip.Source)"
+
       - name: Locate NSIS
         shell: pwsh
         run: |
