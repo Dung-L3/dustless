@@ -269,3 +269,16 @@ and below the letters (fixing "quét được" hangs a comma below the line, "đ
 bridges two lines that sit that close, in the pixels the check reads and for the eye. The stacks now use 5
 and 6 points, the three languages draw the same three rows, and the banner no longer relies on the accent
 height of one script to separate its rows. The check that caught it is unchanged.
+
+151. The dmg step frees the diskimage slots the boot image spends on simulator runtimes, because the
+helper's table was the constraint. The failing runners reported "No space left on device" from
+`hdiutil create` with 96 Gi free on both the system and the Data volume, and the diagnostic run
+measured what actually sits behind the error: `hdiutil info` lists 15 attached images, nearly all of
+them the simulator runtime cryptexes the runner boots with (AppleTV, watchOS, iOS), and even a
+5 MB scratch create with no `-srcfolder` failed — so no new image could get a slot, whatever its
+size, while the same fleet handed out runners that created the image on the first try. The step
+therefore detaches the simulator runtime images (passwordless sudo, `hdiutil detach -force`) before
+the create, prints the attached count after the cleanup, and leaves the create itself unchanged:
+healthy runners lose nothing, sick ones get the slots the image needs. Notarising nothing here: the
+depth is one disk and the work is throwaway, and the images are detached again by the next runner
+reimage anyway.

@@ -145,6 +145,20 @@ jobs:
         with:
           name: dustless-macos-arm64
           path: dist/release-engine
+      - name: Free the diskimage slots the boot image spends on simulator runtimes
+        run: |
+          # The runner boots with simulator runtime cryptexes attached; when the
+          # diskimages2 helper has no free slot the dmg create fails with
+          # "No space left on device". This job uses no simulator. See docs/DECISIONS.md 151.
+          sudo -n true || exit 0
+          hdiutil info | awk '
+            /image-path/ { path=$NF }
+            /dev-entry/  { print path, $NF }
+          ' | grep -i SimulatorRuntime | while read -r path dev; do
+            sudo hdiutil detach -force "$dev" >/dev/null 2>&1 && echo "detached $dev"
+          done
+          echo "attached images after cleanup: $(hdiutil info | sed -n '3p')"
+
       - name: Build the app bundle and the disk image
         run: |
           bun run bundle:mac
@@ -186,6 +200,17 @@ jobs:
         with:
           name: dustless-macos-arm64
           path: dist/release-engine
+      - name: Free the diskimage slots the boot image spends on simulator runtimes
+        run: |
+          # Same rationale as in bundle-macos (docs/DECISIONS.md 151).
+          sudo -n true || exit 0
+          hdiutil info | awk '
+            /image-path/ { path=$NF }
+            /dev-entry/  { print path, $NF }
+          ' | grep -i SimulatorRuntime | while read -r path dev; do
+            sudo hdiutil detach -force "$dev" >/dev/null 2>&1 && echo "detached $dev"
+          done
+
       - name: Build the app bundle with the Developer ID and the disk image
         env:
           DUSTLESS_ENGINE: dist/release-engine/dustless-macos-arm64

@@ -86,6 +86,22 @@ jobs:
           rm -rf apps/dustless-mac/.build
           rm -f dist/dustless
           df -h /
+      - name: Free the diskimage slots the boot image spends on simulator runtimes
+        run: |
+          # The runner boots with simulator runtime cryptexes attached (measured on the
+          # sick state: hdiutil info reports 15 images and even a 5 MB scratch create
+          # fails with "No space left on device"). Detach the simulator runtime images
+          # first: this job compiles for the host and uses no simulator, and the disk
+          # image it builds needs a free slot. See docs/DECISIONS.md 151.
+          sudo -n true || exit 0
+          hdiutil info | awk '
+            /image-path/ { path=$NF }
+            /dev-entry/  { print path, $NF }
+          ' | grep -i SimulatorRuntime | while read -r path dev; do
+            sudo hdiutil detach -force "$dev" >/dev/null 2>&1 && echo "detached $dev ($path)"
+          done
+          echo "attached images after cleanup: $(hdiutil info | sed -n '3p')"
+
       - name: Build the disk image
         run: |
           df -h / /System/Volumes/Data
