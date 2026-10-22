@@ -89,8 +89,8 @@ describe("the rules file only moves when XDG_CONFIG_HOME is absolute", () => {
       expect(userRulesPath()).toBe(join(homedir(), ".config", "dustless", "rules.yaml"));
       process.env["XDG_CONFIG_HOME"] = "";
       expect(userRulesPath()).toBe(join(homedir(), ".config", "dustless", "rules.yaml"));
-      process.env["XDG_CONFIG_HOME"] = "/tmp/dustless-absolute-config";
-      expect(userRulesPath()).toBe("/tmp/dustless-absolute-config/dustless/rules.yaml");
+      process.env["XDG_CONFIG_HOME"] = join("/tmp", "dustless-absolute-config");
+      expect(userRulesPath()).toBe(join("/tmp", "dustless-absolute-config", "dustless", "rules.yaml"));
     } finally {
       if (prior === undefined) delete process.env["XDG_CONFIG_HOME"];
       else process.env["XDG_CONFIG_HOME"] = prior;

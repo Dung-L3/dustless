@@ -147,7 +147,7 @@ describe("the busy-process gate is only paid for by a rule that needs it", () =>
     }
   });
 
-  test("a rule that declares a busy process does list the process table", async () => {
+  test.skipIf(process.platform === "win32")("a rule that declares a busy process does list the process table", async () => {
     const dir = await plant("busy");
     await writeRules(
       `- id: test.npm\n  tier: green\n  desc: npm\n  paths: { all: ${JSON.stringify(join(sandbox, "busy"))} }\n  busyProcesses: ["npm"]\n  recoveryLabel: download\n`,
