@@ -68,6 +68,12 @@ dustless doctor     # xác nhận nó chạy và đọc được cache của b�
 
 `doctor` in ra nền tảng, home directory của bạn, thư mục config, số rule, tổng và dung lượng trống, cùng một bài kiểm tra khả năng đọc theo từng path. Nó trả exit code khác 0 khi một path nó cần không đọc được (`src/cli/doctor.ts`).
 
+**Bản cũ.** Các bản từ 0.3.0 trở xuống có lỗi phạm vi rule: một rule mà đường dẫn chạm tới thư mục con
+trực tiếp của `$HOME` - `~/*` là ví dụ rõ nhất - có thể được tạo bằng `rule add`, và một lần scan của rule
+đó sẽ liệt kê mọi thư mục con trực tiếp của `$HOME` là có thể thu hồi. Đừng chạy cleanup với rule tùy
+chỉnh trên 0.3.0 trở xuống. Binary cũ được giữ nguyên trên trang releases để lịch sử không bị xáo trộn, và
+release notes của v0.3.0 có cùng cảnh báo.
+
 ### Ứng dụng macOS
 
 Cùng release đó có `Dustless-<version>.dmg`. Mở nó và kéo **Dustless** vào `/Applications`.
