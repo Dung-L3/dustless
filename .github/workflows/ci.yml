@@ -81,6 +81,11 @@ jobs:
           codesign --verify --deep dist/Dustless.app
           dist/Dustless.app/Contents/Resources/dustless version
           test -x dist/Dustless.app/Contents/MacOS/Dustless
+      - name: Free the space the image needs
+        run: |
+          rm -rf apps/dustless-mac/.build
+          rm -f dist/dustless
+          df -h /
       - name: Build the disk image
         run: bun run dmg
       - name: The image must hold the app and the Applications link
