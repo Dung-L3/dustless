@@ -110,6 +110,12 @@ export function patternVerdict(pattern: string): PatternVerdict {
   if (slots.length === home.length + 1 && compatible(slots.slice(0, home.length), home) && slots[home.length] === null) {
     return { ok: false, kind: "protected", reason: "phạm vi rule chọn thư mục con trực tiếp của $HOME" };
   }
+  if (slots.length === 1 && slots[0] === "Volumes") {
+    return { ok: false, kind: "protected", reason: "phạm vi rule là thư mục gốc của các ổ đĩa đã mount" };
+  }
+  if (slots.length === 2 && slots[0] === "Volumes") {
+    return { ok: false, kind: "protected", reason: "phạm vi rule chọn thư mục gốc của một ổ đĩa đã mount" };
+  }
   if (anchored && !(slots.length > home.length && compatible(slots.slice(0, home.length), home))) {
     return { ok: false, kind: "protected", reason: "phạm vi rule đi ra ngoài $HOME" };
   }
@@ -248,7 +254,12 @@ const RED_PATTERNS: RegExp[] = [
   /Passes/i,
   /Keynotes/i,
   /Messages/i,
-  /Application Support\/com\.apple\.(Photos|MobileSync|Notes|Trial)/i,
+  /Application Support\/com\.apple\./i,
+  /Containers\/com\.apple\./i,
+  /Mobile Documents(\/|$)/i,
+  /com~apple~CloudDocs(\/|$)/i,
+  /\.Trash(\/|$)/i,
+  /com\.apple\.TimeMachine\.localsnapshots/i,
 ];
 
 export function isRed(path: string): boolean {
@@ -273,6 +284,10 @@ function canonicalReal(path: string): string {
   return platform === "win" ? mac.toLowerCase() : mac;
 }
 
+function foldCase(path: string): string {
+  return platform === "win" || platform === "mac" ? path.toLowerCase() : path;
+}
+
 function homeReal(): string {
   try {
     return realpathSync(HOME);
@@ -282,9 +297,15 @@ function homeReal(): string {
 }
 
 function isProtectedReal(real: string): boolean {
-  const target = canonicalReal(real);
-  const home = canonicalReal(homeReal());
+  const target = foldCase(canonicalReal(real));
+  const home = foldCase(canonicalReal(homeReal()));
   if (target === parse(target).root) return true;
+  return target === home || home.startsWith(target.endsWith(sep) ? target : target + sep);
+}
+
+export function isHomeOrAncestor(path: string): boolean {
+  const target = foldCase(resolve(path));
+  const home = foldCase(resolve(HOME));
   return target === home || home.startsWith(target.endsWith(sep) ? target : target + sep);
 }
 
