@@ -87,7 +87,9 @@ jobs:
           rm -f dist/dustless
           df -h /
       - name: Build the disk image
-        run: bun run dmg
+        run: |
+          df -h / /System/Volumes/Data
+          bun run dmg
       - name: The image must hold the app and the Applications link
         run: |
           hdiutil attach dist/Dustless-*.dmg -nobrowse -readonly

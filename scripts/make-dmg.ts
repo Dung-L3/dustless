@@ -54,17 +54,24 @@ try {
   const stagedBytes = await treeBytes(stage);
   if (stagedBytes <= 0) fail("the staging folder is empty");
 
-  const createSpec = ["create", "-volname", VOLUME, "-srcfolder", stage, "-ov", "-format", "UDZO", DMG];
-  // CI (macos-14) hits diskimages2-helper "No space left on device" with ~90Gi free, minutes
-  // after an identical run succeeds; it is environmental, a second attempt on the same runner
-  // goes through. One retry, loud about it (see docs/DECISIONS.md 149).
-  let created = await run("hdiutil", createSpec);
-  if (created.code !== 0) {
-    console.error(`hdiutil create failed once, retrying after 10s: ${created.stderr.trim()}`);
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-    created = await run("hdiutil", createSpec);
+  let created: Awaited<ReturnType<typeof run>> | null = null;
+  const createSpec = ["create", "-volname", VOLUME, "-srcfolder", stage, "-ov", "-format", "UDZO", DMG] as const;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    created = await run("hdiutil", [...createSpec]);
+    if (created.code === 0) break;
+    // CI (macos-26-arm64) reports "No space left on device" from hdiutil with ~90Gi free on
+    // /; df in the same step only shows the system slice, so the free space of the Data
+    // volume is printed before the step ends and every failure is loud, in order. Healthy
+    // runners succeed on the first try; an unhealthy VM keeps failing at any pause, so
+    // three tries with a growing pause cover the recoverable cases and the failed job is
+    // then rerun, which schedules a fresh VM (see docs/DECISIONS.md 149).
+    if (attempt < 3) {
+      const wait = attempt === 1 ? 10000 : 45000;
+      console.error(`hdiutil create failed (attempt ${attempt}), retrying after ${wait / 1000}s: ${created.stderr.trim()}`);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
   }
-  if (created.code !== 0) fail(`hdiutil create failed: ${created.stderr.trim()}`);
+  if (created!.code !== 0) fail(`hdiutil create failed: ${created!.stderr.trim()}`);
 
   const verified = await run("hdiutil", ["verify", DMG]);
   if (verified.code !== 0) fail(`hdiutil verify rejected the image: ${verified.stderr.trim()}`);
