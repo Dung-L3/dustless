@@ -65,7 +65,7 @@ public enum L10n {
         "reason.verify_failed": "KHÔNG XÓA: {cause}",
         "reason.busy_process": "{names} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng",
         "reason.listing_unavailable": "không liệt kê được tiến trình đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng",
-        "reason.not_determinable": "không xác định được tiến trình {names} đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng",
+        "reason.not_determinable": "không xác định được tiến trình đang chạy, bỏ qua để tránh hỏng tiến trình đang dùng",
         "reason.revalidate_age": "bỏ qua: cây cache đã bị chạm sau lúc quét (mới {age} ngày, rule yêu cầu ≥ {min} ngày)",
         "reason.revalidate_verify": "bỏ qua: {cause}",
         "reason.not_selected": "không được chọn: ngoài danh sách --only-file",
