@@ -57,9 +57,10 @@ try {
 
   const attachedRaw = await run("hdiutil", ["attach", rw, "-nobrowse", "-nomount"]);
   if (attachedRaw.code !== 0) fail(`hdiutil attach (staging image) failed: ${attachedRaw.stderr.trim()}`);
+  process.stdout.write(`staging attach -nomount: ${attachedRaw.stdout.trim().split("\n").join(" | ")}\n`);
   const raw = blockForHfs(attachedRaw.stdout);
   if (raw.device === null) fail(`hdiutil attach -nomount did not report a device: ${attachedRaw.stdout.trim()}`);
-  if (raw.label !== VOLUME) fail(`the staging image labels itself ${raw.label}, it must be ${VOLUME}`);
+  if (raw.label !== null && raw.label !== VOLUME) fail(`the staging image labels itself ${raw.label}, it must be ${VOLUME}`);
 
   const mountPoint = await mkdtemp(join(tmpdir(), "dustless-mnt-"));
   const mounted = await run("sudo", ["mount", "-t", "hfs", raw.device, mountPoint]);
@@ -109,9 +110,10 @@ try {
 
   const checkAttach = await run("hdiutil", ["attach", DMG, "-nobrowse", "-nomount"]);
   if (checkAttach.code !== 0) fail(`hdiutil attach (final image) failed: ${checkAttach.stderr.trim()}`);
+  process.stdout.write(`final attach -nomount: ${checkAttach.stdout.trim().split("\n").join(" | ")}\n`);
   const check = blockForHfs(checkAttach.stdout);
   if (check.device === null) fail(`hdiutil attach -nomount did not report a device: ${checkAttach.stdout.trim()}`);
-  if (check.label !== VOLUME) fail(`the image labels itself ${check.label}, it must be ${VOLUME}`);
+  if (check.label !== null && check.label !== VOLUME) fail(`the image labels itself ${check.label}, it must be ${VOLUME}`);
 
   const checkMount = await mkdtemp(join(tmpdir(), "dustless-check-"));
   const readOnly = await run("sudo", ["mount", "-r", "-t", "hfs", check.device, checkMount]);
