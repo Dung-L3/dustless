@@ -18,7 +18,17 @@ assert.equal(home.toLowerCase(), resolve(process.env["USERPROFILE"] ?? "").toLow
 const exists = async (path: string): Promise<boolean> => await lstat(path).then(() => true, () => false);
 
 async function root(): Promise<string> {
-  return await mkdtemp(join(home, "case-"));
+  const box = await mkdtemp(join(home, "case-"));
+  const config = process.env["XDG_CONFIG_HOME"];
+  if (config) {
+    const dir = join(config, "dustless");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "rules.yaml"),
+      `- id: test.junction\n  tier: green\n  desc: junction probe\n  paths: { all: ${JSON.stringify(box)} }\n  recoveryLabel: download\n`,
+    );
+  }
+  return box;
 }
 
 function finding(path: string): Finding {

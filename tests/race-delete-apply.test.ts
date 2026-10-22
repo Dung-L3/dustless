@@ -18,6 +18,12 @@ const { SCHEMA_VERSION } = await import("../src/types.ts");
 
 const roots: string[] = [home];
 
+await mkdir(join(home, "config", "dustless"), { recursive: true });
+await writeFile(
+  join(home, "config", "dustless", "rules.yaml"),
+  `- id: test.cache\n  tier: green\n  desc: cache\n  paths: { all: ${JSON.stringify(join(tmpdir(), "dustless-q5b2-*"))} }\n`,
+);
+
 afterAll(async () => {
   if (originalXdg === undefined) delete process.env["XDG_CONFIG_HOME"];
   else process.env["XDG_CONFIG_HOME"] = originalXdg;

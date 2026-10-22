@@ -34,7 +34,7 @@ function remember(key: string, result: VerifyResult): VerifyResult {
   return result;
 }
 
-export async function verify(rule: Rule, path: string): Promise<VerifyResult> {
+export async function verify(rule: Rule, path: string, options: { fresh?: boolean } = {}): Promise<VerifyResult> {
   if (basename(path) === "node_modules") {
     const live = await isLiveDependencyTree(path);
     if (!live) return { ok: false, cause: "node_stale" };
@@ -44,7 +44,7 @@ export async function verify(rule: Rule, path: string): Promise<VerifyResult> {
       return { ok: true };
     case "gradle_version_unused": {
       const key = `gradle:${basename(path)}`;
-      const hit = cached(key);
+      const hit = options.fresh ? null : cached(key);
       if (hit) return hit;
       return remember(key, await gradleVersionUnused(basename(path)));
     }
