@@ -81,6 +81,15 @@ jobs:
           codesign --verify --deep dist/Dustless.app
           dist/Dustless.app/Contents/Resources/dustless version
           test -x dist/Dustless.app/Contents/MacOS/Dustless
+      - name: Build the disk image
+        run: bun run dmg
+      - name: The image must hold the app and the Applications link
+        run: |
+          hdiutil attach dist/Dustless-*.dmg -nobrowse -readonly
+          ls -R /Volumes/Dustless
+          test -d /Volumes/Dustless/Dustless.app
+          test -L /Volumes/Dustless/Applications
+          hdiutil detach /Volumes/Dustless
 
   ui:
     name: ui (macos, advisory)
