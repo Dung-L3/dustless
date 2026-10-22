@@ -89,6 +89,19 @@ jobs:
       - name: Build the disk image
         run: |
           df -h / /System/Volumes/Data
+          echo "=== diskimages2 helper state ==="
+          hdiutil info | head -25
+          echo "=== minimal scratch create (no -srcfolder) ==="
+          rm -f /tmp/diag.dmg
+          hdiutil create -volname Diag -size 5m -format UDRW /tmp/diag.dmg 2>&1 | tail -2
+          if [ -f /tmp/diag.dmg ]; then
+            echo "minimal create SUCCEEDED: $(stat -f%z /tmp/diag.dmg) bytes"
+            hdiutil imageinfo /tmp/diag.dmg 2>&1 | head -4
+          else
+            echo "minimal create FAILED too: the create path itself is broken on this runner"
+          fi
+          echo "=== mounted volumes ==="
+          mount | grep -c "on /Volumes" || true
           bun run dmg
       - name: The image must hold the app and the Applications link
         run: |
