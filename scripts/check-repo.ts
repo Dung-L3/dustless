@@ -175,6 +175,34 @@ async function checkLocalizationKeys(baseline: Baseline, findings: Finding[]): P
   }
 }
 
+async function checkLocalizationKeyCoverage(findings: Finding[]): Promise<void> {
+  const table = await readFile(
+    join(ROOT, "apps/dustless-mac/Sources/DustlessKit/Model/Localization.swift"),
+    "utf8",
+  );
+  const defined = new Set<string>();
+  for (const match of table.matchAll(/^\s*"([A-Za-z0-9._]+)":/gm)) {
+    if (match[1]) defined.add(match[1]);
+  }
+  const sources = await collectCodeFiles(["apps/dustless-mac/Sources"]);
+  let used = "";
+  for (const file of sources) used += await readFile(file, "utf8");
+  const composed = new Set<string>();
+  for (const match of used.matchAll(/"([A-Za-z0-9._]*)\\\(/g)) {
+    if (match[1]) composed.add(match[1]);
+  }
+  for (const match of used.matchAll(/(?:\.t|L10nText|render|titleKey|identifier|actionTitle|messageKey|helpKey|hintKey)\(\s*"([A-Za-z0-9._]+)"/g)) {
+    const key = match[1];
+    if (!key) continue;
+    if (defined.has(key)) continue;
+    if ([...composed].some((prefix) => key.startsWith(prefix))) continue;
+    findings.push({
+      file: "Localization.swift",
+      message: `key "${key}" is used in the app but is not in the table`,
+    });
+  }
+}
+
 async function checkDocReferences(baseline: Baseline, findings: Finding[]): Promise<void> {
   for (const file of DOC_FILES) {
     let text: string;
@@ -252,6 +280,7 @@ const findings: Finding[] = [];
 await checkNoComments(files, findings);
 await checkFileSize(baseline, findings);
 await checkLocalizationKeys(baseline, findings);
+await checkLocalizationKeyCoverage(findings);
 await checkDocReferences(baseline, findings);
 
 if (findings.length > 0) {
