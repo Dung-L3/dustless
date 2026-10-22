@@ -121,7 +121,7 @@ jobs:
       - run: bun run build
       - name: Swift tests, including the off-screen render suite
         working-directory: apps/dustless-mac
-        run: swift test -c release
+        run: swift test
       - name: The render suite must have drawn every screen
         if: always()
         run: |
