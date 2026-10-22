@@ -54,17 +54,16 @@ try {
   const stagedBytes = await treeBytes(stage);
   if (stagedBytes <= 0) fail("the staging folder is empty");
 
-  const created = await run("hdiutil", [
-    "create",
-    "-volname",
-    VOLUME,
-    "-srcfolder",
-    stage,
-    "-ov",
-    "-format",
-    "UDZO",
-    DMG,
-  ]);
+  const createSpec = ["create", "-volname", VOLUME, "-srcfolder", stage, "-ov", "-format", "UDZO", DMG];
+  // CI (macos-14) hits diskimages2-helper "No space left on device" with ~90Gi free, minutes
+  // after an identical run succeeds; it is environmental, a second attempt on the same runner
+  // goes through. One retry, loud about it (see docs/DECISIONS.md 149).
+  let created = await run("hdiutil", createSpec);
+  if (created.code !== 0) {
+    console.error(`hdiutil create failed once, retrying after 10s: ${created.stderr.trim()}`);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    created = await run("hdiutil", createSpec);
+  }
   if (created.code !== 0) fail(`hdiutil create failed: ${created.stderr.trim()}`);
 
   const verified = await run("hdiutil", ["verify", DMG]);

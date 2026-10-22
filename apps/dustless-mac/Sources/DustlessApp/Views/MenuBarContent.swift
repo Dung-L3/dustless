@@ -15,6 +15,8 @@ struct MenuBarContent: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var pendingPrivilege = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
             header
@@ -31,6 +33,13 @@ struct MenuBarContent: View {
         .frame(width: 320)
         .onChange(of: router.module) { _, _ in dismiss() }
         .task { await refreshLive() }
+        .awdlPrivilegeConfirm(isPresented: $pendingPrivilege) {
+            pendingPrivilege = false
+            Task {
+                guard await awdl.installPrivilege() else { return }
+                await awdl.setEnabled(!awdl.isOn)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             guard let window = note.object as? NSWindow,
                   window !== MainWindowTracker.shared.window else { return }
@@ -75,14 +84,10 @@ struct MenuBarContent: View {
                 .font(PanelFont.caption)
                 .foregroundStyle(.orange)
 
-                Text(settings.text(error))
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
+                EngineErrorMessage(text: error, showsPaths: false)
+                    .fixedSize(horizontal: false, vertical: true)
                     .help(settings.text(error))
             }
-            .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("menubar.failure")
         }
     }
@@ -179,7 +184,7 @@ struct MenuBarContent: View {
         VStack(spacing: PanelStyle.Space.s) {
             if !store.selectedFindings.isEmpty {
                 Text(settings.t("selectedLine", [
-                    "n": "\(store.selectedFindings.count)",
+                    "count": settings.itemCount(store.selectedFindings.count),
                     "size": ByteFormat.string(store.selectedBytes),
                 ]))
                 .font(PanelFont.caption)
@@ -222,7 +227,7 @@ struct MenuBarContent: View {
                     .disabled(!store.canClean)
                     .help(settings.t("reviewAndDeleteHelp"))
                     .accessibilityLabel(settings.t("overviewReview", [
-                        "n": "\(store.selectedFindings.count)",
+                        "count": settings.itemCount(store.selectedFindings.count),
                         "size": ByteFormat.string(store.selectedBytes),
                     ]))
                     .transition(.opacity)
@@ -282,7 +287,7 @@ struct MenuBarContent: View {
                     .font(PanelFont.emphasis())
                 Spacer(minLength: PanelStyle.Space.s)
                 if module == .cleanup, !store.selectedFindings.isEmpty {
-                    Text(settings.t("itemMany", ["n": "\(store.selectedFindings.count)"]))
+                    Text(settings.itemCount(store.selectedFindings.count))
                         .font(PanelFont.number())
                         .foregroundStyle(.secondary)
                 }
@@ -326,10 +331,9 @@ struct MenuBarContent: View {
             .help(airDropHelp)
 
             if let error = awdl.error {
-                Label(settings.text(error), systemImage: "exclamationmark.triangle.fill")
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.orange)
+                EngineErrorMessage(text: error, showsPaths: false)
                     .fixedSize(horizontal: false, vertical: true)
+                    .help(settings.text(error))
             }
         }
     }
@@ -365,7 +369,8 @@ struct MenuBarContent: View {
 
     private func toggleAirDrop() async {
         if !awdl.privilegeInstalled {
-            guard await awdl.installPrivilege() else { return }
+            pendingPrivilege = true
+            return
         }
         await awdl.setEnabled(!awdl.isOn)
     }

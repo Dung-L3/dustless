@@ -61,45 +61,54 @@ public struct ProcessLauncher: EngineLauncher {
     public func launch(executable tool: URL, arguments: [String], timeout: Int) async throws -> EngineRun {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<EngineRun, Error>) in
             let running = RunningProcess()
-            let out = LockedBox(Data())
-            let err = LockedBox(Data())
-            let timedOut = LockedBox(false)
+            let outURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("dustless-out-\(UUID().uuidString)")
+            let errURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("dustless-err-\(UUID().uuidString)")
             let queue = DispatchQueue(label: "dustless.engine", qos: .userInitiated)
 
             queue.async {
+                FileManager.default.createFile(atPath: outURL.path, contents: nil)
+                FileManager.default.createFile(atPath: errURL.path, contents: nil)
+                guard let outHandle = FileHandle(forWritingAtPath: outURL.path),
+                      let errHandle = FileHandle(forWritingAtPath: errURL.path) else {
+                    try? FileManager.default.removeItem(at: outURL)
+                    try? FileManager.default.removeItem(at: errURL)
+                    continuation.resume(throwing: DustlessError.launchFailed("the engine output file could not be opened"))
+                    return
+                }
                 let process = Process()
                 process.executableURL = tool
                 process.arguments = arguments
-                let outPipe = Pipe()
-                let errPipe = Pipe()
-                process.standardOutput = outPipe
-                process.standardError = errPipe
+                process.standardOutput = outHandle
+                process.standardError = errHandle
                 do {
                     try process.run()
                 } catch {
+                    outHandle.closeFile()
+                    errHandle.closeFile()
+                    try? FileManager.default.removeItem(at: outURL)
+                    try? FileManager.default.removeItem(at: errURL)
                     continuation.resume(throwing: DustlessError.launchFailed(error.localizedDescription))
                     return
                 }
+                outHandle.closeFile()
+                errHandle.closeFile()
                 running.attach(process)
 
-                let readers = DispatchGroup()
-                for (handle, sink) in [(outPipe.fileHandleForReading, out), (errPipe.fileHandleForReading, err)] {
-                    readers.enter()
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let data = handle.readDataToEndOfFile()
-                        sink.mutate { $0 = data }
-                        readers.leave()
-                    }
-                }
-
+                let timedOut = LockedBox(false)
                 DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeout)) {
                     timedOut.mutate { $0 = true }
                     running.cancel()
                 }
 
-                readers.wait()
                 process.waitUntilExit()
                 running.finish()
+
+                let out = (try? Data(contentsOf: outURL)) ?? Data()
+                let err = (try? Data(contentsOf: errURL)) ?? Data()
+                try? FileManager.default.removeItem(at: outURL)
+                try? FileManager.default.removeItem(at: errURL)
 
                 if timedOut.read() {
                     continuation.resume(throwing: DustlessError.timedOut(timeout))
@@ -107,9 +116,9 @@ public struct ProcessLauncher: EngineLauncher {
                 }
 
                 continuation.resume(returning: EngineRun(
-                    data: out.read(),
+                    data: out,
                     status: process.terminationStatus,
-                    stderr: String(data: err.read(), encoding: .utf8) ?? ""
+                    stderr: String(data: err, encoding: .utf8) ?? ""
                 ))
             }
         }
@@ -247,16 +256,16 @@ public struct DustlessCLI: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from result: EngineRun) throws -> T {
+        if let envelope = try? JSONDecoder().decode(SchemaEnvelope.self, from: result.data),
+           let version = envelope.schemaVersion,
+           !EngineContract.isSupported(version) {
+            throw DustlessError.unreadableOutput(
+                "the engine speaks schema version \(version), this app understands \(EngineContract.currentSchemaVersion)"
+            )
+        }
         do {
             return try JSONDecoder().decode(type, from: result.data)
         } catch {
-            if let envelope = try? JSONDecoder().decode(SchemaEnvelope.self, from: result.data),
-               let version = envelope.schemaVersion,
-               !EngineContract.isSupported(version) {
-                throw DustlessError.unreadableOutput(
-                    "the engine speaks schema version \(version), this app understands \(EngineContract.currentSchemaVersion)"
-                )
-            }
             if result.status == 0 {
                 let reason = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 throw DustlessError.unreadableOutput(reason.isEmpty ? String(describing: error) : reason)

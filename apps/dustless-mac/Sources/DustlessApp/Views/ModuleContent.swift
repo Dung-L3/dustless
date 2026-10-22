@@ -21,6 +21,7 @@ struct ModuleContent: View {
             VStack(spacing: 0) {
                 SummaryHeader(
                     report: store.report,
+                    tier: store.tierTab,
                     isScanning: store.isBusy
                 ) {
                     Task { await store.rescan() }
@@ -54,6 +55,7 @@ struct StorageModuleView: View {
             PanelStateView(
                 kind: .error,
                 message: store.storageError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
+                error: store.storageError,
                 title: settings.t("engineUnavailable"),
                 actionTitle: settings.t("retry"),
                 action: { Task { await store.fetchStorage() } },
@@ -82,44 +84,10 @@ struct StorageModuleView: View {
 
 struct MemoryModuleView: View {
     @EnvironmentObject private var store: ScanStore
-    @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        state
+        MemoryView()
             .task { await store.ensureMemory() }
-    }
-
-    @ViewBuilder
-    private var state: some View {
-        if store.memoryReport != nil {
-            MemoryView()
-        } else if store.memoryPhase == .failed {
-            PanelStateView(
-                kind: .error,
-                message: store.memoryError.map { settings.text($0) } ?? settings.t("engineUnavailable"),
-                title: settings.t("engineUnavailable"),
-                actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchMemory() } },
-                identifier: "memory.state",
-                actionIdentifier: "memory.retry"
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if store.memoryPhase == .loaded {
-            PanelStateView(
-                kind: .empty,
-                message: settings.t("memoryNoProcesses"),
-                title: settings.t("memory"),
-                identifier: "memory.state"
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            PanelStateView(
-                kind: .loading,
-                message: settings.t("busyMemory"),
-                identifier: "memory.state"
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
     }
 }
 
@@ -129,32 +97,7 @@ struct NetworkModuleView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        state
+        NetView(net: net)
             .task { await net.refresh() }
-    }
-
-    @ViewBuilder
-    private var state: some View {
-        if net.report != nil {
-            NetView(net: net)
-        } else if let error = net.loadError {
-            PanelStateView(
-                kind: .error,
-                message: settings.text(error),
-                title: settings.t("networkUnavailable"),
-                actionTitle: settings.t("retry"),
-                action: { Task { await net.refresh() } },
-                identifier: "network.state",
-                actionIdentifier: "network.retry"
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            PanelStateView(
-                kind: .loading,
-                message: settings.t("busyNetwork"),
-                identifier: "network.state"
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
     }
 }

@@ -17,7 +17,7 @@ struct UnscannableTextTests {
         let report = try makeReport(summary: summary)
         let parts = try #require(UnscannableText.bannerParts(report: report, lang: .en))
         #expect(parts.count == 3)
-        #expect(parts.reasonLabels == ["absent"])
+        #expect(parts.reasonLabels == ["the path is not on this machine"])
     }
 
     @Test func eachReasonCodeMapsToLocalizedLabel() throws {
@@ -25,13 +25,13 @@ struct UnscannableTextTests {
         let report = try makeReport(summary: summary)
 
         let enParts = try #require(UnscannableText.bannerParts(report: report, lang: .en))
-        #expect(enParts.reasonLabels == ["absent", "no access", "not supported", "error"])
+        #expect(enParts.reasonLabels == ["the path is not on this machine", "the app is not allowed to read it", "the tool it needs is not installed", "it failed, and the reason is given"])
 
         let viParts = try #require(UnscannableText.bannerParts(report: report, lang: .vi))
-        #expect(viParts.reasonLabels == ["thiếu", "không truy cập", "không hỗ trợ", "lỗi"])
+        #expect(viParts.reasonLabels == ["đường dẫn không có trên máy này", "ứng dụng không được phép đọc", "công cụ nó cần chưa được cài", "nó lỗi, lý do được ghi bên dưới"])
 
         let zhParts = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
-        #expect(zhParts.reasonLabels == ["缺失", "无访问权限", "不支持", "错误"])
+        #expect(zhParts.reasonLabels == ["该路径不在本机上", "应用无权读取它", "它需要的工具未安装", "它失败了，原因见下"])
     }
 
     @Test func mixedReasonsListEachLabelOnce() throws {
@@ -39,7 +39,7 @@ struct UnscannableTextTests {
         let report = try makeReport(summary: summary)
         let parts = try #require(UnscannableText.bannerParts(report: report, lang: .en))
         #expect(parts.count == 4)
-        #expect(parts.reasonLabels == ["absent", "no access", "error"])
+        #expect(parts.reasonLabels == ["the path is not on this machine", "the app is not allowed to read it", "it failed, and the reason is given"])
     }
 
     @Test func reasonsPresentReturnsOnlyNonZeroReasons() {
@@ -58,22 +58,22 @@ struct UnscannableTextTests {
         let summary = UnscannableSummary(absent: 0, noAccess: 0, notSupported: 0, error: 0, red: 2)
         let report = try makeReport(summary: summary)
         let en = try #require(UnscannableText.bannerParts(report: report, lang: .en))
-        #expect(en.reasonLabels == ["red list"])
+        #expect(en.reasonLabels == ["it is on the red list, so it will never be deleted"])
         let vi = try #require(UnscannableText.bannerParts(report: report, lang: .vi))
-        #expect(vi.reasonLabels == ["danh sách đỏ"])
+        #expect(vi.reasonLabels == ["nó nằm trong danh sách đỏ, sẽ không bao giờ bị xóa"])
         let zh = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
-        #expect(zh.reasonLabels == ["红名单"])
+        #expect(zh.reasonLabels == ["它在红名单中，永远不会被删除"])
     }
 
     @Test func protectedResolvesToLocalizedLabel() throws {
         let summary = UnscannableSummary(absent: 0, noAccess: 0, notSupported: 0, error: 0, red: 0, protected: 2)
         let report = try makeReport(summary: summary)
         let en = try #require(UnscannableText.bannerParts(report: report, lang: .en))
-        #expect(en.reasonLabels == ["outside the delete scope"])
+        #expect(en.reasonLabels == ["it is outside the range that may be deleted"])
         let vi = try #require(UnscannableText.bannerParts(report: report, lang: .vi))
-        #expect(vi.reasonLabels == ["ngoài phạm vi xóa"])
+        #expect(vi.reasonLabels == ["nó nằm ngoài phạm vi có thể xóa"])
         let zh = try #require(UnscannableText.bannerParts(report: report, lang: .zh))
-        #expect(zh.reasonLabels == ["超出删除范围"])
+        #expect(zh.reasonLabels == ["它在可删除范围之外"])
     }
 
     @Test func aReportCarryingTheProtectedReasonDecodes() throws {

@@ -27,7 +27,7 @@ struct DetailView: View {
 
             if let report = store.report {
                 if let error = store.engineError {
-                    staleBanner(settings.text(error))
+                    staleBanner(error)
                         .transition(.opacity)
                 }
                 UnscannableNotice(report: report, showsDetail: true, identifier: "cleanup.unscannable")
@@ -36,7 +36,7 @@ struct DetailView: View {
                 tierContent(report)
             } else if let error = store.engineError {
                 EngineErrorView(
-                    message: settings.text(error),
+                    message: error,
                     isBusy: store.isBusy
                 ) {
                     Task { await store.rescan() }
@@ -55,17 +55,16 @@ struct DetailView: View {
         store.report == nil ? settings.t("scanNow") : settings.t("rescan")
     }
 
-    private func staleBanner(_ text: String) -> some View {
+    private func staleBanner(_ error: L10nText) -> some View {
         HStack(alignment: .top, spacing: PanelStyle.Space.s) {
-            Label(text, systemImage: "exclamationmark.triangle.fill")
-                .font(PanelFont.mono(11))
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
                 .foregroundStyle(.orange)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .help(text)
-                .accessibilityLabel(text)
+            EngineErrorMessage(
+                text: error,
+                retry: { Task { await store.rescan() } },
+                retryIdentifier: "cleanup.retry"
+            )
             Button(action: { store.dismissEngineError() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .bold))
@@ -75,6 +74,7 @@ struct DetailView: View {
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
             .accessibilityIdentifier("cleanup.error.dismiss")
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, PanelStyle.Space.l)
         .padding(.vertical, PanelStyle.Space.s)
@@ -173,7 +173,7 @@ struct DetailView: View {
     }
 
     private func sectionCount(shown: Int, total: Int) -> String {
-        guard shown != total else { return settings.t("itemMany", ["n": "\(total)"]) }
+        guard shown != total else { return settings.itemCount(total) }
         return settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
     }
 
@@ -205,7 +205,7 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.selectedBytes > 0
                      ? settings.t("selectedLine", [
-                         "n": "\(store.selectedFindings.count)",
+                         "count": settings.itemCount(store.selectedFindings.count),
                          "size": ByteFormat.string(store.selectedBytes),
                      ])
                      : settings.t("selectedNone"))
@@ -217,9 +217,19 @@ struct DetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 if store.selectedLockedCount > 0 {
-                    Text(settings.t("lockedExcluded", ["n": "\(store.selectedLockedCount)"]))
+                    Text(settings.t("lockedExcluded", ["count": settings.lockedCount(store.selectedLockedCount)]))
                         .font(PanelFont.caption)
                         .foregroundStyle(.secondary)
+                }
+                if let change = store.selectionChange {
+                    Text(settings.t("selectionChanged", [
+                        "before": settings.itemCount(change.before),
+                        "kept": settings.itemCount(change.kept),
+                    ]))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("cleanup.selectionChange")
                 }
             }
             Spacer()
@@ -316,7 +326,7 @@ struct EmptyStateView: View {
 }
 
 struct EngineErrorView: View {
-    let message: String
+    let message: L10nText
     let isBusy: Bool
     let onRetry: () -> Void
 
@@ -344,14 +354,8 @@ struct EngineErrorView: View {
 
     private var errorMessage: some View {
         ScrollView {
-            Text(message)
-                .font(PanelFont.mono(11))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 520)
-                .help(message)
+            EngineErrorMessage(text: message)
+                .frame(maxWidth: 520, alignment: .leading)
         }
         .frame(maxWidth: 520, maxHeight: 220)
     }

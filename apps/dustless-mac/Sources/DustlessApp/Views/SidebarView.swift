@@ -71,7 +71,7 @@ struct ModuleSidebar: View {
         }
         .buttonStyle(.plain)
         .help(title)
-        .accessibilityLabel("\(title): \(settings.t("itemMany", ["n": "\(items.count)"]))")
+        .accessibilityLabel("\(title): \(settings.itemCount(items.count))")
         .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }

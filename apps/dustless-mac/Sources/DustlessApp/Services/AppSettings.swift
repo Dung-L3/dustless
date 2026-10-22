@@ -70,6 +70,19 @@ final class AppSettings: ObservableObject {
         L10n.render(language, key, vars)
     }
 
+    func count(_ n: Int, _ one: String, _ many: String) -> String {
+        n == 1 ? t(one) : t(many, ["n": "\(n)"])
+    }
+
+    func itemCount(_ n: Int) -> String { count(n, "itemOne", "itemMany") }
+    func pathCount(_ n: Int) -> String { count(n, "countPathOne", "countPathMany") }
+    func fileCount(_ n: Int) -> String { count(n, "countFileOne", "countFileMany") }
+    func appCount(_ n: Int) -> String { count(n, "countAppOne", "countAppMany") }
+    func processCount(_ n: Int) -> String { count(n, "countProcessOne", "countProcessMany") }
+    func ruleCount(_ n: Int) -> String { count(n, "countRuleOne", "countRuleMany") }
+    func lockedCount(_ n: Int) -> String { count(n, "countLockedOne", "countLockedMany") }
+    func relatedCount(_ n: Int) -> String { count(n, "countRelatedOne", "countRelatedMany") }
+
     func text(_ text: L10nText?) -> String {
         text.map { L10n.text(language, $0) } ?? ""
     }
