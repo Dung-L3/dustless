@@ -244,7 +244,7 @@ jobs:
   release:
     name: release
     needs: [guard, checksums]
-    if: needs.checksums.result == 'success'
+    if: always() && needs.guard.result == 'success' && needs.checksums.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
