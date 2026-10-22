@@ -26,11 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
     steps:
       - id: resolve
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           git ls-remote --exit-code --tags "https://github.com/${{ github.repository }}" "refs/tags/$TAG" > /dev/null
       - uses: actions/checkout@v7
         with:
@@ -41,6 +43,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: The tag, the package and the docs must agree
         run: bun scripts/check-release.ts "${{ steps.resolve.outputs.tag }}"
+      - name: No other copy of the version may drift
+        run: bun scripts/check-release-artifacts.ts "${{ steps.resolve.outputs.tag }}"
 
   prepare:
     name: prepare
@@ -51,8 +55,27 @@ jobs:
       - id: check
         env:
           SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
         run: |
-          if [ -n "$SIGNING_CERT" ]; then echo "macos_signed=1" >> "$GITHUB_OUTPUT"; else echo "macos_signed=0" >> "$GITHUB_OUTPUT"; fi
+          set -eu
+          signed=0
+          notary=0
+          if [ -n "$SIGNING_CERT" ] && [ -n "$SIGNING_CERT_PASSWORD" ]; then signed=1; fi
+          if [ -n "$NOTARY_PROFILE" ]; then notary=1; fi
+          if [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_ISSUER_ID" ]; then notary=1; fi
+          if [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_PASSWORD" ] && [ -n "$NOTARY_TEAM_ID" ]; then notary=1; fi
+          if [ "$signed" = "1" ] && [ "$notary" != "1" ]; then
+            echo "::error::A Developer ID certificate is configured but the notary credentials are missing. Set MACOS_NOTARY_KEY_ID, MACOS_NOTARY_KEY and MACOS_NOTARY_ISSUER_ID, or MACOS_NOTARY_APPLE_ID, MACOS_NOTARY_PASSWORD and MACOS_NOTARY_TEAM_ID, or MACOS_NOTARY_PROFILE. A signed but un-notarised app is never published."
+            exit 1
+          fi
+          if [ "$signed" = "1" ]; then echo "macos_signed=1" >> "$GITHUB_OUTPUT"; else echo "macos_signed=0" >> "$GITHUB_OUTPUT"; fi
 
   build:
     name: build (${{ matrix.out }})
@@ -95,6 +118,7 @@ jobs:
         shell: bash
         run: |
           ${{ matrix.run }} --version
+          test "$(${{ matrix.run }} version)" = "${{ needs.guard.outputs.version }}"
           ${{ matrix.run }} scan --json > /dev/null
           ${{ matrix.run }} rule list --json > /dev/null
           ${{ matrix.run }} doctor || true
@@ -106,7 +130,47 @@ jobs:
 
   bundle-macos:
     name: bundle-macos (macos)
-    needs: [guard, prepare]
+    needs: [guard, prepare, build]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.guard.outputs.tag }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Take the engine that will be published
+        uses: actions/download-artifact@v4
+        with:
+          name: dustless-macos-arm64
+          path: dist/release-engine
+      - name: Build the app bundle and the disk image
+        run: |
+          bun run bundle:mac
+          bun run dmg
+        env:
+          DUSTLESS_ENGINE: dist/release-engine/dustless-macos-arm64
+      - name: The bundle must carry a working engine
+        run: |
+          codesign --verify --deep dist/Dustless.app
+          dist/Dustless.app/Contents/Resources/dustless version
+          test "$(dist/Dustless.app/Contents/Resources/dustless version)" = "${{ needs.guard.outputs.version }}"
+      - name: Every version must agree
+        env:
+          DUSTLESS_ENGINE: dist/release-engine/dustless-macos-arm64
+        run: bun scripts/check-release-artifacts.ts "${{ needs.guard.outputs.tag }}" --artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dustless-macos-unsigned
+          path: |
+            dist/Dustless-*.dmg
+            dist/macos-release.json
+          if-no-files-found: error
+
+  sign-macos:
+    name: sign-macos (macos)
+    needs: [guard, prepare, build]
     if: needs.prepare.outputs.macos_signed == '1'
     runs-on: macos-latest
     steps:
@@ -117,19 +181,44 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Build the app bundle and the disk image
+      - name: Take the engine that will be published
+        uses: actions/download-artifact@v4
+        with:
+          name: dustless-macos-arm64
+          path: dist/release-engine
+      - name: Build the app bundle with the Developer ID and the disk image
+        env:
+          DUSTLESS_ENGINE: dist/release-engine/dustless-macos-arm64
+          DUSTLESS_SIGN_MODE: developer-id
+          MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+          MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
           bun run bundle:mac
           bun run dmg
-      - name: The bundle must carry a working engine
+      - name: Notarise the image and staple the ticket
+        env:
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+        run: bun scripts/notarize-macos.ts
+      - name: Gatekeeper must accept the app
         run: |
-          codesign --verify --deep dist/Dustless.app
-          dist/Dustless.app/Contents/Resources/dustless version
+          codesign --verify --deep --strict dist/Dustless.app
+          xcrun stapler validate dist/Dustless.app
+          xcrun stapler validate dist/Dustless-*.dmg
+          spctl -a -t exec -v dist/Dustless.app
+          test "$(dist/Dustless.app/Contents/Resources/dustless version)" = "${{ needs.guard.outputs.version }}"
       - uses: actions/upload-artifact@v7
         with:
           name: dustless-macos-app
-          path: dist/Dustless-*.dmg
+          path: |
+            dist/Dustless-*.dmg
+            dist/macos-release.json
           if-no-files-found: error
 
   bundle-windows:
@@ -215,8 +304,8 @@ jobs:
 
   checksums:
     name: checksums
-    needs: [guard, build, bundle-macos, bundle-windows]
-    if: always() && needs.guard.result == 'success'
+    needs: [guard, build, bundle-macos, bundle-windows, sign-macos]
+    if: always() && needs.guard.result == 'success' && needs.build.result == 'success' && needs.bundle-macos.result == 'success' && needs.bundle-windows.result == 'success' && (needs.sign-macos.result == 'success' || needs.sign-macos.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -226,7 +315,7 @@ jobs:
       - name: Collect every artifact
         run: |
           mkdir -p out
-          find artifacts -type f \( -name 'dustless-*' -o -name 'Dustless-*' \) ! -name '*.blockmap' -exec cp {} out/ \;
+          find artifacts -type f \( -name 'dustless-*' -o -name 'Dustless-*' \) ! -name '*.blockmap' ! -path 'artifacts/dustless-macos-unsigned/*' -exec cp {} out/ \;
           ls -l out
           test "$(find out -type f | wc -l)" -ge 6
       - name: SHA256SUMS
@@ -254,16 +343,28 @@ jobs:
         with:
           name: release-assets
           path: out
+      - name: Read what signed the macOS app
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: dustless-macos-app
+          path: macos
+          if-no-files-found: ignore
       - name: Every published file must have a checksum
         run: |
           cd out
           test -f SHA256SUMS
           sha256sum -c SHA256SUMS
           ls -l
+      - name: The published engine must print the released version
+        run: |
+          chmod +x out/dustless-linux-x64
+          test "$(out/dustless-linux-x64 version)" = "${{ needs.guard.outputs.version }}"
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.guard.outputs.tag }}
+          VERSION: ${{ needs.guard.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -272,10 +373,22 @@ jobs:
           printf -- '- Engine binaries for macOS, Linux and Windows\n' >> "$notes"
           printf -- '- A per user Windows installer and a portable archive\n' >> "$notes"
           printf -- '- SHA256SUMS for every file\n' >> "$notes"
-          if [ "${{ needs.prepare.outputs.macos_signed }}" = "1" ]; then
-            printf -- '- The macOS app bundle as a drag to install disk image\n' >> "$notes"
+          record=$(find macos -name macos-release.json -print -quit 2>/dev/null || true)
+          if [ -f "out/Dustless-$VERSION.dmg" ]; then
+            if [ -z "$record" ] || [ ! -f "$record" ]; then
+              echo "::error::the macOS disk image is in the release but the signing record is missing. Refusing to publish an app nobody checked."
+              exit 1
+            fi
+            mode=$(sed -n 's/.*"mode"[^"]*"\([^"]*\)".*/\1/p' "$record")
+            notarized=$(sed -n 's/.*"notarized"[^:]*:[[:space:]]*\([a-z]*\).*/\1/p' "$record")
+            if [ "$mode" != "developer-id" ] || [ "$notarized" != "true" ]; then
+              echo "::error::the macOS app was not notarised (mode $mode, notarized $notarized). Refusing to publish an app macOS refuses to open."
+              exit 1
+            fi
+            printf -- '- The macOS app bundle as a drag to install disk image, signed with a Developer ID and notarised by Apple. Gatekeeper opens it without a warning.\n' >> "$notes"
           else
-            printf -- '- No macOS app in this release: the project holds no Apple Developer ID, so the bundle would not be notarised and macOS would refuse to open it. The command line engine is complete and is what this release ships.\n' >> "$notes"
+            printf -- '- No macOS app in this release: the project holds no Apple Developer ID, so the bundle cannot be notarised and macOS would refuse to open it. The command line engine is complete and is what this release ships.\n' >> "$notes"
+            printf -- '- The macOS bundle and its disk image are built and checked on every release run. They are published only once they can be notarised.\n' >> "$notes"
           fi
           gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag out/* || \
           gh release upload "$TAG" --clobber out/*
