@@ -108,3 +108,31 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run test:ui
+
+  ui-render:
+    name: ui-render (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Swift tests, including the off-screen render suite
+        working-directory: apps/dustless-mac
+        run: swift test -c release
+      - name: The render suite must have drawn every screen
+        if: always()
+        run: |
+          test -d artifacts/ui-render
+          count=$(ls artifacts/ui-render/*.png | wc -l)
+          test "$count" -ge 50
+      - name: Upload the rendered screens
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-render
+          path: artifacts/ui-render
+          if-no-files-found: error
+          retention-days: 14
