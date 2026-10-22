@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import type { Rule } from "../types.ts";
 import { exists, patternVerdict } from "./paths.ts";
 
@@ -11,7 +11,9 @@ const VERIFY_NAMES = ["gradle_version_unused", "git_clean", "not_in_gitignore"];
 const RULE_FIELDS = ["id", "tier", "desc", "paths", "match", "requireVerify", "minAgeDays", "nativeCommand", "recoveryLabel", "busyProcesses", "staleDays", "gitClean"];
 
 export function configDir(): string {
-  return join(process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config"), "dustless");
+  const xdg = process.env["XDG_CONFIG_HOME"];
+  const base = xdg && isAbsolute(xdg) ? xdg : join(homedir(), ".config");
+  return join(base, "dustless");
 }
 
 export function userRulesPath(): string {

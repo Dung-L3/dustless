@@ -51,6 +51,16 @@ consequences.
 - **Residual risk:** the id check and the path check are lexical (`resolve`, not `realpath`). A
   hostile bundle is not the trust boundary — the user chose to uninstall that app — so this guards a
   malformed plist and a mistake, not a local attacker who can already write into `$HOME`.
+- **The red list names the macOS places that hold real user data.** `RED_PATTERNS`
+  (`src/core/paths.ts`) is the permanent blocklist, and on macOS that means the Trash (the user's
+  own undo), iCloud Drive in both spellings macOS uses (`~/Library/Mobile Documents` and
+  `com~apple~CloudDocs`), Apple's own application data (`~/Library/Application Support/com.apple.*`
+  and `~/Library/Containers/com.apple.*`) and a Time Machine local snapshot. Every pattern is
+  matched case-insensitively, because the default macOS volume is case-insensitive and
+  `realpath` keeps the case it was given, so `~/library/application support/com.apple.photos` is
+  the same directory as the capitalised spelling and must be refused the same way. A third-party
+  bundle identifier is deliberately NOT red: the app uninstaller removes exactly those leftovers,
+  and the user asked for that.
 
 ## 2. A symlink swapped in between scan and delete (TOCTOU)
 
@@ -76,7 +86,13 @@ consequences.
   during the scan, so links into a red directory are never reported as reclaimable. The lexical
   `refusal` gate in `apply` remains in front of the real-path gate as a second, independent check.
   macOS `/private/{var,tmp,etc}` aliases and Windows case are canonicalised before the real-path
-  comparison so ordinary temp paths are not misread as links. The symlinked-parent data-loss case is
+  comparison so ordinary temp paths are not misread as links. On macOS the default volume is
+  case-INSENSITIVE and `realpath` keeps the case it was given, so the same directory can be named
+  two ways; the identity of `$HOME` and of its ancestors is therefore compared with the case
+  folded, so `/users/mac` is recognised as `$HOME` and refused (`isHomeOrAncestor` in
+  `src/core/paths.ts`). A Finder alias is a regular file, so `rename`/`rm` unlink the alias and
+  never its target, and a path that resolves into a red directory through an alias is still
+  refused. The symlinked-parent data-loss case is
   locked by `tests/race-delete.test.ts` and `tests/race-delete-apply.test.ts`, and the e2e
   `tests/e2e/edges.test.ts` cases keep a symlinked cache root from being deleted through.
 - **Residual risk:** the real-path check and the path-based `rename`/`rm` are not one atomic
@@ -139,6 +155,13 @@ consequences.
   the check could not run, and the path is refused (`gitIgnored` in `src/core/verify/git.ts`,
   entry 125). A rule file can still ask for more than the product considers safe — that is the
   point of a user rule — but it can no longer ask for a check that silently passes.
+- **The scope is enforced at the delete, not only at the scan.** A rule whose scope reaches the
+  direct children of `$HOME` is refused when it is written, when it is validated and when it is
+  scanned, but the scan is not the only way a finding reaches a delete: a report can be handed to
+  `apply` directly. `apply` therefore re-derives the scope of the rule that produced the finding
+  (`patternsVerdict` over `pathsForRule`) and refuses the finding with the reason `protected` when
+  the scope is not acceptable, and it refuses a finding whose rule id is not in the rule set at all,
+  because there is no rule to say what the finding may authorise (`src/core/apply.ts`).
 
 ## 4. MCP prompt injection
 
@@ -184,21 +207,35 @@ consequences.
   `netPrivilege` builds from the command steps; `awdlPrivilege` (`src/core/net/awdl.ts`) names
   exactly `/sbin/ifconfig awdl0 up` and `/sbin/ifconfig awdl0 down`, and the executable it names
   is a fixed constant checked against an allowlist that holds `/sbin/ifconfig` and nothing else —
-  no environment value can reach the rule. `sudoersArg` refuses an argument containing a newline,
-  a carriage return, a NUL, `"`, `#`, `*`, `?`, `[`, `]`, `\` or any of `; | & $ > < ( ) { } ! ' `
-  — a wildcard, a comment starter or a command separator is refused, never escaped — and
-  `sudoersPath` additionally refuses whitespace inside a path, a path that is not absolute and any
-  path outside the allowlist. `validSudoersUser` refuses a name that is not `[A-Za-z0-9._-]{1,32}`,
-  a leading `-`, `.`, `..` or `ALL`. The file is validated with `visudo -cf` before it is installed,
-  and the macOS app re-checks the rule — destination path, the two allowed commands and the account
-  name — against what it expects before it installs it as root, so a payload that is not the
-  expected rule is refused instead of written. `tests/net.test.ts` and `tests/awdl.test.ts` pin
-  the derived rules and their absolute paths, and `tests/e2e/awdl.test.ts` runs the compiled binary
+  no environment value can reach the rule. The net rule is built the same way: the executable of
+  every step goes through `sudoersPath` against an allowlist that holds `/usr/sbin/networksetup`,
+  `/usr/sbin/ipconfig` and `/usr/sbin/arp` and nothing else. Every value that can reach a rule is
+  checked against a POSITIVE character set, not against a list of bad characters: a value that is
+  not made of letters, digits and `. _ : @ / + = % ~ -` (plus a single space, which is quoted) is
+  refused, so a tab, a NUL, a newline, a carriage return, any other control character, `"`, `#`,
+  `*`, `?`, `[`, `]`, `\` and any of `; | & $ > < ( ) { } ! ' ` and `,` are all refused, never
+  escaped. The rule that is about to be written is then checked as a whole, against the grammar
+  `<account> ALL=(root) NOPASSWD: <command>[, <command>]*`, where a command is a sequence of
+  bare words and quoted words; a quoted region is part of the checked text, so a forbidden
+  character hidden inside quotes is refused too. `sudoersPath` additionally refuses a path that is
+  not absolute and any path outside the allowlist. `validSudoersUser` refuses a name that is not
+  `[A-Za-z0-9._-]{1,32}`, a leading `-`, `.`, `..` or `ALL`. The file is validated with `visudo -cf`
+  before it is installed, and the macOS app re-checks the AWDL rule — destination path, the two
+  allowed commands and the account name — against what it expects before it installs it as root, so
+  a payload that is not the expected rule is refused instead of written. `tests/net.test.ts` and
+  `tests/awdl.test.ts` pin the derived rules and their absolute paths, `tests/sudoers-rule.test.ts`
+  pins the character set and the grammar, and `tests/e2e/awdl.test.ts` runs the compiled binary
   with a hostile `DUSTLESS_IFCONFIG` in its environment and asserts that the printed rule and the
   executed command are the fixed ones.
 - **Residual risk:** the rules are `NOPASSWD` and live in `/etc/sudoers.d`, so any process that can
   already act as the user can run exactly those commands without a prompt. That is the intended cost
-  of the toggle, and the commands change only the interface state they name.
+  of the toggle, and the commands change only the interface state they name. The net rule still
+  names the interface and the service resolved at install time, so a network service whose name
+  holds a character outside the safe set cannot get a rule at all — the refusal is the safe side,
+  but it means such a machine cannot use the "remember the permission" button. The macOS app's
+  net path (`NetControl.installPrivilege` in the app's services) still installs whatever rule the
+  engine prints, without the AWDL-side re-check: the engine's own validator is the only control
+  there, and the same re-check belongs on that path.
 
 ## 7. Telemetry and accounts
 

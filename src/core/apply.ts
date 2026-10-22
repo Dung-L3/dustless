@@ -1,8 +1,8 @@
 import { lstat, rm } from "node:fs/promises";
-import { basename, parse, resolve, sep } from "node:path";
+import { basename, parse, resolve } from "node:path";
 import type { ApplyOutcome, ApplyReport, Finding, Reason, Rule, ScanReport, TierChoice } from "../types.ts";
 import { SCHEMA_VERSION } from "../types.ts";
-import { HOME, isRed, realGuard, refusalCode, platform } from "./paths.ts";
+import { isHomeOrAncestor, isRed, pathsForRule, patternsVerdict, realGuard, refusalCode, platform } from "./paths.ts";
 import { loadRules } from "./rules.ts";
 import { accountedBytes, exec, freeSpace, treeUsage } from "./space.ts";
 import { verify } from "./verify/index.ts";
@@ -95,9 +95,30 @@ async function run(
     outcome.detail = { code: "not_selected" };
     return outcome;
   }
+  const present = await lstat(target).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
+  if (!present) {
+    outcome.detail = { code: "missing" };
+    return outcome;
+  }
+  const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
+  const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
+  const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
+  if (action === "skip") {
+    outcome.detail = { code: "not_selected" };
+    return outcome;
+  }
   const rule = rules.get(finding.ruleId);
-  const native = rule?.nativeCommand?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  const declared = (rule?.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map(processName);
+  if (!rule) {
+    outcome.detail = { code: "unresolvable" };
+    return outcome;
+  }
+  if (!patternsVerdict(pathsForRule(rule)).ok) {
+    outcome.status = "failed";
+    outcome.detail = { code: "protected" };
+    return outcome;
+  }
+  const native = rule.nativeCommand?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const declared = (rule.busyProcesses ?? (native ? BUSY_NAMES[native] ?? [native] : [])).map(processName);
   if (declared.length > 0) {
     const running = await busy();
     if (running === null) {
@@ -111,18 +132,6 @@ async function run(
       outcome.detail = { code: "busy_process", params: { names: watchers.join(", ") } };
       return outcome;
     }
-  }
-  const present = await lstat(target).then(() => true, (err: NodeJS.ErrnoException) => err.code !== "ENOENT");
-  if (!present) {
-    outcome.detail = { code: "missing" };
-    return outcome;
-  }
-  const chosen = Boolean(opts.tiers && Object.hasOwn(opts.tiers, finding.ruleId));
-  const requested = chosen ? opts.tiers?.[finding.ruleId] ?? "skip" : "skip";
-  const action = requested === "skip" ? "skip" : finding.tier === "yellow" ? "yellow" : requested;
-  if (action === "skip") {
-    outcome.detail = { code: "not_selected" };
-    return outcome;
   }
   const recheck = await revalidate(finding, rule, target);
   if (recheck) {
@@ -140,8 +149,7 @@ async function run(
   return outcome;
 }
 
-async function revalidate(finding: Finding, rule: Rule | undefined, target: string): Promise<Reason | null> {
-  if (!rule) return null;
+async function revalidate(finding: Finding, rule: Rule, target: string): Promise<Reason | null> {
   const ageFloor = rule.minAgeDays;
   const staleFloor = rule.staleDays;
   const needsVerify = rule.requireVerify !== undefined;
@@ -171,7 +179,7 @@ async function revalidate(finding: Finding, rule: Rule | undefined, target: stri
     if (!clean.ok) return { code: "revalidate_verify", params: { cause: clean.cause ?? "unknown" } };
   }
   if (needsVerify) {
-    const verdict = await verify(rule, target);
+    const verdict = await verify(rule, target, { fresh: true });
     if (!verdict.ok) return { code: "revalidate_verify", params: { cause: verdict.cause ?? "unknown" } };
   }
   return null;
@@ -180,7 +188,7 @@ async function revalidate(finding: Finding, rule: Rule | undefined, target: stri
 function refusal(path: string): Reason | null {
   const full = resolve(path);
   if (isRed(full)) return { code: "red_list" };
-  if (full === resolve(HOME) || resolve(HOME).startsWith(full + sep)) return { code: "home" };
+  if (isHomeOrAncestor(full)) return { code: "home" };
   if (full === parse(full).root) return { code: "root" };
   return null;
 }
