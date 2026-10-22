@@ -4,7 +4,7 @@
 
 **Dọn dung lượng ổ đĩa cho máy lập trình viên.** Nó đo mọi cache toolchain trong rule database, chứng minh mỗi mục đã không còn ai dùng bằng cách đọc project thật của bạn, rồi chỉ xóa những gì đã qua kiểm chứng.
 
-Dustless là một binary đã compile, chạy trên macOS, Windows và Linux. Không cần runtime, không daemon, không quyền admin. Phiên bản, 0.5.0, được đọc từ `package.json` lúc build (`src/cli/context.ts`) — một con số, một nguồn.
+Dustless là một binary đã compile, chạy trên macOS, Windows và Linux. Không cần runtime, không daemon, không quyền admin. Phiên bản, 0.6.0, được đọc từ `package.json` lúc build (`src/cli/context.ts`) — một con số, một nguồn.
 
 ---
 
@@ -195,7 +195,7 @@ Mọi lệnh dưới đây đều được implement trong `src/cli.ts`.
 | `dustless rule validate [file]` | Parse và validate một file rules. Bỏ trống đường dẫn để validate database đã gộp. |
 | `dustless doctor` | Nền tảng, home, thư mục config, số rule, tổng/trống, khả năng đọc các path chính, kiểm tra Full Disk Access. |
 | `dustless mcp` | Phục vụ MCP qua stdio cho AI agent. Xem [docs/MCP.md](docs/MCP.md). |
-| `dustless version` | In `0.5.0`. `dustless help`, và gõ `dustless` trần, in hướng dẫn dùng. |
+| `dustless version` | In `0.6.0`. `dustless help`, và gõ `dustless` trần, in hướng dẫn dùng. |
 
 ### Cờ
 

@@ -6,6 +6,11 @@ struct SettingsView: View {
     @ObservedObject var login: LoginItem
     @ObservedObject var awdl: AwdlControl
 
+    @State private var engineVersion: String?
+    @State private var pendingPrivilege = false
+
+    @EnvironmentObject private var localized: AppSettings
+
     var body: some View {
         Form {
             Section {
@@ -96,9 +101,17 @@ struct SettingsView: View {
                         .disabled(awdl.busy)
                         .accessibilityIdentifier("settings.awdl.remove")
                 } else {
-                    Button(settings.t("awdlInstall")) { Task { await awdl.installPrivilege() } }
+                    Button(settings.t("awdlInstall")) { pendingPrivilege = true }
                         .disabled(awdl.busy)
+                        .help(settings.t("awdlPrivilegeExplain"))
+                        .accessibilityLabel(settings.t("awdlInstall"))
+                        .accessibilityHint(settings.t("awdlPrivilegeExplain"))
                         .accessibilityIdentifier("settings.awdl.install")
+                    Text(settings.t("awdlPrivilegeExplain"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("settings.awdl.explain")
                 }
 
                 if let error = awdl.error {
@@ -118,35 +131,53 @@ struct SettingsView: View {
             }
 
             Section {
-                HStack(spacing: 6) {
-                    Text("Dustless")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(version)
+                LabeledContent(settings.t("versionLabel")) {
+                    Text(appVersion)
                         .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    Spacer()
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Dustless \(version)")
-                .accessibilityIdentifier("settings.version")
+                LabeledContent(settings.t("buildLabel")) {
+                    Text(appBuild)
+                        .font(.system(size: 11, design: .monospaced))
+                }
+                LabeledContent(settings.t("engineVersionLabel")) {
+                    Text(engineVersion ?? "—")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(engineVersion == nil ? Color.secondary : Color.primary)
+                }
+                if showsMismatch {
+                    Label(settings.t("engineVersionMismatch"), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("settings.version.mismatch")
+                }
             } header: {
                 Text(settings.t("about"))
             }
         }
         .formStyle(.grouped)
-        .task { await awdl.refresh() }
+        .task {
+            await awdl.refresh()
+            engineVersion = await EngineVersion.read()
+        }
+        .awdlPrivilegeConfirm(isPresented: $pendingPrivilege) {
+            pendingPrivilege = false
+            Task { await awdl.installPrivilege() }
+        }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var version: String {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
-        switch (short, build) {
-        case let (short?, build?):
-            return "\(short) (\(build))"
-        default:
-            return short ?? build ?? "—"
-        }
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    private var appBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
+    private var showsMismatch: Bool {
+        guard let engineVersion, engineVersion != "—" else { return false }
+        return engineVersion != appVersion
     }
 }

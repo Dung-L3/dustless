@@ -195,11 +195,24 @@ struct MemoryView: View {
             }
 
             if groups.isEmpty {
-                PanelStateView(
-                    kind: .empty,
-                    message: isFiltering ? settings.t("noMatches") : settings.t("memoryNoProcesses"),
-                    identifier: "memory.empty"
-                )
+                if let error = store.memoryError {
+                    PanelStateView(
+                        kind: .error,
+                        message: settings.text(error),
+                        error: error,
+                        title: settings.t("engineUnavailable"),
+                        actionTitle: settings.t("retry"),
+                        action: { Task { await store.fetchMemory() } },
+                        identifier: "memory.state",
+                        actionIdentifier: "memory.retry"
+                    )
+                } else {
+                    PanelStateView(
+                        kind: .empty,
+                        message: isFiltering ? settings.t("noMatches") : settings.t("memoryNoProcesses"),
+                        identifier: "memory.empty"
+                    )
+                }
             } else {
                 ScrollView {
                     LazyVStack(spacing: PanelStyle.Space.s) {
@@ -269,14 +282,16 @@ struct MemoryView: View {
                 .truncationMode(.middle)
                 .help(group.bundlePath ?? group.id)
 
-            StatusChip(
-                color: categoryColor(groupCategory(group)),
-                text: settings.t(categoryKey(groupCategory(group)))
-            )
+            if let category = groupCategory(group) {
+                StatusChip(
+                    color: categoryColor(category),
+                    text: settings.t(categoryKey(category))
+                )
+            }
 
             Spacer(minLength: PanelStyle.Space.s)
 
-            Text(settings.t("memoryProcessCount", ["n": "\(group.count)"]))
+            Text(settings.processCount(group.count))
                 .font(PanelFont.secondary)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -294,8 +309,10 @@ struct MemoryView: View {
         .accessibilityIdentifier("memory.group.\(group.id)")
     }
 
-    private func groupCategory(_ group: ProcessGroup) -> MemCategory {
-        group.processes.first?.category ?? .other
+    private func groupCategory(_ group: ProcessGroup) -> MemCategory? {
+        let categories = Set(group.processes.map(\.category))
+        guard categories.count == 1, let category = categories.first else { return nil }
+        return category == .other ? nil : category
     }
 
     @ViewBuilder
@@ -325,28 +342,20 @@ struct MemoryView: View {
     }
 
     private func processRow(_ proc: MemProcess) -> some View {
-        HStack(spacing: PanelStyle.Space.s) {
-            Text(proc.name)
-                .font(PanelFont.mono(12))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(proc.command)
-                .accessibilityLabel(rowDescription(proc))
-
-            Spacer(minLength: 6)
-
-            Text(String(proc.pid))
-                .font(PanelFont.mono(12))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .trailing)
-
-            Text(ByteFormat.string(proc.mem))
-                .font(PanelFont.number())
-                .frame(minWidth: 64, alignment: .trailing)
-
-            stopButton(for: proc)
-        }
-        .padding(.vertical, 3)
+        MemoryProcessRow(
+            proc: proc,
+            status: killResults[proc.pid],
+            isStopping: isStopping,
+            onStop: { target in
+                pendingStop = PendingStop(pid: target.pid, name: target.name, force: false, sigkill: false)
+            },
+            onForceStop: { target in
+                pendingStop = PendingStop(pid: target.pid, name: target.name, force: true, sigkill: true)
+            },
+            onStatusCleared: { pid in
+                killResults[pid] = nil
+            }
+        )
     }
 
     private func isExpanded(_ group: ProcessGroup, in groups: [ProcessGroup]) -> Bool {
@@ -360,68 +369,13 @@ struct MemoryView: View {
         collapsed = current
     }
 
-    private func rowDescription(_ proc: MemProcess) -> String {
-        [
-            proc.name,
-            settings.t("memoryProcessPID") + " " + "\(proc.pid)",
-            settings.t(categoryKey(proc.category)),
-            ByteFormat.string(proc.mem),
-        ].joined(separator: ", ")
-    }
-
-    @ViewBuilder
-    private func stopButton(for proc: MemProcess) -> some View {
-        if let status = killResults[proc.pid] {
-            statusView(status, for: proc)
-        } else {
-            Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: false, sigkill: false) }) {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(DestructiveStyle.red)
-                    .frame(width: 22, height: 20)
-                    .background(DestructiveStyle.red.opacity(0.12), in: .rect(cornerRadius: 5))
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .help(settings.t("memoryStopNamed", ["name": proc.name]))
-            .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
-            .accessibilityIdentifier("memory.stop.\(proc.pid)")
-            .contextMenu {
-                Button(action: { pendingStop = PendingStop(pid: proc.pid, name: proc.name, force: true, sigkill: true) }) {
-                    Label(
-                        settings.t("memoryForceStopNamed", ["name": proc.name]),
-                        systemImage: "exclamationmark.octagon.fill"
-                    )
-                }
-            }
-            .disabled(isStopping)
-        }
-    }
-
-    @ViewBuilder
-    private func statusView(_ status: KillStatus, for proc: MemProcess) -> some View {
-        let tint = status.ok ? Color.green : Color.red
-        let label = status.ok
-            ? settings.t("memoryStoppedNamed", ["name": proc.name])
-            : (status.reason.map { reasonText($0) } ?? settings.t("memoryStopError"))
-        Image(systemName: status.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(tint)
-            .help(label)
-            .accessibilityLabel(label)
-            .accessibilityIdentifier("memory.status.\(proc.pid)")
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    withAnimation { killResults[status.pid] = nil }
-                }
-            }
-    }
-
-    private func reasonText(_ reason: KillReason) -> String {
-        switch reason {
-        case .engine(let sentence): sentence
-        case .translated(let text): settings.text(text)
+    private func categoryColor(_ category: MemCategory) -> Color {
+        switch category {
+        case .browser: return .blue
+        case .editor: return .purple
+        case .container: return .teal
+        case .lsp: return .orange
+        case .other: return .secondary
         }
     }
 
@@ -432,16 +386,6 @@ struct MemoryView: View {
         case .container: return "categoryContainer"
         case .lsp: return "categoryLSP"
         case .other: return "categoryOther"
-        }
-    }
-
-    private func categoryColor(_ category: MemCategory) -> Color {
-        switch category {
-        case .browser: return .blue
-        case .editor: return .purple
-        case .container: return .teal
-        case .lsp: return .orange
-        case .other: return .secondary
         }
     }
 
@@ -467,16 +411,4 @@ struct MemoryView: View {
             }
         }
     }
-}
-
-private struct KillStatus: Identifiable {
-    let id = UUID()
-    let pid: Int
-    let ok: Bool
-    let reason: KillReason?
-}
-
-private enum KillReason {
-    case engine(String)
-    case translated(L10nText)
 }

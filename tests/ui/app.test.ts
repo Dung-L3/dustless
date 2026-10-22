@@ -127,7 +127,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       expect(await app.exists("sidebar.module.overview")).toBe(true);
       expect(await app.exists("overview.header")).toBe(true);
       expect(await app.exists("overview.tier.safe")).toBe(true);
-      expect(await app.exists("overview.cta")).toBe(true);
+      expect(await app.exists("overview.scan")).toBe(true);
       expect(await app.exists("toolbar.scan")).toBe(true);
       const hero = await app.find("overview.tier.safe");
       expect(String(hero.description ?? "")).toContain("Safe");
@@ -240,7 +240,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.press("storage.result.close");
         await app.waitGone("storage.result.close");
 
-        await app.click("storage.section.files");
+        await app.click("storage.advanced");
         await app.find(`storage.file.trash.${large}`, 20_000);
         await app.press(`storage.file.trash.${large}`);
         await app.find("storage.trash.cancel");

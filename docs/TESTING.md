@@ -2,26 +2,113 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # 393 tests, about 32s; 19 skips unless DUSTLESS_UI=1
-bun run test:ui       # real macOS app UI suite; see below
+bun test              # 474 tests, about 40s; 20 skips unless DUSTLESS_UI=1
+bun run lint          # repository policy checks
+cd apps/dustless-mac && swift test   # 148 Swift tests, about 100s
+bun run test:ui       # real macOS app UI suite; needs Accessibility trust; see below
 ```
 
 No build step is needed for the engine suite. `tests/e2e` runs the compiled
 binary in `dist/`, and the e2e harness builds it before the first assertion, so
 you do not have to remember `bun run build` first.
 
-## macOS app UI tests
+## The macOS app has three test suites
 
-`bun run test:ui` drives the real SwiftUI app through the Accessibility API. It
-builds both the engine and a test-only app bundle (`dev.dustless.e2e`, process
-`DustlessE2E`), presses the controls a user would press, and asserts on the
-filesystem afterwards.
+| Suite | Command | Needs a GUI session | Blocks a merge |
+| --- | --- | --- | --- |
+| Engine, TypeScript | `bun test` | no | yes, `verify` |
+| App render + unit, Swift | `cd apps/dustless-mac && swift test` | no | yes, `ui-render (macos)` |
+| App interaction, Accessibility | `bun run test:ui` | yes, Accessibility trust | no, `ui (macos, advisory)` |
+
+They are three different questions and none of them answers all three.
+
+### The render suite: `apps/dustless-mac/Tests`
+
+The render suite builds the real SwiftUI views with the real fixture data and
+draws them off screen with `ImageRenderer`. It needs no window server, no
+Accessibility trust and no launched application, so it runs on any macOS
+machine and in CI. The images land in `artifacts/ui-render/` (ignored by git).
+
+The catalogue in `Screens.swift` holds 18 screens: the overview, the cleanup
+screen and its finding list, the confirm sheet, the storage screen and its
+application and file list, the memory panel, the network panel, the menu bar
+popover, the settings window, the unscannable notice, the engine error state
+and its message, the uninstall sheet, the trash sheet, the cleanup result card,
+the tier badges and the destructive controls. Every screen is drawn in
+Vietnamese, English and Chinese, so 54 images.
+
+What the render suite proves:
+
+- every screen builds and draws; a screen that renders empty fails.
+- the destructive control is painted with the app's own red
+  (`DestructiveStyle.red`), it is a wide control in the footer on the right,
+  and the cancel control next to it is neither red nor the same colour.
+- the SAFE tier badge is painted green, YOUR CALL is orange, PROTECTED is red,
+  and the blocked reason is red, wherever those appear.
+- the three languages draw the same rows in the same places: same number of
+  text bands, same vertical centres, same leading edge, and the delete button
+  does not move. A translation that wraps into an extra row or pushes the
+  layout sideways fails.
+- a reason on screen is a translated sentence, not a bare code: the rendered
+  pixels change when only the reason's parameters change, and the drawn reason
+  is as wide as the translated sentence and several times wider than the raw
+  code would be.
+- the engine failure paths produce the right error: a missing engine names
+  every path it searched and starts nothing, a non-zero exit names its status,
+  an unreadable payload says so, a hanging engine reports the deadline, a
+  report with no findings and a report where everything is locked offer no
+  delete control at all.
+- the destructive paths behave inside a sandbox: cancelling runs nothing,
+  confirming deletes exactly the selected paths, a locked path is never
+  deleted, a path that vanished is reported and not deleted, a red listed path
+  is refused, a path outside the sandbox is refused, the default uninstall
+  moves the app to the Trash and the permanent delete has to be asked for.
+- the source contracts hold: the confirm sheet has no default action and no
+  Return shortcut, the shortcut that reaches the delete review is ⌘↩, no
+  `accessibilityElement(children: .combine)` wraps a button, and no view reads
+  a reason's `code`.
+
+What the render suite cannot prove, and why:
+
+- `ImageRenderer` does not draw the content of a `ScrollView`, a `List`, a
+  `LazyVStack`, a `Picker` or a text field. The confirm sheet therefore draws
+  its header, its totals and its buttons but not the list of paths, and the
+  cleanup and storage screens draw their chrome but not their scrolled rows.
+  The rows themselves are covered by the separate list screens
+  (`cleanup-list`, `storage-list`), which are drawn without a scroll container.
+- It cannot prove that a click does what it says. Nothing is clicked; the
+  views are drawn and their pixels are measured.
+- It cannot see the accessibility tree, the focus order, the keyboard
+  behaviour, the window chrome or the real appearance of the app in a window.
+- It runs against fixtures, not against the real engine, so it proves nothing
+  about what the engine does. The engine's own behaviour is covered by the
+  TypeScript suite and by the Accessibility suite.
+
+### A note on concurrent engine launches
+
+`DustlessCLI.ProcessLauncher` reads the engine's output through a pipe. A child
+process inherits every descriptor the parent has open, so two engine launches
+that overlap can leave one of them waiting for the *other* child to exit before
+it sees the end of its own pipe. The engine's own timeout then fires and the
+launch is reported as timed out even though the engine answered. The render
+suite's launcher writes to a file instead of a pipe, and the suites that spawn
+engines are marked `.serialized`, so the suites do not trip over each other.
+The production launcher is not changed by this branch. The fix belongs there:
+close the inherited descriptors in the child (`POSIX_SPAWN_CLOEXEC_DEFAULT`) or
+read the engine's output from a file.
+
+### The Accessibility suite: `tests/ui`
+
+`bun run test:ui` drives the real SwiftUI app through the Accessibility API.
+It builds both the engine and a test-only app bundle (`dev.dustless.e2e`,
+process `DustlessE2E`), presses the controls a user would press, and asserts on
+the filesystem afterwards.
 
 Requirements: macOS, Xcode or the Command Line Tools (`swiftc`), and
 Accessibility trust for the terminal or process that starts the tests. Without
 that trust the driver cannot inspect another app's window; `DUSTLESS_UI=1` then
 fails with an explicit message instead of reporting a skipped suite. Plain
-`bun test` skips the nine UI cases because it does not set `DUSTLESS_UI=1`; that
+`bun test` skips the UI cases because it does not set `DUSTLESS_UI=1`; that
 is the only skip condition for this file. Setting `DUSTLESS_UI=1` on a
 non-macOS host fails rather than skipping.
 
@@ -41,7 +128,11 @@ events were not reliably delivered as menu key equivalents in this harness, so
 the same routes are exercised through the Go menu instead of pretending the
 shortcut ran.
 
-### Sandbox guarantees
+`tests/ui/identifiers.test.ts` guards the identifiers the suite drives: every
+identifier the suite uses must exist in the app, and the identifiers that no
+test uses are printed, so they are reported rather than deleted silently.
+
+#### Sandbox guarantees
 
 Each case gets an `mkdtemp` root and launches the app with `HOME`,
 `CFFIXED_USER_HOME` and `TMPDIR` inside it. Preferences go to
@@ -80,10 +171,42 @@ ignored. The test app is built at `artifacts/ui/build/` and copied to
 AX driver is built in `.ui-bin/`. Screenshots are window-only; if the window id
 is missing, the screenshot fails rather than capturing the desktop.
 
-CI runs the UI job with `continue-on-error: true` (`ui (macos, advisory)`).
-GitHub-hosted macOS runners do not guarantee an AX-trusted GUI session, so that
-job is not a merge gate; a local `bun run test:ui` on an AX-trusted machine is
-the evidence for UI coverage. Do not turn its failure into a skip.
+### What only a trusted host can prove
+
+These are facts about this project, not gaps to paper over:
+
+- That a click does what it says. The render suite draws the button and
+  measures its pixels; it never presses it. Only the Accessibility suite
+  presses `confirm.delete` and then checks the filesystem.
+- That the app's own accessibility tree is what the user hears: the roles,
+  the labels, the values and the traits of the real elements in a real window.
+- That the keyboard shortcuts work: ⌘↩ reaches the review, Return does not
+  delete, Escape cancels. The render suite asserts the shortcut configuration
+  in the source, because the Accessibility suite cannot deliver synthetic key
+  events reliably.
+- That the menu bar popover opens, that the status item is drawn by the system
+  and that the settings window opens as a window.
+- That the app looks right in a real window, at the real window size, with the
+  real appearance and the real focus ring.
+
+So the honest statement is: **the click did what it says is proven only by the
+Accessibility suite on a trusted host.** A local `bun run test:ui` on an
+AX-trusted machine is the evidence for that, and CI cannot produce it. Do not
+turn its failure into a skip, and do not pretend the render suite covers it.
+
+### The CI jobs
+
+- `verify` runs the TypeScript suite on Linux, macOS and Windows.
+- `swift (macos)` runs `swift test` in the app package.
+- `ui-render (macos)` is the gate for the macOS app. It runs the whole Swift
+  suite, including the render suite, and uploads `artifacts/ui-render/` so a
+  reviewer can look at every screen in every language. It has no
+  `continue-on-error`, so it blocks a merge. Add it to the branch protection's
+  required checks.
+- `ui (macos, advisory)` still runs `bun run test:ui` with
+  `continue-on-error: true`, because GitHub-hosted macOS runners do not
+  guarantee an AX-trusted GUI session. It is not a merge gate and it must not
+  become one by being made to pass.
 
 ## Browser-driven testing is deliberately not automated
 
@@ -143,6 +266,18 @@ frees the disk between the two reads. An earlier version asserted `freed > 0` an
 rest of the suite planting and deleting hundreds of megabytes in parallel; that is why the check is
 now self-measured. If you touch `freed`, keep asserting on the per-outcome `status` as well, or take
 the delta against a filesystem the test owns.
+
+Two Swift tests fail on purpose, because they describe a promise the app does not
+keep yet. They are the reason the `ui-render (macos)` gate is red, and they
+must stay red until the app is fixed.
+
+| Test | What it says |
+| --- | --- |
+| `ScreenReasonTests.theReasonTableCoversEveryCodeTheEngineCanSend` | `not_determinable`, `not_executable` and `engine_unavailable` are reason codes the engine can send and the app has no translation for, so the screen shows the raw `reason.<code>`. |
+| `EngineFailureTests.anUnsupportedSchemaVersionIsReported` | A report whose `schemaVersion` the app does not understand is accepted and shown, instead of being refused with a message that names both versions. |
+
+Both need a change in `apps/dustless-mac/Sources/DustlessKit`, not in the
+tests. Do not weaken the tests to make them green.
 
 ## Documentation audit
 

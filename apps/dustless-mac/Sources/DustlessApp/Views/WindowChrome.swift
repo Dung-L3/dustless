@@ -302,6 +302,7 @@ struct PanelStateView: View {
 
     let kind: Kind
     let message: String
+    var error: L10nText? = nil
     var title: String?
     var actionTitle: String?
     var action: (() -> Void)?
@@ -338,18 +339,27 @@ struct PanelStateView: View {
         .axID(identifier)
     }
 
+    @ViewBuilder
     private var messageLabel: some View {
-        Text(message)
-            .font(kind == .error ? PanelFont.mono(11) : PanelFont.body)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .lineLimit(6)
-            .truncationMode(.tail)
-            .frame(maxWidth: 440)
-            .modifier(OptionalTextSelection(isEnabled: kind == .error))
-            .help(message)
-            .accessibilityLabel(message)
+        if let error {
+            ScrollView {
+                EngineErrorMessage(text: error)
+                    .frame(maxWidth: 520, alignment: .leading)
+            }
+            .frame(maxWidth: 520, maxHeight: 220)
+        } else {
+            Text(message)
+                .font(kind == .error ? PanelFont.mono(11) : PanelFont.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .frame(maxWidth: 440)
+                .modifier(OptionalTextSelection(isEnabled: kind == .error))
+                .help(message)
+                .accessibilityLabel(message)
+        }
     }
 }
 

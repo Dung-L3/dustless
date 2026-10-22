@@ -2,13 +2,6 @@ import DustlessKit
 import SwiftUI
 import AppKit
 
-enum StorageSection: String, Identifiable {
-    case apps
-    case files
-
-    var id: String { rawValue }
-}
-
 struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
@@ -16,7 +9,7 @@ struct StorageView: View {
     @EnvironmentObject private var store: ScanStore
     @StateObject private var control = StorageControl()
 
-    @State private var section: StorageSection = .apps
+    @State private var showAdvanced = false
     @State private var appsQuery = ""
     @State private var filesQuery = ""
 
@@ -29,10 +22,7 @@ struct StorageView: View {
         } summary: {
             volumeStrip
         } filters: {
-            filterBar(
-                shown: section == .apps ? appsVisible.count : filesVisible.count,
-                total: section == .apps ? store.storageApps.count : store.storageLargeFiles.count
-            )
+            filterBar(shown: filesVisible.count, total: store.storageLargeFiles.count)
         } content: {
             inventory(apps: appsVisible, files: filesVisible)
         }
@@ -91,10 +81,11 @@ struct StorageView: View {
                 .frame(maxHeight: 160)
             }
 
-            switch section {
-            case .apps: appsBody(apps)
-            case .files: largeFilesBody(files)
-            }
+            largeFilesBody(files)
+
+            Divider()
+
+            advancedArea(apps)
         }
     }
 
@@ -124,35 +115,18 @@ struct StorageView: View {
 
     private func filterBar(shown: Int, total: Int) -> some View {
         PanelFilterBar(
-            placeholder: searchPlaceholder,
-            text: searchBinding,
-            filter: {
-                Picker(settings.t("storage"), selection: $section) {
-                    Text(settings.t("appsTitle"))
-                        .tag(StorageSection.apps)
-                        .accessibilityIdentifier("storage.section.apps")
-                    Text(settings.t("largeFilesTitle"))
-                        .tag(StorageSection.files)
-                        .accessibilityIdentifier("storage.section.files")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityLabel(settings.t("storage"))
-                .onChange(of: section) { _, next in
-                    if next == .files {
-                        Task { await store.ensureStorageFiles() }
-                    }
-                }
-            },
+            placeholder: settings.t("searchFiles"),
+            text: $filesQuery,
+            filter: { EmptyView() },
             trailing: {
                 HStack(spacing: PanelStyle.Space.s) {
-                    if isInventoryLoading {
+                    if store.isLoadingStorageFiles {
                         ProgressView()
                             .controlSize(.small)
                     }
                     if total > 0 {
-                        countChip(shown, of: total, filtered: isInventoryFiltering)
-                            .accessibilityLabel(inventoryCountLabel(shown: shown, total: total))
+                        countChip(shown, of: total, filtered: isFilesFiltering)
+                            .accessibilityLabel(filesCountLabel(shown: shown, total: total))
                             .accessibilityIdentifier("storage.count")
                     }
                 }
@@ -161,41 +135,47 @@ struct StorageView: View {
         )
     }
 
-    private var searchBinding: Binding<String> {
-        switch section {
-        case .apps: $appsQuery
-        case .files: $filesQuery
-        }
+    private var isFilesFiltering: Bool {
+        !needle(filesQuery).isEmpty
     }
 
-    private var searchPlaceholder: String {
-        switch section {
-        case .apps: settings.t("searchApps")
-        case .files: settings.t("searchFiles")
-        }
+    private func filesCountLabel(shown: Int, total: Int) -> String {
+        isFilesFiltering
+            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
+            : settings.fileCount(total)
     }
 
-    private var isInventoryLoading: Bool {
-        switch section {
-        case .apps: store.isLoadingStorageApps
-        case .files: store.isLoadingStorageFiles
+    private func advancedArea(_ apps: [InstalledApp]) -> some View {
+        DisclosureGroup(isExpanded: $showAdvanced) {
+            VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+                HStack(spacing: PanelStyle.Space.s) {
+                    Text(settings.t("appsTitle"))
+                        .font(PanelFont.emphasis())
+                    Text(settings.appCount(store.storageApps.count))
+                        .font(PanelFont.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: PanelStyle.Space.s)
+                    SearchField(
+                        placeholder: settings.t("searchApps"),
+                        text: $appsQuery,
+                        identifier: "storage.apps.search"
+                    )
+                    .frame(maxWidth: 220)
+                }
+                appsBody(filteredApps)
+            }
+            .padding(.top, PanelStyle.Space.s)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settings.t("advanced"))
+                    .font(PanelFont.emphasis())
+                Text(settings.t("advancedHint"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-    }
-
-    private var isInventoryFiltering: Bool {
-        switch section {
-        case .apps: !needle(appsQuery).isEmpty
-        case .files: !needle(filesQuery).isEmpty
-        }
-    }
-
-    private func inventoryCountLabel(shown: Int, total: Int) -> String {
-        countLabel(
-            shown,
-            of: total,
-            filtered: isInventoryFiltering,
-            key: section == .apps ? "appsCount" : "largeFilesCount"
-        )
+        .accessibilityIdentifier("storage.advanced")
     }
 
     @ViewBuilder
@@ -204,6 +184,7 @@ struct StorageView: View {
             PanelStateView(
                 kind: .error,
                 message: settings.text(error),
+                error: error,
                 title: settings.t("appsTitle"),
                 actionTitle: settings.t("retry"),
                 action: { Task { await store.fetchStorageApps() } },
@@ -232,6 +213,7 @@ struct StorageView: View {
                     }
                 }
             }
+            .frame(maxHeight: 260)
         }
     }
 
@@ -241,6 +223,7 @@ struct StorageView: View {
             PanelStateView(
                 kind: .error,
                 message: settings.text(error),
+                error: error,
                 title: settings.t("largeFilesTitle"),
                 actionTitle: settings.t("retry"),
                 action: { Task { await store.fetchStorageFiles() } },
@@ -269,6 +252,7 @@ struct StorageView: View {
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
         }
     }
 
@@ -291,18 +275,12 @@ struct StorageView: View {
     private func countChip(_ shown: Int, of total: Int, filtered: Bool) -> some View {
         Text(filtered
             ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
-            : settings.t("itemMany", ["n": "\(total)"]))
+            : settings.fileCount(total))
             .font(PanelFont.number(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(PanelStyle.rowFill, in: .capsule)
-    }
-
-    private func countLabel(_ shown: Int, of total: Int, filtered: Bool, key: String) -> String {
-        filtered
-            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
-            : settings.t(key, ["n": "\(total)"])
     }
 
     private func reclaimableStat(_ reclaimable: UInt64) -> some View {

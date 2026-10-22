@@ -59,8 +59,8 @@ struct AppsModelTests {
             }
         }
         for lang in Lang.allCases {
-            #expect(L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("3"), "\(lang)")
-            #expect(!L10n.render(lang, "appsPurgeBody", ["n": "3"]).contains("{n}"), "\(lang)")
+            #expect(L10n.render(lang, "appsPurgeBody", ["count": "3"]).contains("3"), "\(lang)")
+            #expect(!L10n.render(lang, "appsPurgeBody", ["count": "3"]).contains("{count}"), "\(lang)")
         }
     }
 }

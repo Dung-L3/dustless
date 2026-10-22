@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import DustlessKit
-@Suite("engine process contract")
+@Suite("engine process contract", .serialized)
 struct EngineProcessContractTests {
     private func script(_ body: String) throws -> URL {
         let dir = FileManager.default.temporaryDirectory

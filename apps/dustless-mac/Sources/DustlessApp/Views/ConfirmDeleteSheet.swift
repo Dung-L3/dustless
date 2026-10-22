@@ -16,6 +16,11 @@ struct ConfirmDeleteSheet: View {
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    Text(settings.t("confirmPathsTitle"))
+                        .font(PanelFont.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, PanelStyle.Space.m)
+                        .padding(.top, PanelStyle.Space.s)
                     ForEach(findings) { finding in
                         HStack(alignment: .top, spacing: 10) {
                             TierBadge(tier: finding.tier, compact: true)
@@ -30,7 +35,7 @@ struct ConfirmDeleteSheet: View {
                                 Text(finding.ruleId)
                                     .font(PanelFont.caption)
                                     .foregroundStyle(.tertiary)
-                                Text(finding.desc)
+                                Text(RuleText.description(of: finding, lang: settings.language))
                                     .font(PanelFont.secondary)
                                     .foregroundStyle(.tertiary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -75,7 +80,11 @@ struct ConfirmDeleteSheet: View {
                 Text(settings.t("reviewBeforeDeleting"))
                     .font(PanelFont.heading)
             }
-            Text(settings.t("confirmSheetBody", ["n": "\(findings.count)"]))
+            Text(settings.t("confirmSheetBody", ["count": settings.pathCount(findings.count)]))
+                .font(PanelFont.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(settings.t("confirmSheetNote"))
                 .font(PanelFont.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -104,12 +113,12 @@ struct ConfirmDeleteSheet: View {
                     .accessibilityIdentifier("confirm.cancel")
                 Spacer()
                 DestructiveButton(
-                    help: settings.t("confirmSheetBody", ["n": "\(findings.count)"]),
-                    hint: settings.t("confirmSheetBody", ["n": "\(findings.count)"]),
+                    help: settings.t("confirmSheetBody", ["count": settings.pathCount(findings.count)]),
+                    hint: settings.t("confirmSheetBody", ["count": settings.pathCount(findings.count)]),
                     action: onConfirm
                 ) {
                     Text(settings.t("deleteItemsButton", [
-                        "n": "\(findings.count)",
+                        "count": settings.itemCount(findings.count),
                         "size": ByteFormat.string(totalBytes),
                     ]))
                     .frame(minWidth: 190)
@@ -165,6 +174,23 @@ struct CleanupResultCard: View {
         .padding(PanelStyle.Space.m)
         .panelCard(PanelStyle.rowFill)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            AccessibilityNotification.Announcement(announcement).post()
+        }
+    }
+
+    private var announcement: String {
+        let summary = settings.t("resultSummary", [
+            "freed": ByteFormat.string(report.freed),
+            "elapsed": Duration.milliseconds(report.elapsedMs),
+            "free": ByteFormat.string(report.freeAfter),
+        ])
+        let counts = settings.t("resultCounts", [
+            "deleted": "\(report.deleted.count)",
+            "skipped": "\(report.skipped.count)",
+            "failed": "\(report.failed.count)",
+        ])
+        return "\(summary) \(counts)"
     }
 
     private var header: some View {
@@ -229,15 +255,25 @@ struct CleanupResultCard: View {
     }
 
     private var counts: some View {
-        Text(settings.t("resultCounts", [
-            "deleted": "\(report.deleted.count)",
-            "skipped": "\(report.skipped.count)",
-            "failed": "\(report.failed.count)",
-        ]))
-        .font(PanelFont.secondary)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityIdentifier("cleanup.result.counts")
+        VStack(alignment: .leading, spacing: 3) {
+            Text(settings.t("resultCounts", [
+                "deleted": "\(report.deleted.count)",
+                "skipped": "\(report.skipped.count)",
+                "failed": "\(report.failed.count)",
+            ]))
+            .font(PanelFont.secondary)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("cleanup.result.counts")
+
+            if !report.skipped.isEmpty || !report.failed.isEmpty {
+                Text(settings.t("resultPartial"))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("cleanup.result.partial")
+            }
+        }
     }
 
     private var disclosure: some View {
@@ -251,7 +287,7 @@ struct CleanupResultCard: View {
             }
             .frame(maxHeight: 160)
         } label: {
-            Text(settings.t("itemMany", ["n": "\(report.outcomes.count)"]))
+            Text(settings.t("resultOutcomes", ["count": settings.pathCount(report.outcomes.count)]))
                 .font(PanelFont.secondary)
         }
         .accessibilityIdentifier("cleanup.result.disclosure")
