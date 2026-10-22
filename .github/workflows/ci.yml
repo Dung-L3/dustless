@@ -94,8 +94,8 @@ jobs:
           # image and detach it: this job uses no simulator. Measured in docs/DECISIONS.md 151.
           sudo -n true || exit 0
           hdiutil info | awk '
-            /^image-path/                 { path=$NF }
-            /^[[:space:]]*\/dev\/disk[0-9]+$/ { print path, $1 }
+            /^image-path/ { path=$NF }
+            /^[[:space:]]*\/dev\/disk[0-9]+([[:space:]]|$)/ { print path, $1 }
           ' | grep -i SimulatorRuntime | awk '!seen[$2]++' | while read -r path dev; do
             if sudo hdiutil detach -force "$dev" >/dev/null 2>&1; then
               echo "detached $dev ($path)"
@@ -112,7 +112,7 @@ jobs:
           hdiutil info | head -25
           echo "=== minimal scratch create (no -srcfolder, full output) ==="
           rm -f /tmp/diag.dmg
-          hdiutil create /tmp/diag.dmg -volname Diag -size 5m -format UDRW 2>&1 | tail -20
+          hdiutil create /tmp/diag.dmg -volname Diag -size 5m -fs APFS 2>&1 | tail -20
           if [ -f /tmp/diag.dmg ]; then
             echo "minimal create SUCCEEDED: $(stat -f%z /tmp/diag.dmg) bytes"
             sudo hdiutil detach -force /tmp/diag.dmg 2>/dev/null || true
