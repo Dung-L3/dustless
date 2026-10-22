@@ -18,6 +18,19 @@ final class ScanStore: ObservableObject {
         case failed
     }
 
+    struct Preview {
+        var report: ScanReport?
+        var scannedAt: Date?
+        var lastApply: ApplyReport?
+        var memoryReport: MemoryReport?
+        var diskSpace: DiskSpace?
+        var storageVolumes: [VolumeInfo] = []
+        var storageApps: [InstalledApp] = []
+        var storageLargeFiles: [LargeFile] = []
+        var selected: Set<String> = []
+        var engineError: L10nText?
+    }
+
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var report: ScanReport?
     @Published private(set) var scannedAt: Date?
@@ -50,6 +63,23 @@ final class ScanStore: ObservableObject {
     private(set) var storageFilesLoadedAt: Date?
 
     private var cli: DustlessCLI?
+
+    init(preview: Preview? = nil) {
+        guard let preview else { return }
+        report = preview.report
+        scannedAt = preview.scannedAt
+        lastApply = preview.lastApply
+        memoryReport = preview.memoryReport
+        diskSpace = preview.diskSpace
+        storageVolumes = preview.storageVolumes
+        storageApps = preview.storageApps
+        storageLargeFiles = preview.storageLargeFiles
+        selection = preview.selected
+        engineError = preview.engineError
+        phase = preview.report == nil ? .idle : .ready
+        memoryPhase = preview.memoryReport == nil ? .idle : .loaded
+        storagePhase = .loaded
+    }
 
     var canClean: Bool {
         guard report != nil, phase == .ready else { return false }
