@@ -88,17 +88,20 @@ jobs:
           df -h /
       - name: Free the diskimage slots the boot image spends on simulator runtimes
         run: |
-          # The runner boots with simulator runtime cryptexes attached (measured on the
-          # sick state: hdiutil info reports 15 images and even a 5 MB scratch create
-          # fails with "No space left on device"). Detach the simulator runtime images
-          # first: this job compiles for the host and uses no simulator, and the disk
-          # image it builds needs a free slot. See docs/DECISIONS.md 151.
+          # The runner boots with simulator runtime cryptexes attached. Their blocks in
+          # hdiutil info carry plain /dev/diskN lines (no "dev-entry" label in the
+          # DiskImages2 output), so take the top-level device of each simulator runtime
+          # image and detach it: this job uses no simulator. Measured in docs/DECISIONS.md 151.
           sudo -n true || exit 0
           hdiutil info | awk '
-            /image-path/ { path=$NF }
-            /dev-entry/  { print path, $NF }
-          ' | grep -i SimulatorRuntime | while read -r path dev; do
-            sudo hdiutil detach -force "$dev" >/dev/null 2>&1 && echo "detached $dev ($path)"
+            /^image-path/                 { path=$NF }
+            /^[[:space:]]*\/dev\/disk[0-9]+$/ { print path, $1 }
+          ' | grep -i SimulatorRuntime | awk '!seen[$2]++' | while read -r path dev; do
+            if sudo hdiutil detach -force "$dev" >/dev/null 2>&1; then
+              echo "detached $dev ($path)"
+            else
+              echo "detach of $dev failed (kept: $path)"
+            fi
           done
           echo "attached images after cleanup: $(hdiutil info | sed -n '3p')"
 
@@ -107,12 +110,13 @@ jobs:
           df -h / /System/Volumes/Data
           echo "=== diskimages2 helper state ==="
           hdiutil info | head -25
-          echo "=== minimal scratch create (no -srcfolder) ==="
+          echo "=== minimal scratch create (no -srcfolder, full output) ==="
           rm -f /tmp/diag.dmg
-          hdiutil create -volname Diag -size 5m -format UDRW /tmp/diag.dmg 2>&1 | tail -2
+          hdiutil create /tmp/diag.dmg -volname Diag -size 5m -format UDRW 2>&1 | tail -20
           if [ -f /tmp/diag.dmg ]; then
             echo "minimal create SUCCEEDED: $(stat -f%z /tmp/diag.dmg) bytes"
-            hdiutil imageinfo /tmp/diag.dmg 2>&1 | head -4
+            sudo hdiutil detach -force /tmp/diag.dmg 2>/dev/null || true
+            rm -f /tmp/diag.dmg
           else
             echo "minimal create FAILED too: the create path itself is broken on this runner"
           fi
