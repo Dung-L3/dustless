@@ -174,23 +174,27 @@ export async function resolveSigning(): Promise<SigningPlan> {
 }
 
 export async function signApplication(app: string, plan: SigningPlan): Promise<void> {
-  if (plan.kind === "adhoc") {
-    const adhoc = await run("codesign", ["--force", "--deep", "--sign", "-", app]);
-    if (adhoc.code !== 0) fail(`the ad-hoc signature failed: ${adhoc.stderr.trim()}`);
-    const verified = await run("codesign", ["--verify", "--deep", app]);
+  try {
+    if (plan.kind === "adhoc") {
+      const adhoc = await run("codesign", ["--force", "--deep", "--sign", "-", app]);
+      if (adhoc.code !== 0) fail(`the ad-hoc signature failed: ${adhoc.stderr.trim()}`);
+      const verified = await run("codesign", ["--verify", "--deep", app]);
+      if (verified.code !== 0) fail(`codesign --verify failed: ${verified.stderr.trim()}`);
+      return;
+    }
+    const identity = plan.identity;
+    if (!identity) fail("there is no Developer ID identity to sign with");
+    for (const nested of await nestedCodePaths(app)) {
+      const signed = await run("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", identity, nested]);
+      if (signed.code !== 0) fail(`codesign failed for ${nested}: ${signed.stderr.trim()}`);
+    }
+    const signed = await run("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", identity, app]);
+    if (signed.code !== 0) fail(`codesign failed: ${signed.stderr.trim()}`);
+    const verified = await run("codesign", ["--verify", "--deep", "--strict", app]);
     if (verified.code !== 0) fail(`codesign --verify failed: ${verified.stderr.trim()}`);
-    return;
+  } finally {
+    await plan.finish();
   }
-  const identity = plan.identity;
-  if (!identity) fail("there is no Developer ID identity to sign with");
-  for (const nested of await nestedCodePaths(app)) {
-    const signed = await run("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", identity, nested]);
-    if (signed.code !== 0) fail(`codesign failed for ${nested}: ${signed.stderr.trim()}`);
-  }
-  const signed = await run("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", identity, app]);
-  if (signed.code !== 0) fail(`codesign failed: ${signed.stderr.trim()}`);
-  const verified = await run("codesign", ["--verify", "--deep", "--strict", app]);
-  if (verified.code !== 0) fail(`codesign --verify failed: ${verified.stderr.trim()}`);
 }
 
 export async function inspectSignature(app: string): Promise<SignatureInfo> {

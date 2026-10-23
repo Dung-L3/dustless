@@ -358,3 +358,36 @@ two shortcuts are dropped, with the source sweep that used to exempt the storage
 sheets inverted into "no sheet answers Return with a destructive action". The keyboard
 contracts belong to SourceContractTests by precedent, so the three new contracts live
 there; the guards themselves remain ordinary one-line refusals.
+
+157. Signing credentials are torn down on every path the signing step can end.
+The packaging audit traced every call site of the cleanups and found them wired only
+to failure exits: `importCertificate` and `resolveSigning` restore the keychain list
+and remove the throwaway keychain on their own errors, while the success path — the
+one every actual release run takes — left the Developer ID signing identity and the
+keychain search-list append in place for the rest of the job, and `resolveNotaryCredentials`
+left the 0600 `AuthKey.p8` tempdir behind when submission, stapling or Gatekeeper
+rejection failed midway. `signApplication` and the notarisation script now run those
+teardowns in `finally` blocks: success, mid-signing failure and mid-notarisation
+failure all end with the keychain unlisted and deleted and the key file removed.
+The teardowns were idempotent by construction (keychain-list set, `rm -rf`), so no
+double-cleanup hazard exists.
+
+158. The dmg workflow detaches under the same privilege that attached it.
+The CI mount check attached the image with `sudo hdiutil attach` but detached as the
+runner user; a DiskImages2 device registered by a root session is not guaranteed to
+be detachable by a non-root caller, and a detached-as-user failure would turn an
+all-green check into a false red after every substantive assertion had passed. The
+detach now runs under `sudo` to match the attach. The same session reconciled the
+packaging docs with the code they describe: the disk image is created at an explicit
+size (staged tree plus 96 MiB) and its `imageinfo` size is cross-checked against what
+was requested; the pre-rewrite claims (a staged-engine hash step that has since
+moved into the filled image, and a refused-if-more-than-twice-as-large rule) were
+several commits stale. The docs also now state what `MACOS_NOTARY_PROFILE` really
+requires — a profile created by `notarytool store-credentials` on that machine — so a
+hosted runner is told to use the API-key or Apple-id trios instead of a creed that can
+only ever fail loudly there. The three-attempt `hdiutil create` retry that DECISIONS
+149 once described was removed with the DiskArbitration rewrite (152) and it stays
+removed deliberately: the mounted-free create needs no slot machinery, the workflow
+frees the image slots itself, and a transient create failure now fails the step
+loudly on its single attempt rather than papering over a runner that will go on
+failing.
