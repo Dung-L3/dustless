@@ -341,3 +341,20 @@ summary said "Freed X of volume space", which attributes the delta to the run; i
 free space rose by X", which is the statement the measurement actually supports. The CLI's
 Vietnamese text already said the volume rose, and the JSON fields are untouched, so only the one
 English sentence changed.
+
+156. The app refuses a second destructive press instead of racing it.
+The audit session replayed the destructive walks end to end and found the re-entrancy
+pattern uneven in three places. `ScanStore.clean()` had no guard of its own while its
+sibling `rescan()` always did — a second press of the review sheet's delete button
+before the first apply reached its first mutation would hand the engine two `apply`
+runs. `StorageControl.uninstall` and `trash` flipped their in-flight flags without
+checking them, so a second click inside the confirm sheet ran a second engine call in
+parallel. And both storage sheets bound a destructive confirm button to Return with
+`keyboardShortcut(.defaultAction)`, while the main confirm sheet deliberately gives
+its destructive button no shortcut — a stray Enter would move a large file to the
+trash with zero modifier held. The guards now mirror the house pattern everywhere:
+`clean()` refuses any phase but ready, the storage actions refuse while busy, and the
+two shortcuts are dropped, with the source sweep that used to exempt the storage
+sheets inverted into "no sheet answers Return with a destructive action". The keyboard
+contracts belong to SourceContractTests by precedent, so the three new contracts live
+there; the guards themselves remain ordinary one-line refusals.
