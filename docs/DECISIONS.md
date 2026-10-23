@@ -391,3 +391,47 @@ removed deliberately: the mounted-free create needs no slot machinery, the workf
 frees the image slots itself, and a transient create failure now fails the step
 loudly on its single attempt rather than papering over a runner that will go on
 failing.
+
+159. For rules that declare nothing, the delete path trusts the path it scanned.
+The audit's swap probe planted a different tree at a finding's path after the report
+was built and then asked the engine to delete the finding: for a rule that declares
+none of `staleDays`, `minAgeDays`, `requireVerify` or `gitClean`, the run deleted the
+replacement without noticing, because every runtime re-check is opt-in per rule and
+the finding's identity is the path string the scan recorded. The window is exactly
+the no-declaration case: a rule that does declare an age floor is protected by the
+revalidate contract of 126 — the tree's fresh mtime is measured at delete time and a
+newer baseline than the scan's is refused — so a planted replacement is caught as
+long as its fresh mtime betrays it; a replacement whose mtimes were restored matches
+nothing short of content identity, which the finding format does not carry. The line
+this version holds: reopening every tree on every delete would charge the default
+path the walk that only rules claiming age sensitivity pay now. The upgrade paths
+are a cheap per-finding lstat compare against the scan-time snapshot (same
+newer-than-scan semantics 126 defines, no schema change) or a content fingerprint in
+the finding itself (schema change).
+
+160. The busy gate refuses what the rule declares, and nothing beyond it.
+The audit's fixture session saw the gate behave exactly as declared: a `sleep`
+process named in the rule's `busyProcesses` held the tree and dispose refused with
+the busy reason until the process exited; nothing checked any other holder. A
+process that writes into the tree while it is deleted is a real window when no
+declared name matches, and the audit looked at the two general gates it could carry:
+an `lsof` sweep is a full-process fd walk per finding, and a post-delete audit only
+reports damage after it is done. Both pay their cost on every run to guard the
+unusual case, so the engine keeps the declared-contract gate with its fail-closed
+corner intact (a system where process listings cannot be read refuses rather than
+deletes, which the test "no process listing at all keeps the fail-closed behaviour"
+locks). The honest answer to an author who cannot name the interfering processes is
+the tier and confirmation contract, not a heuristic sweep.
+
+161. Size accounting reads logical byte lengths, not allocated blocks.
+`treeUsage` and the scan walk sum `stat.size`, so `reclaimable`, the scan totals and
+`deletedBytes` all carry logical lengths, and the freed delta compares volumes whose
+frees are paid in blocks. A sparse file reports its full logical length while the
+volume gives back only its allocated blocks on removal, so a sparse-heavy tree
+over-promises reclaimable and the two numbers drift apart. The audit kept it
+deliberately: the shipped rules' territory — caches — is dense in practice, a
+regular file's logical size is exactly what a `rm`-based contract reads, and one
+consistent number across scan and apply is worth more to every consumer than a
+second, sparser truth. The upgrade path is a one-line change in the two sum sites
+(`st_blocks × 512` instead of `size`) with the fixtures recalculated; it changes the
+meaning of every consumer at once, so it wants its own decision, not a ride-along.
