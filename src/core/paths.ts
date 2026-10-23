@@ -82,6 +82,34 @@ function patternSlots(pattern: string): { slots: Slot[]; anchored: boolean } | {
 
 const homeSlots: string[] = splitSegments(resolve(HOME));
 
+const SYSTEM_ROOTS = ["/System", "/usr", "/bin", "/sbin", "/Library", "/Applications"];
+
+function systemRootHeld(path: string): boolean {
+  const folded = foldCase(path);
+  for (const root of SYSTEM_ROOTS) {
+    const probe = foldCase(root);
+    if (folded === probe || folded.startsWith(probe + "/")) return true;
+  }
+  return false;
+}
+
+function anotherUserHome(path: string): boolean {
+  if (platform !== "mac") return false;
+  const segments = splitSegments(path);
+  if (segments.length < 2) return false;
+  if (segments[0]!.toLowerCase() !== "users") return false;
+  const own = homeSlots[1];
+  if (own === undefined) return false;
+  return segments[1]!.toLowerCase() !== own.toLowerCase();
+}
+
+function protectedPrefix(path: string): string | null {
+  if (platform === "win") return null;
+  if (systemRootHeld(path)) return "phạm vi rule nằm dưới thư mục hệ thống";
+  if (anotherUserHome(path)) return "phạm vi rule thuộc thư mục của một người dùng khác";
+  return null;
+}
+
 function compatible(slots: Slot[], target: string[]): boolean {
   if (slots.length !== target.length) return false;
   for (let index = 0; index < slots.length; index += 1) {
@@ -118,6 +146,12 @@ export function patternVerdict(pattern: string): PatternVerdict {
   }
   if (anchored && !(slots.length > home.length && compatible(slots.slice(0, home.length), home))) {
     return { ok: false, kind: "protected", reason: "phạm vi rule đi ra ngoài $HOME" };
+  }
+  const wildcard = slots.indexOf(null);
+  const fixed = wildcard === -1 ? slots : slots.slice(0, wildcard);
+  if (fixed.length > 0) {
+    const held = protectedPrefix("/" + fixed.join("/"));
+    if (held) return { ok: false, kind: "protected", reason: held };
   }
   return { ok: true };
 }
@@ -300,6 +334,7 @@ function isProtectedReal(real: string): boolean {
   const target = foldCase(canonicalReal(real));
   const home = foldCase(canonicalReal(homeReal()));
   if (target === parse(target).root) return true;
+  if (protectedPrefix(real)) return true;
   return target === home || home.startsWith(target.endsWith(sep) ? target : target + sep);
 }
 

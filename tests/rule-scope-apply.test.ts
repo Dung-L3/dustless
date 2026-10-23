@@ -96,6 +96,22 @@ describe("a rule whose scope reaches the direct children of $HOME is refused at 
   });
 });
 
+describe.skipIf(process.platform === "win32")("a rule scoped into system territory is refused at apply", () => {
+  test("a hand-written /Library rule is refused and the payload survives", async () => {
+    const dir = await plant("system-scope");
+    await writeRules(
+      `- id: test.cache\n  tier: green\n  desc: cache\n  paths: { all: "/Library" }\n  recoveryLabel: download\n`,
+    );
+
+    const result = await apply(report([finding(dir)]), { assumeYes: true, tiers: { "test.cache": "green" } });
+
+    expect(result.outcomes[0]?.status).toBe("failed");
+    expect(result.outcomes[0]?.detail?.code).toBe("protected");
+    expect(result.deletedBytes).toBe(0);
+    expect(await exists(join(dir, "blob.bin"))).toBe(true);
+  });
+});
+
 describe("the delete path refuses a finding it cannot tie to a rule", () => {
   test("a rule id that is not in the rule set is skipped, never deleted", async () => {
     const dir = await plant("unknown-rule");

@@ -301,3 +301,43 @@ size instead of whatever a srcfolder-sizing pass decided. The CI step that had m
 same machinery was rewritten on the same primitives, so "the image must hold the app" is still a
 mount-proven statement, made without the organ that was broken. On healthy runners the recipe runs
 unchanged in meaning, and the day's evidence says the sick runners can now build the same image.
+
+153. The rules engine refuses the system roots the uninstall path already refuses.
+An audit session probing the scope guards with the engine's own functions found what the
+anchored-scope check cannot see: an absolute custom rule scoped to /Library, /System, /usr, /bin,
+/sbin or /Applications loads clean, scans, and is deletable with `apply --yes`, because the
+protected checks only know the filesystem root, `$HOME` and `/Volumes`, while the uninstall path
+carries its own `DENY_PATHS` for exactly those roots. The probe that proved it is pure: for
+`/Users/<me>/../Library`, `patternVerdict` answered `{ok:true}` and `realGuard` returned `{real}`
+— every guard stage green on a path an author never intended as cache territory. The fix moves the
+constant into paths.ts as `SYSTEM_ROOTS` and checks it in two places: `patternVerdict` refuses a
+fixed prefix (the segments before any wildcard) that sits under a system root, and
+`isProtectedReal` refuses a resolved real path there too, so both the load-time verdict and the
+delete-time realpath check catch it, including the `..`-composed forms. `/Users/<someone-else>/…`
+is refused the same way on macOS (the second segment under `/Users` must be the current user's).
+`/opt/homebrew` deliberately stays open — the bundled homebrew rule depends on it. The new checks
+read POSIX paths: they run on mac and linux, while windows keeps the checks it already had; the
+windows runner's own rules are `LOCALAPPDATA`-shaped and `/Library`-style roots are not windows
+territory. Nothing else
+changes: deep `$HOME`-anchored rules sail through, and the unmeasured-scope window for
+wildcard-first patterns remains guarded per resolved candidate. Scan reports the refusal as
+`protected`, both to the CLI text and the app's reason table.
+
+154. Size accounting counts a hardlinked inode once per tree.
+The same audit session measured the double count directly: three pathnames reaching two inodes of
+4096 bytes reported 12288 for `treeUsage` while the real block cost is 8192, and deleting one alias
+still left the remaining pair double-counted. The walks in scan.ts and space.ts now carry a set of
+`dev:ino` identities and skip the size of any file with `nlink > 1` that they have already seen, so
+`reclaimable`, the scan totals and `deletedBytes` stop claiming the same content twice, in both the
+scan-time walk and the apply-time re-measure. The ceiling keeps its ponytail comment: the set lives
+inside one walk, so content aliased across two different findings still counts in each — cross-tree
+dedup would need scan-global state for a case no shipped rule produces.
+
+155. The MCP text reports the freed delta as what it measures.
+`freed` is a whole-volume `statfs` delta, so a busy volume can credit the run with bytes another
+process released: the probe that measured it printed 311 GB "freed" while the run deleted nothing
+(the formula is asserted in the tests, so the number itself stays as documented). The MCP apply
+summary said "Freed X of volume space", which attributes the delta to the run; it now reads "Volume
+free space rose by X", which is the statement the measurement actually supports. The CLI's
+Vietnamese text already said the volume rose, and the JSON fields are untouched, so only the one
+English sentence changed.

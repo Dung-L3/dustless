@@ -186,6 +186,7 @@ async function walk(root: string): Promise<Tree> {
     tree.bytes = rootMeta.size;
     return tree;
   }
+  const traced = new Set<string>();
   const stack = [root];
   while (stack.length) {
     const dir = stack.pop();
@@ -201,6 +202,11 @@ async function walk(root: string): Promise<Tree> {
     const stats = await Promise.all(files.map((file) => lstat(file).catch(() => null)));
     for (const meta of stats) {
       if (!meta) continue;
+      if (meta.nlink > 1) {
+        const identity = `${meta.dev}:${meta.ino}`;
+        if (traced.has(identity)) continue;
+        traced.add(identity);
+      }
       tree.bytes += meta.size;
       if (meta.mtimeMs > tree.mtime) tree.mtime = meta.mtimeMs;
       if (meta.atimeMs > tree.atime) tree.atime = meta.atimeMs;

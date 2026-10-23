@@ -214,7 +214,7 @@ async function applyTool(core: Core, args: Record<string, unknown>): Promise<Too
   const notDeleted = result.outcomes.filter((outcome) => outcome.status !== "deleted");
   const body = [
     `Deleted ${result.outcomes.length - notDeleted.length} of ${result.outcomes.length} finding(s) (${formatBytes(result.deletedBytes)}). ` +
-      `Freed ${formatBytes(result.freed)} of volume space in ${result.elapsedMs}ms.`,
+      `Volume free space rose by ${formatBytes(result.freed)} over ${result.elapsedMs}ms.`,
     table(["rule_id", "tier", "status", "bytes", "path", "detail"], result.outcomes.map((outcome) => [
       outcome.ruleId, outcome.tier, outcome.status, formatBytes(outcome.bytes), displayPath(outcome.path),
       outcome.detail ? describeReason(outcome.detail) : "-",
