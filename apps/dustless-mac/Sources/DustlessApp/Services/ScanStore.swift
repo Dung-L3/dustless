@@ -156,6 +156,7 @@ final class ScanStore: ObservableObject {
     func dismissEngineError() { engineError = nil }
 
     func clean() async {
+        guard phase == .ready else { return }
         let selected = selectedFindings
         guard let cli, !selected.isEmpty else { return }
         showingConfirmation = false
