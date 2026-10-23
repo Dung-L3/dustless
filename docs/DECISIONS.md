@@ -315,7 +315,10 @@ fixed prefix (the segments before any wildcard) that sits under a system root, a
 `isProtectedReal` refuses a resolved real path there too, so both the load-time verdict and the
 delete-time realpath check catch it, including the `..`-composed forms. `/Users/<someone-else>/…`
 is refused the same way on macOS (the second segment under `/Users` must be the current user's).
-`/opt/homebrew` deliberately stays open — the bundled homebrew rule depends on it. Nothing else
+`/opt/homebrew` deliberately stays open — the bundled homebrew rule depends on it. The new checks
+read POSIX paths: they run on mac and linux, while windows keeps the checks it already had; the
+windows runner's own rules are `LOCALAPPDATA`-shaped and `/Library`-style roots are not windows
+territory. Nothing else
 changes: deep `$HOME`-anchored rules sail through, and the unmeasured-scope window for
 wildcard-first patterns remains guarded per resolved candidate. Scan reports the refusal as
 `protected`, both to the CLI text and the app's reason table.

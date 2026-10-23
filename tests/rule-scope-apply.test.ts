@@ -96,7 +96,7 @@ describe("a rule whose scope reaches the direct children of $HOME is refused at 
   });
 });
 
-describe("a rule scoped into system territory is refused at apply", () => {
+describe.skipIf(process.platform === "win32")("a rule scoped into system territory is refused at apply", () => {
   test("a hand-written /Library rule is refused and the payload survives", async () => {
     const dir = await plant("system-scope");
     await writeRules(

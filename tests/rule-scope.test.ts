@@ -232,7 +232,7 @@ describe("the scan refuses a protected scope", () => {
 describe("system territory", () => {
   const userName = HOME.split("/").at(-1) ?? "";
 
-  test("a rule that reaches a system root is refused", () => {
+  test.skipIf(process.platform === "win32")("a rule that reaches a system root is refused", () => {
     for (const pattern of [
       "/System",
       "/System/Library/Caches",
@@ -259,9 +259,9 @@ describe("system territory", () => {
     }
   });
 
-  test("a real path inside system territory is refused at delete time", () => {
-    expect(realGuard("/Library")).toMatchObject({ refused: "protected" });
-    expect(realGuard("/System/Library")).toMatchObject({ refused: "protected" });
+  test.skipIf(process.platform === "win32")("a real path inside system territory is refused at delete time", () => {
+    expect(realGuard("/usr")).toMatchObject({ refused: "protected" });
+    expect(realGuard("/bin")).toMatchObject({ refused: "protected" });
   });
 
   test("user territory and tool caches are untouched by the system guard", () => {
