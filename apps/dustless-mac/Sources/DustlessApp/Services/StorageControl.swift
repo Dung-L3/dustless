@@ -33,6 +33,7 @@ final class StorageControl: ObservableObject {
     private var nextAlert: (titleKey: String, message: L10nText)?
 
     func uninstall(_ app: InstalledApp, purge: Bool, store: ScanStore) async {
+        guard !isUninstalling else { return }
         isUninstalling = true
         defer { isUninstalling = false }
         do {
@@ -49,6 +50,7 @@ final class StorageControl: ObservableObject {
     }
 
     func trash(_ file: LargeFile, store: ScanStore) async {
+        guard !isTrashingFile else { return }
         isTrashingFile = true
         defer { isTrashingFile = false }
         do {

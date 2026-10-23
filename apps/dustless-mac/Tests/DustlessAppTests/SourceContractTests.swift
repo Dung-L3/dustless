@@ -8,6 +8,7 @@ import Testing
 @Suite("source contracts")
 struct SourceContractTests {
     private var viewsDirectory: URL { appSources.appendingPathComponent("DustlessApp/Views") }
+    private var servicesDirectory: URL { appSources.appendingPathComponent("DustlessApp/Services") }
 
     private func sourceFiles() throws -> [URL] {
         let files = try FileManager.default.contentsOfDirectory(
@@ -25,6 +26,16 @@ struct SourceContractTests {
 
     private func indentation(of line: String) -> Int {
         line.prefix { $0 == " " || $0 == "\t" }.count
+    }
+
+    private func functionBody(of url: URL, startingAt marker: String) throws -> [String] {
+        let all = try lines(of: url)
+        let start = try #require(all.firstIndex { $0.contains(marker) })
+        var end = start + 1
+        while end < all.count && !all[end].trimmingCharacters(in: .whitespaces).hasPrefix("func ") {
+            end += 1
+        }
+        return Array(all[(start + 1)..<min(end, all.count)])
     }
 
     @Test func theConfirmSheetHasNoDefaultAction() throws {
@@ -72,7 +83,7 @@ struct SourceContractTests {
         )
     }
 
-    @Test func theDefaultActionIsConfinedToTheStorageSheets() throws {
+    @Test func noSheetTakesTheDefaultAction() throws {
         var found: [String] = []
         for file in try sourceFiles() {
             let text = try String(contentsOf: file, encoding: .utf8)
@@ -81,8 +92,34 @@ struct SourceContractTests {
             }
         }
         #expect(
-            found == ["StorageSheets.swift"],
-            "only the storage sheets may take the default action, found \(found)"
+            found.isEmpty,
+            "no sheet may answer Return with a destructive action, found \(found)"
+        )
+    }
+
+    @Test func theStoreCleansOnlyFromAReadyPhase() throws {
+        let file = servicesDirectory.appendingPathComponent("ScanStore.swift")
+        let body = try functionBody(of: file, startingAt: "func clean() async {")
+        let first = try #require(body.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(
+            first.contains("guard phase == .ready else { return }"),
+            "clean must refuse while a scan or apply is already running, first body line was \(first)"
+        )
+    }
+
+    @Test func theStorageGuardsLockOutReentry() throws {
+        let file = servicesDirectory.appendingPathComponent("StorageControl.swift")
+        let uninstall = try functionBody(of: file, startingAt: "func uninstall(")
+        let first = try #require(uninstall.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(
+            first.contains("guard !isUninstalling else { return }"),
+            "uninstall must refuse a second run while one is in flight, first body line was \(first)"
+        )
+        let trash = try functionBody(of: file, startingAt: "func trash(")
+        let firstTrash = try #require(trash.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(
+            firstTrash.contains("guard !isTrashingFile else { return }"),
+            "trash must refuse a second run while one is in flight, first body line was \(firstTrash)"
         )
     }
 

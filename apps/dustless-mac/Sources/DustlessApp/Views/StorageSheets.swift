@@ -45,7 +45,6 @@ struct LargeFileTrashSheet: View {
                         .frame(minWidth: 160)
                 }
                 .tint(DestructiveStyle.red)
-                .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("storage.trash.confirm")
             }
             .padding(PanelStyle.Space.l)
@@ -150,7 +149,6 @@ struct UninstallConfirmationSheet: View {
                         Text(settings.t("appsMoveToTrash"))
                             .frame(minWidth: 160)
                     }
-                    .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("storage.uninstall.confirm")
                 }
             }
