@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { HOME, patternVerdict, resolvePattern } from "../src/core/paths.ts";
+import { HOME, patternVerdict, realGuard, resolvePattern } from "../src/core/paths.ts";
 import { defect, loadRules, scopeDefect } from "../src/core/rules.ts";
 import { scan } from "../src/core/scan.ts";
 
@@ -226,5 +226,48 @@ describe("the scan refuses a protected scope", () => {
     const report = await scan({ roots: [sandbox] });
     expect(report.findings.some((f) => f.ruleId === "test.deep")).toBe(false);
     expect(report.unscannable.find((r) => r.ruleId === "test.deep")?.reason).toBe("not_supported");
+  });
+});
+
+describe("system territory", () => {
+  const userName = HOME.split("/").at(-1) ?? "";
+
+  test("a rule that reaches a system root is refused", () => {
+    for (const pattern of [
+      "/System",
+      "/System/Library/Caches",
+      "/Library",
+      "/Library/Caches/x",
+      "/Applications",
+      "/Applications/App.app",
+      "/usr",
+      "/usr/local/bin/x",
+      "/bin",
+      "/sbin",
+    ]) {
+      const problem = defect(rule(pattern), false);
+      expect(problem).not.toBeNull();
+      expect(patternVerdict(pattern)).toMatchObject({ ok: false, kind: "protected" });
+    }
+  });
+
+  test.skipIf(process.platform !== "darwin")("a rule that reaches another user's home is refused", () => {
+    for (const pattern of ["/Users/someone-else", "/Users/someone-else/Library/Caches", `/Users/${userName}/../Library`]) {
+      const problem = defect(rule(pattern), false);
+      expect(problem).not.toBeNull();
+      expect(patternVerdict(pattern)).toMatchObject({ ok: false, kind: "protected" });
+    }
+  });
+
+  test("a real path inside system territory is refused at delete time", () => {
+    expect(realGuard("/Library")).toMatchObject({ refused: "protected" });
+    expect(realGuard("/System/Library")).toMatchObject({ refused: "protected" });
+  });
+
+  test("user territory and tool caches are untouched by the system guard", () => {
+    for (const pattern of ["/opt/homebrew/var/homebrew/cache", "/tmp/dustless-x", `/Users/${userName}/Library/Caches/*`, "~/Library/Caches/*"]) {
+      expect(defect(rule(pattern), false)).toBeNull();
+    }
+    expect(realGuard(HOME)).toHaveProperty("refused");
   });
 });

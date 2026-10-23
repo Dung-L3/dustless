@@ -281,7 +281,7 @@ describe("mcp server over stdio", () => {
       expect(structured.free_after).toBeGreaterThan(0);
       expect(structured.elapsed_ms).toBeGreaterThan(0);
       expect(structured.freed).toBe(Math.max(0, structured.free_after - structured.free_before));
-      expect(String(result.content?.[0]?.text)).toContain("Freed");
+      expect(String(result.content?.[0]?.text)).toContain("Volume free space rose by");
       expect(await pathExists(cacheDir())).toBeFalse();
     },
     30_000,

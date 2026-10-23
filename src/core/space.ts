@@ -31,6 +31,7 @@ export async function treeUsage(path: string): Promise<TreeUsage | null> {
   let bytes = root.isFile() ? root.size : 0;
   let mtime = root.mtimeMs;
   if (!root.isDirectory()) return { bytes, mtime };
+  const traced = new Set<string>();
   const stack = [path];
   while (stack.length) {
     const dir = stack.pop();
@@ -46,6 +47,11 @@ export async function treeUsage(path: string): Promise<TreeUsage | null> {
       if (!entry.isFile()) continue;
       const meta = await lstat(full).catch(() => null);
       if (!meta) continue;
+      if (meta.nlink > 1) {
+        const identity = `${meta.dev}:${meta.ino}`;
+        if (traced.has(identity)) continue;
+        traced.add(identity);
+      }
       bytes += meta.size;
       if (meta.mtimeMs > mtime) mtime = meta.mtimeMs;
     }
