@@ -167,13 +167,16 @@ team, the notarisation state and the submission id.
 The image is built by `bun run dmg`, which:
 
 1. stages `Dustless.app` with `ditto` and adds an `/Applications` symlink;
-2. checks that `ditto` carried the signature into the staged bundle and that the
-   staged engine is the engine that was bundled;
-3. creates a compressed `UDZO` image with `hdiutil`;
-4. runs `hdiutil verify` over the image;
-5. reads the image size with `hdiutil imageinfo` and refuses an image that is
-   smaller than the app or more than twice as large — a disk image that is much
-   bigger than its content is a padded placeholder, not a release;
+2. checks that `ditto` carried the signature into the staged bundle, then
+   verifies the engine again inside the filled image by checksum against the
+   bundled engine (see step 5 of the fill loop below);
+3. creates an explicit-size `HFS+` staging image — the staged tree plus 96 MiB
+   of slack — and fills it with `ditto` plus the Applications link;
+4. converts it to compressed `UDZO` and runs `hdiutil verify` over it;
+5. reads the size the image claims with `hdiutil imageinfo` and refuses it when
+   it cannot hold the staged tree or when it is more than 5 percent larger than
+   the size the recipe asked for — an image only works when its advertised size
+   reconciles with what was requested;
 6. mounts the image read-only, and checks that `Dustless.app` is there, that
    `Applications` is a symlink pointing at `/Applications`, that the app in the
    image is still signed, and that the engine inside the image answers `version`
@@ -206,6 +209,10 @@ The GitHub secrets the `sign-macos` job reads:
 Either the API key trio, the Apple id trio, or a keychain profile is enough.
 The `prepare` job refuses to continue when a Developer ID exists but no notary
 credential does: a signed but un-notarised app is never published.
+
+A profile exists only on the machine where `xcrun notarytool store-credentials`
+created it. On GitHub-hosted runners no such profile can exist, so release runs
+must use the API-key trio or the Apple id trio.
 
 The notarisation itself (`bun scripts/notarize-macos.ts`):
 

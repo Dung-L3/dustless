@@ -127,7 +127,7 @@ jobs:
           echo "the image holds Dustless.app $version and the Applications link"
           sudo umount "$mountpoint"
           rm -rf "$mountpoint"
-          hdiutil detach "$dev"
+          sudo hdiutil detach "$dev"
 
   ui:
     name: ui (macos, advisory)
