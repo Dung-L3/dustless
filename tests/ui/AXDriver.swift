@@ -250,11 +250,20 @@ func click(_ element: AXUIElement, pid: pid_t) {
         .post(tap: .cghidEventTap)
 }
 
+func actionNames(_ element: AXUIElement) -> [String] {
+    var names: CFArray?
+    guard AXUIElementCopyActionNames(element, &names) == .success, let list = names as? [String] else { return [] }
+    return list
+}
+
 func pressAncestors(_ element: AXUIElement) -> Bool {
     var current: AXUIElement? = element
-    for _ in 0..<4 {
+    for _ in 0..<5 {
         guard let candidate = current else { return false }
-        if AXUIElementPerformAction(candidate, kAXPressAction as CFString) == .success { return true }
+        if actionNames(candidate).contains(kAXPressAction as String),
+           AXUIElementPerformAction(candidate, kAXPressAction as CFString) == .success {
+            return true
+        }
         guard let parent = attribute(candidate, kAXParentAttribute as String) as! AXUIElement? else { return false }
         current = parent
     }
