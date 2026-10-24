@@ -51,6 +51,11 @@ struct MenuBarContent: View {
         let provenance = settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
         return VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
             HStack(spacing: PanelStyle.Space.s) {
+                if let mark = MenuBarIcon.image {
+                    Image(nsImage: mark)
+                        .resizable()
+                        .frame(width: 14, height: 14)
+                }
                 Text("Dustless")
                     .font(PanelFont.emphasis(.semibold))
                 Spacer(minLength: PanelStyle.Space.s)
@@ -108,21 +113,44 @@ struct MenuBarContent: View {
     }
 
     private var metrics: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
-                GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
-            ],
-            alignment: .leading,
-            spacing: PanelStyle.Space.s
-        ) {
-            ForEach(stats) { stat in
-                PanelStat(label: stat.label, value: stat.value)
-                    .help(stat.help ?? stat.label)
+        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
+                    GridItem(.flexible(), spacing: PanelStyle.Space.m, alignment: .leading),
+                ],
+                alignment: .leading,
+                spacing: PanelStyle.Space.s
+            ) {
+                ForEach(stats) { stat in
+                    PanelStat(label: stat.label, value: stat.value)
+                        .help(stat.help ?? stat.label)
+                }
+            }
+
+            if let consumer = topConsumer {
+                Text(consumer)
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(consumer)
+                    .accessibilityLabel(consumer)
+                    .accessibilityIdentifier("menubar.top-memory")
             }
         }
         .padding(PanelStyle.Space.m)
         .panelCard()
+        .accessibilityIdentifier("menubar.status")
+    }
+
+    private var topConsumer: String? {
+        guard store.memoryPhase == .loaded, let memory = store.memoryReport else { return nil }
+        guard let group = memory.processes.groupedByApp().first else { return nil }
+        return settings.t("menubar.topConsumer", [
+            "name": group.label,
+            "mem": ByteFormat.string(group.bytes),
+        ])
     }
 
     private struct Stat: Identifiable {
@@ -182,6 +210,25 @@ struct MenuBarContent: View {
 
     private var actions: some View {
         VStack(spacing: PanelStyle.Space.s) {
+            if let apply = store.lastApply, !store.isBusy, store.selectedFindings.isEmpty {
+                Label(
+                    settings.t("menubar.result", [
+                        "deleted": ByteFormat.string(apply.deletedBytes),
+                        "freed": ByteFormat.string(apply.volumeDelta),
+                    ]),
+                    systemImage: "checkmark.circle.fill"
+                )
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .imageScale(.small)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+                .help(settings.t("menubar.resultHelp"))
+                .accessibilityIdentifier("menubar.result")
+            }
+
             if !store.selectedFindings.isEmpty {
                 Text(settings.t("selectedLine", [
                     "count": settings.itemCount(store.selectedFindings.count),
@@ -193,64 +240,113 @@ struct MenuBarContent: View {
                 .transition(.opacity)
             }
 
-            if store.report == nil {
-                Button {
-                    Task { await store.rescan() }
-                } label: {
-                    Text(scanLabel).frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(store.isBusy)
-                .help(settings.t("rescanHelp"))
-                .transition(.opacity)
-                .accessibilityIdentifier("menubar.scan")
+            if store.isBusy {
+                busyStrip
             } else {
-                if store.selectedFindings.isEmpty {
-                    Button {
-                        leave { router.select(.cleanup) }
-                    } label: {
-                        Text(settings.t("menuPickToClean")).frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .help(settings.t("menuPickToClean"))
-                    .transition(.opacity)
-                    .accessibilityIdentifier("menubar.pick")
-                } else {
-                    Button(action: reviewAndClean) {
-                        Text(settings.t("reviewAndDelete"))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!store.canClean)
-                    .help(settings.t("reviewAndDeleteHelp"))
-                    .accessibilityLabel(settings.t("overviewReview", [
-                        "count": settings.itemCount(store.selectedFindings.count),
-                        "size": ByteFormat.string(store.selectedBytes),
-                    ]))
-                    .transition(.opacity)
-                    .accessibilityIdentifier("menubar.review")
+                primaryButton
+                if store.report != nil {
+                    rescanRow
                 }
-
-                Button {
-                    Task { await store.rescan() }
-                } label: {
-                    Label(
-                        store.isBusy ? settings.t("scanningShort") : settings.t("rescan"),
-                        systemImage: "arrow.clockwise"
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .controlSize(.large)
-                .disabled(store.isBusy)
-                .help(settings.t("rescanHelp"))
-                .accessibilityIdentifier("menubar.rescan")
             }
         }
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.selectedFindings.isEmpty)
         .animation(PanelMotion.gated(reduceMotion, PanelMotion.crossfade), value: store.report == nil)
+        .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.isBusy)
+    }
+
+    private var busyStrip: some View {
+        HStack(spacing: PanelStyle.Space.s) {
+            ProgressView()
+                .controlSize(.small)
+            Text(busyText)
+                .font(PanelFont.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .truncationMode(.tail)
+                .help(busyText)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("menubar.busy")
+    }
+
+    private var busyText: String {
+        store.busyMessage.map { settings.text($0) } ?? settings.t("scanningShort")
+    }
+
+    @ViewBuilder
+    private var primaryButton: some View {
+        if store.report == nil {
+            Button {
+                Task { await store.rescan() }
+            } label: {
+                Text(scanLabel).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .help(settings.t("rescanHelp"))
+            .transition(.opacity)
+            .accessibilityIdentifier("menubar.scan")
+        } else if !store.selectedFindings.isEmpty {
+            Button(action: reviewAndClean) {
+                Text(settings.t("reviewAndDelete"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(!store.canClean)
+            .help(settings.t("reviewAndDeleteHelp"))
+            .accessibilityLabel(settings.t("overviewReview", [
+                "count": settings.itemCount(store.selectedFindings.count),
+                "size": ByteFormat.string(store.selectedBytes),
+            ]))
+            .transition(.opacity)
+            .accessibilityIdentifier("menubar.review")
+        } else if !store.safeCleanFindings.isEmpty {
+            Button(action: quickClean) {
+                Text(settings.t("menubar.cleanSafely", [
+                    "items": settings.itemCount(store.safeCleanFindings.count),
+                    "size": ByteFormat.string(store.safeCleanBytes),
+                ]))
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(store.isBusy || store.phase != .ready)
+            .help(settings.t("menubar.cleanSafelyHelp"))
+            .accessibilityHint(settings.t("menubar.cleanSafelyHelp"))
+            .transition(.opacity)
+            .accessibilityIdentifier("menubar.quickClean")
+        } else {
+            Button {
+                leave { router.select(.cleanup) }
+            } label: {
+                Text(settings.t("menuPickToClean")).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .help(settings.t("menuPickToClean"))
+            .transition(.opacity)
+            .accessibilityIdentifier("menubar.pick")
+        }
+    }
+
+    private var rescanRow: some View {
+        Button {
+            Task { await store.rescan() }
+        } label: {
+            Label(
+                store.isBusy ? settings.t("scanningShort") : settings.t("rescan"),
+                systemImage: "arrow.clockwise"
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .controlSize(.large)
+        .disabled(store.isBusy)
+        .help(settings.t("rescanHelp"))
+        .accessibilityIdentifier("menubar.rescan")
     }
 
     private var scanLabel: String {
@@ -260,6 +356,15 @@ struct MenuBarContent: View {
 
     private func reviewAndClean() {
         leave {
+            router.select(.cleanup)
+            store.showingConfirmation = true
+        }
+    }
+
+    private func quickClean() {
+        leave {
+            store.tierTab = .safe
+            store.selectQuickClean()
             router.select(.cleanup)
             store.showingConfirmation = true
         }

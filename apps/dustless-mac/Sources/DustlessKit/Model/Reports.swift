@@ -137,6 +137,10 @@ public struct ScanReport: Codable, Sendable {
     }
 
     public var initialSelection: Set<String> { [] }
+
+    public func quickCleanFindings() -> [Finding] {
+        findings.filter { $0.effectiveTier == .green && $0.isDeletableByEngine }
+    }
 }
 
 public enum UnscannableText {

@@ -123,14 +123,33 @@ struct OverviewView: View {
                 .accessibilityIdentifier("overview.scan")
             }
         } else if store.selectedFindings.isEmpty {
-            Button {
-                router.select(.cleanup)
-            } label: {
-                Text(settings.t("menuPickToClean"))
+            if store.safeCleanFindings.isEmpty {
+                Button {
+                    router.select(.cleanup)
+                } label: {
+                    Text(settings.t("menuPickToClean"))
+                }
+                .buttonStyle(.borderedProminent)
+                .help(settings.t("menuPickToClean"))
+                .accessibilityIdentifier("overview.pick")
+            } else {
+                Button {
+                    store.tierTab = .safe
+                    store.selectQuickClean()
+                    router.select(.cleanup)
+                    store.showingConfirmation = true
+                } label: {
+                    Text(settings.t("menubar.cleanSafely", [
+                        "items": settings.itemCount(store.safeCleanFindings.count),
+                        "size": ByteFormat.string(store.safeCleanBytes),
+                    ]))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.isBusy || store.phase != .ready)
+                .help(settings.t("menubar.cleanSafelyHelp"))
+                .accessibilityHint(settings.t("menubar.cleanSafelyHelp"))
+                .accessibilityIdentifier("overview.cleanSafely")
             }
-            .buttonStyle(.borderedProminent)
-            .help(settings.t("menuPickToClean"))
-            .accessibilityIdentifier("overview.pick")
         } else {
             Button {
                 router.select(.cleanup)

@@ -143,7 +143,7 @@ struct UninstallConfirmationSheet: View {
                     }
                     .accessibilityIdentifier("storage.uninstall.confirm")
                 } else {
-                    Button {
+                    Button(role: .destructive) {
                         onConfirm(false)
                     } label: {
                         Text(settings.t("appsMoveToTrash"))

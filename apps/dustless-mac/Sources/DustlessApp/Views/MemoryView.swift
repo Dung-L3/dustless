@@ -73,14 +73,14 @@ struct MemoryView: View {
             processList(groups, summary: countSummary(groups: groups, matched: matched))
         }
         .confirmationDialog(
-            settings.t("memoryStopConfirmTitle"),
+            stopTitle,
             isPresented: Binding(
                 get: { pendingStop != nil },
                 set: { if !$0 { pendingStop = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button(settings.t("memoryStopConfirmAction"), role: .destructive) {
+            Button(stopActionLabel, role: .destructive) {
                 guard let pending = pendingStop else { return }
                 pendingStop = nil
                 killProcess(pid: pending.pid, force: pending.force, sigkill: pending.sigkill)
@@ -94,9 +94,22 @@ struct MemoryView: View {
         .accessibilityIdentifier("memory.stop.confirm")
     }
 
+    private var stopTitle: String {
+        guard let pending = pendingStop else { return "" }
+        return settings.t(pending.sigkill ? "memoryForceStopTitle" : "memoryStopConfirmTitle")
+    }
+
+    private var stopActionLabel: String {
+        guard let pending = pendingStop else { return "" }
+        return settings.t(pending.sigkill ? "memoryForceStopAction" : "memoryStopConfirmAction")
+    }
+
     private var stopMessage: String {
         guard let pending = pendingStop else { return "" }
-        return settings.t("memoryStopConfirmBody", ["name": pending.name, "pid": "\(pending.pid)"])
+        return settings.t(
+            pending.sigkill ? "memoryForceStopBody" : "memoryStopConfirmBody",
+            ["name": pending.name, "pid": "\(pending.pid)"]
+        )
     }
 
     private func countSummary(groups: [ProcessGroup], matched: [ProcessGroup]) -> String? {
