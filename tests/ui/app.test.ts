@@ -202,6 +202,28 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     );
   });
 
+  test("brings the main window back when the popover starts a cleanup", async () => {
+    await withApp(
+      "menubar-closed-window",
+      {},
+      async (app) => {
+        await app.closeWindow();
+        await app.openMenuBar();
+        await app.find("menubar.quickClean", 20_000);
+        await app.press("menubar.quickClean");
+        await app.find("confirm.delete");
+        await app.press("confirm.cancel");
+        await app.waitGone("confirm.cancel");
+
+        await app.closeWindow();
+        await app.openMenuBar();
+        await app.press("menubar.module.memory");
+        await app.find("memory.header");
+      },
+      seedCleanup,
+    );
+  });
+
   test("persists a setting in the isolated preferences file", async () => {
     await withApp("settings", { language: "en" }, async (app) => {
       await app.press("toolbar.settings");

@@ -368,6 +368,10 @@ export class UiApp {
     await this.driver(["menubar"]);
   }
 
+  async closeWindow(): Promise<void> {
+    await this.driver(["close-window"]);
+  }
+
   async waitGone(identifier: string, timeout = 10_000): Promise<void> {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
