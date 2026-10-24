@@ -293,7 +293,7 @@ struct MemoryView: View {
         HStack(spacing: PanelStyle.Space.s) {
             groupIcon(group)
 
-            Text(displayName(group))
+            Text(group.displayName)
                 .font(PanelFont.emphasis(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -361,12 +361,6 @@ struct MemoryView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
             quitResults[group.id] = nil
         }
-    }
-
-    private func displayName(_ group: ProcessGroup) -> String {
-        guard group.bundlePath == nil, group.label.contains("/") else { return group.label }
-        let name = (group.label as NSString).lastPathComponent
-        return name.isEmpty ? group.label : name
     }
 
     private func groupCategory(_ group: ProcessGroup) -> MemCategory? {
