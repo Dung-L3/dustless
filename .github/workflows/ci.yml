@@ -141,6 +141,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run test:ui
+      - name: Upload the app screenshots and the AX dumps
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui
+          path: artifacts/ui
+          if-no-files-found: ignore
+          retention-days: 14
 
   ui-render:
     name: ui-render (macos)
