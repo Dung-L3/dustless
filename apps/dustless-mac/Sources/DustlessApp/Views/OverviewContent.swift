@@ -243,9 +243,9 @@ struct OverviewContent: View {
 
     private var airDropLine: String {
         switch net.awdl.state {
-        case .on: settings.t("awdlOn")
-        case .off: settings.t("awdlOff")
-        default: settings.t("awdlUnknown")
+        case .on: settings.t("awdlOnShort")
+        case .off: settings.t("awdlOffShort")
+        default: settings.t("awdlUnknownShort")
         }
     }
 }

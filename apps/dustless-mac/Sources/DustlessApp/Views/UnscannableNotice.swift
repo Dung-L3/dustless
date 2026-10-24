@@ -35,7 +35,9 @@ struct UnscannableNotice: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
                                 .accessibilityLabel(headline(summary))
-                            reasonLines
+                            if !compact {
+                                reasonLines
+                            }
                         }
                         Spacer(minLength: 0)
                     }
@@ -44,7 +46,8 @@ struct UnscannableNotice: View {
             .padding(compact ? 0 : PanelStyle.Space.m)
             .background(compact ? Color.clear : PanelStyle.rowFill, in: .rect(cornerRadius: PanelStyle.radius))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .help(headline(summary))
+            .help(compact && !reasonText.isEmpty ? "\(headline(summary)) · \(reasonText)" : headline(summary))
+            .accessibilityHint(compact ? reasonText : "")
             .axID(identifier)
         }
     }
@@ -80,6 +83,16 @@ struct UnscannableNotice: View {
             parts.append((reason: reason, count: count))
         }
         return parts
+    }
+
+    private var reasonText: String {
+        counts.map { part in
+            settings.t("scan.unscannable.reasonLine", [
+                "reason": UnscannableText.reasonLabel(part.reason, lang: settings.language),
+                "count": "\(part.count)",
+            ])
+        }
+        .joined(separator: " · ")
     }
 
     private var reasonLines: some View {

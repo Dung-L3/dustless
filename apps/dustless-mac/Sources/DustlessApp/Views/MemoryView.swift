@@ -51,6 +51,7 @@ struct MemoryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var killResults: [Int: KillStatus] = [:]
+    @State private var quitResults: [String: Bool] = [:]
     @State private var pendingStop: PendingStop?
     @State private var isStopping = false
     @State private var collapsed: Set<String>?
@@ -267,6 +268,9 @@ struct MemoryView: View {
             set: { setExpanded($0, for: group) }
         )) {
             VStack(alignment: .leading, spacing: 2) {
+                if let target = AppQuit.target(for: group) {
+                    quitRow(group, target: target)
+                }
                 ForEach(group.processes) { proc in
                     processRow(proc)
                 }
@@ -289,11 +293,12 @@ struct MemoryView: View {
         HStack(spacing: PanelStyle.Space.s) {
             groupIcon(group)
 
-            Text(group.label)
+            Text(displayName(group))
                 .font(PanelFont.emphasis(.semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .help(group.bundlePath ?? group.id)
+                .help(group.bundlePath ?? group.label)
+                .accessibilityHint(group.label)
 
             if let category = groupCategory(group) {
                 StatusChip(
@@ -320,6 +325,48 @@ struct MemoryView: View {
         .help(settings.t(isOpen ? "collapseGroup" : "expandGroup"))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("memory.group.\(group.id)")
+    }
+
+    private func quitRow(_ group: ProcessGroup, target: AppQuit.Target) -> some View {
+        HStack(spacing: PanelStyle.Space.s) {
+            if let ok = quitResults[group.id] {
+                Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ok ? .green : .red)
+                Text(settings.t(ok ? "memoryQuitAsked" : "memoryQuitFailed", ["name": target.name]))
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } else {
+                Button {
+                    askToQuit(group, target: target)
+                } label: {
+                    Label(settings.t("memoryQuitApp"), systemImage: "rectangle.portrait.and.arrow.right")
+                        .font(PanelFont.caption)
+                }
+                .controlSize(.small)
+                .help(settings.t("memoryQuitHelp", ["name": target.name]))
+                .accessibilityLabel(settings.t("memoryQuitHelp", ["name": target.name]))
+                .accessibilityIdentifier("memory.quit.\(group.id)")
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func askToQuit(_ group: ProcessGroup, target: AppQuit.Target) {
+        let ok = AppQuit.requestQuit(target)
+        quitResults[group.id] = ok
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            quitResults[group.id] = nil
+        }
+    }
+
+    private func displayName(_ group: ProcessGroup) -> String {
+        guard group.bundlePath == nil, group.label.contains("/") else { return group.label }
+        let name = (group.label as NSString).lastPathComponent
+        return name.isEmpty ? group.label : name
     }
 
     private func groupCategory(_ group: ProcessGroup) -> MemCategory? {
