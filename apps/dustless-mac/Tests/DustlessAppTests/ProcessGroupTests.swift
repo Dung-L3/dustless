@@ -18,6 +18,20 @@ struct ProcessGroupTests {
         #expect(group.bytes == 150)
     }
 
+    @Test func theDisplayNameShowsTheLastPathComponentWithoutABundle() throws {
+        let groups = try [process(command: "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices -x")]
+            .groupedByApp()
+        let group = try #require(groups.first)
+        #expect(group.label.hasPrefix("/System/Library"), "the label stays the full path")
+        #expect(group.displayName == "CoreServices")
+    }
+
+    @Test func theDisplayNameKeepsABundleName() throws {
+        let groups = try [process(command: "/Applications/Safari.app/Contents/MacOS/Safari")]
+            .groupedByApp()
+        #expect(groups.first?.displayName == "Safari")
+    }
+
     @Test func bundleNamesMayContainSpaces() throws {
         let groups = try [process(command: "/Users/me/Apps/My Cool App.app/Contents/MacOS/cool")]
             .groupedByApp()

@@ -43,7 +43,7 @@ struct MenuBarStatusCard: View {
         guard store.memoryPhase == .loaded, let memory = store.memoryReport else { return nil }
         guard let group = memory.processes.groupedByApp().first else { return nil }
         return settings.t("menubar.topConsumer", [
-            "name": group.label,
+            "name": group.displayName,
             "mem": ByteFormat.string(group.bytes),
         ])
     }

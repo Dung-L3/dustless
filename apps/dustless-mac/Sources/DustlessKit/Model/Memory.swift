@@ -112,6 +112,12 @@ public struct ProcessGroup: Identifiable, Sendable {
 }
 
 extension ProcessGroup {
+    public var displayName: String {
+        guard bundlePath == nil else { return label }
+        let name = (label as NSString).lastPathComponent
+        return name.isEmpty ? label : name
+    }
+
     public func matches(_ needle: String) -> Bool {
         guard !needle.isEmpty else { return true }
         if label.lowercased().contains(needle) { return true }
