@@ -225,12 +225,16 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await capture(app, "acceptance-confirm");
       await app.press("confirm.cancel");
       await app.waitGone("confirm.cancel");
-      await app.press("sidebar.module.memory");
+    }, seedCleanup);
+
+    await withApp("acceptance-memory", {}, async (app) => {
+      await app.find("overview.hero", 20_000);
+      await app.openMenuBar();
+      await app.find("menubar.module.memory", 20_000);
+      await app.press("menubar.module.memory");
       await app.find("memory.header");
+      await Bun.sleep(400);
       await capture(app, "acceptance-memory");
-      await app.press("sidebar.module.storage");
-      await app.find("storage.header");
-      await capture(app, "acceptance-storage");
     }, seedCleanup);
 
     await withApp("acceptance-vi", { language: "vi" }, async (app) => {
@@ -349,7 +353,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.find("cleanup.selectAll");
         await app.press("cleanup.selectAll");
         const selected = await app.find("cleanup.selected");
-        expect(String(selected.value ?? "")).toMatch(/^2 selected\b/);
+        expect(String(selected.value ?? "")).toMatch(/^2 items selected\b/);
         await app.press("cleanup.review");
         await app.find("confirm.cancel");
         await app.screenshot("cleanup-confirm");
@@ -368,7 +372,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.find("cleanup.selectAll");
         await app.press("cleanup.selectAll");
         const selectedAgain = await app.find("cleanup.selected");
-        expect(String(selectedAgain.value ?? "")).toMatch(/^2 selected\b/);
+        expect(String(selectedAgain.value ?? "")).toMatch(/^2 items selected\b/);
         const immutable = join(fail, "keep.bin");
         const flag = Bun.spawnSync(["chflags", "uchg", immutable]);
         if (flag.exitCode !== 0) throw new Error(`chflags failed: ${flag.stderr.toString()}`);
