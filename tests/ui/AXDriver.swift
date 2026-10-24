@@ -215,12 +215,14 @@ func click(_ element: AXUIElement, pid: pid_t) {
     guard let (point, size) = frame(element) else { fail("element has no frame") }
     let target = CGPoint(x: point.x + size.width / 2, y: point.y + size.height / 2)
     guard let windows = attribute(AXUIElementCreateApplication(pid), kAXWindowsAttribute as String) as? [AXUIElement],
-          let window = windows.first,
-          let (windowPoint, windowSize) = frame(window) else {
+          !windows.isEmpty else {
         fail("test app has no window; refusing to click")
     }
-    let inside = target.x >= windowPoint.x && target.x <= windowPoint.x + windowSize.width
-        && target.y >= windowPoint.y && target.y <= windowPoint.y + windowSize.height
+    let inside = windows.contains { window in
+        guard let (windowPoint, windowSize) = frame(window) else { return false }
+        return target.x >= windowPoint.x && target.x <= windowPoint.x + windowSize.width
+            && target.y >= windowPoint.y && target.y <= windowPoint.y + windowSize.height
+    }
     guard inside else { fail("target is outside the test app window; refusing to click") }
     guard windowOwner(at: target) == pid else {
         fail("another window is above the click target; refusing to click")
