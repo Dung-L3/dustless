@@ -214,13 +214,24 @@ func windowOwner(at point: CGPoint) -> pid_t? {
 func click(_ element: AXUIElement, pid: pid_t) {
     guard let (point, size) = frame(element) else { fail("element has no frame") }
     let target = CGPoint(x: point.x + size.width / 2, y: point.y + size.height / 2)
-    guard let windows = attribute(AXUIElementCreateApplication(pid), kAXWindowsAttribute as String) as? [AXUIElement],
-          let window = windows.first,
-          let (windowPoint, windowSize) = frame(window) else {
+    activate(pid)
+    let app = AXUIElementCreateApplication(pid)
+    raiseWindow(app)
+    guard let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement],
+          !windows.isEmpty else {
         fail("test app has no window; refusing to click")
     }
-    let inside = target.x >= windowPoint.x && target.x <= windowPoint.x + windowSize.width
-        && target.y >= windowPoint.y && target.y <= windowPoint.y + windowSize.height
+    func contains(_ window: AXUIElement) -> Bool {
+        guard let (windowPoint, windowSize) = frame(window) else { return false }
+        return target.x >= windowPoint.x && target.x <= windowPoint.x + windowSize.width
+            && target.y >= windowPoint.y && target.y <= windowPoint.y + windowSize.height
+    }
+    var inside = windows.contains(where: contains)
+    if !inside {
+        usleep(250_000)
+        let retry = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
+        inside = retry.contains(where: contains)
+    }
     guard inside else { fail("target is outside the test app window; refusing to click") }
     guard windowOwner(at: target) == pid else {
         fail("another window is above the click target; refusing to click")
