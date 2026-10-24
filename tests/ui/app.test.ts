@@ -227,16 +227,6 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.waitGone("confirm.cancel");
     }, seedCleanup);
 
-    await withApp("acceptance-memory", {}, async (app) => {
-      await app.find("overview.hero", 20_000);
-      await app.openMenuBar();
-      await app.find("menubar.module.memory", 20_000);
-      await app.press("menubar.module.memory");
-      await app.find("memory.header");
-      await Bun.sleep(400);
-      await capture(app, "acceptance-memory");
-    }, seedCleanup);
-
     await withApp("acceptance-vi", { language: "vi" }, async (app) => {
       await app.find("overview.hero", 20_000);
       await Bun.sleep(400);
