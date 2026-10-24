@@ -159,10 +159,47 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.openMenuBar();
       await app.find("menubar.open");
       expect(await app.exists("menubar.module.storage")).toBe(true);
+      expect(await app.exists("menubar.status")).toBe(true);
+      expect(await app.exists("menubar.busy")).toBe(false);
       await app.screenshot("menubar-open");
       await app.press("menubar.module.storage");
       await app.find("storage.header");
     });
+  });
+
+  test("runs a quick clean from the menu bar popover", async () => {
+    await withApp(
+      "menubar-quickclean",
+      {},
+      async (app) => {
+        const green = join(app.home, ".dustless-e2e", "green");
+        const fail = join(app.home, ".dustless-e2e", "fail");
+        await app.openMenuBar();
+        await app.find("menubar.quickClean", 20_000);
+        expect(await app.exists("menubar.result")).toBe(false);
+        await app.screenshot("menubar-quickclean");
+        await app.press("menubar.quickClean");
+        await app.find("confirm.delete");
+        await app.press("confirm.cancel");
+        await app.waitGone("confirm.cancel");
+        expect(await exists(green)).toBe(true);
+        expect(await exists(fail)).toBe(true);
+        expect(await app.engineLog()).not.toContain("apply --json");
+
+        await app.openMenuBar();
+        await app.find("menubar.review");
+        await app.press("menubar.review");
+        await app.find("confirm.delete");
+        await app.press("confirm.delete");
+        await app.find("cleanup.result.counts", 30_000);
+        const counts = await app.find("cleanup.result.counts");
+        expect(String(counts.value ?? "")).toBe("2 deleted · 1 skipped · 0 failed");
+        expect(await exists(green)).toBe(false);
+        expect(await exists(fail)).toBe(false);
+        await app.screenshot("menubar-quickclean-result");
+      },
+      seedCleanup,
+    );
   });
 
   test("persists a setting in the isolated preferences file", async () => {
