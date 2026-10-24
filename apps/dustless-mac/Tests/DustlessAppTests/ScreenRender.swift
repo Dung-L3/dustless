@@ -343,8 +343,7 @@ enum ScreenRender {
         named name: String,
         width: CGFloat,
         height: CGFloat? = nil
-    ) throws -> URL {
-        let renderer = ImageRenderer(
+    ) throws -> URL {        let renderer = ImageRenderer(
             content: view
                 .frame(width: width, height: height)
                 .environment(\.colorScheme, .light)
@@ -355,6 +354,55 @@ enum ScreenRender {
               let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
               let png = bitmap.representation(using: .png, properties: [:]) else {
+            throw Failure.notRendered(name)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(name).png")
+        try png.write(to: url)
+        return url
+    }
+
+    static func writeHosted(
+        _ view: some View,
+        named name: String,
+        width: CGFloat,
+        height: CGFloat
+    ) throws -> URL {
+        let size = NSSize(width: width, height: height)
+        let hosting = NSHostingView(rootView: view.frame(width: width, height: height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.layoutIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        hosting.displayIfNeeded()
+        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            throw Failure.notRendered(name)
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        guard let captured = bitmap.cgImage else { throw Failure.notRendered(name) }
+        let width = captured.width
+        let height = captured.height
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { throw Failure.notRendered(name) }
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(captured, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let opaque = context.makeImage() else { throw Failure.notRendered(name) }
+        guard let png = NSBitmapImageRep(cgImage: opaque).representation(using: .png, properties: [:]) else {
             throw Failure.notRendered(name)
         }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -377,11 +425,23 @@ enum ScreenRender {
         return try buffer(of: image, named: url.lastPathComponent)
     }
 
+    static func bufferDirect(at url: URL) throws -> Pixels {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw Failure.unreadable(url.lastPathComponent)
+        }
+        return try buffer(of: image, named: url.lastPathComponent)
+    }
+
     static func buffer(of image: NSImage, named name: String) throws -> Pixels {
         var rect = CGRect(origin: .zero, size: image.size)
         guard let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
             throw Failure.unreadable(name)
         }
+        return try buffer(of: cgImage, named: name)
+    }
+
+    static func buffer(of cgImage: CGImage, named name: String) throws -> Pixels {
         let width = cgImage.width
         let height = cgImage.height
         var raw = [UInt8](repeating: 0, count: width * height * 4)
