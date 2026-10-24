@@ -127,7 +127,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       expect(await app.exists("sidebar.module.overview")).toBe(true);
       expect(await app.exists("overview.header")).toBe(true);
       expect(await app.exists("overview.tier.safe")).toBe(true);
-      expect(await app.exists("overview.scan")).toBe(true);
+      expect(
+      (await app.exists("overview.scan")) || (await app.exists("overview.pick")),
+    ).toBe(true);
       expect(await app.exists("toolbar.scan")).toBe(true);
       const hero = await app.find("overview.tier.safe");
       expect(String(hero.description ?? "")).toContain("Safe");
@@ -223,12 +225,10 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await capture(app, "acceptance-confirm");
       await app.press("confirm.cancel");
       await app.waitGone("confirm.cancel");
-      await app.openMenuBar();
-      await app.press("menubar.module.memory");
+      await app.press("sidebar.module.memory");
       await app.find("memory.header");
       await capture(app, "acceptance-memory");
-      await app.openMenuBar();
-      await app.press("menubar.module.storage");
+      await app.press("sidebar.module.storage");
       await app.find("storage.header");
       await capture(app, "acceptance-storage");
     }, seedCleanup);

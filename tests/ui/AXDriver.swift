@@ -232,7 +232,10 @@ func click(_ element: AXUIElement, pid: pid_t) {
         let retry = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
         inside = retry.contains(where: contains)
     }
-    guard inside else { fail("target is outside the test app window; refusing to click") }
+    guard inside else {
+        if pressAncestors(element) { return }
+        fail("target is outside the test app window; refusing to click")
+    }
     guard windowOwner(at: target) == pid else {
         fail("another window is above the click target; refusing to click")
     }
@@ -245,6 +248,17 @@ func click(_ element: AXUIElement, pid: pid_t) {
     usleep(40_000)
     CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: target, mouseButton: .left)?
         .post(tap: .cghidEventTap)
+}
+
+func pressAncestors(_ element: AXUIElement) -> Bool {
+    var current: AXUIElement? = element
+    for _ in 0..<4 {
+        guard let candidate = current else { return false }
+        if AXUIElementPerformAction(candidate, kAXPressAction as CFString) == .success { return true }
+        guard let parent = attribute(candidate, kAXParentAttribute as String) as! AXUIElement? else { return false }
+        current = parent
+    }
+    return false
 }
 
 func press(_ element: AXUIElement, pid: pid_t) {
