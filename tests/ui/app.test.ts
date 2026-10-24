@@ -180,15 +180,15 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.screenshot("menubar-quickclean");
         await app.press("menubar.quickClean");
         await app.find("confirm.delete");
+        await app.find("confirm.total");
         await app.press("confirm.cancel");
         await app.waitGone("confirm.cancel");
         expect(await exists(green)).toBe(true);
         expect(await exists(fail)).toBe(true);
         expect(await app.engineLog()).not.toContain("apply --json");
 
-        await app.openMenuBar();
-        await app.find("menubar.review");
-        await app.press("menubar.review");
+        await app.find("cleanup.review");
+        await app.press("cleanup.review");
         await app.find("confirm.delete");
         await app.press("confirm.delete");
         await app.find("cleanup.result.counts", 30_000);
