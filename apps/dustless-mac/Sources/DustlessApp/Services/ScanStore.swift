@@ -98,6 +98,20 @@ final class ScanStore: ObservableObject {
 
     var isBusy: Bool { phase == .scanning || phase == .resolvingEngine }
 
+    var safeCleanFindings: [Finding] {
+        guard let report else { return [] }
+        return report.quickCleanFindings()
+    }
+
+    var safeCleanBytes: UInt64 {
+        safeCleanFindings.reduce(0) { $0 + $1.bytes }
+    }
+
+    func selectQuickClean() {
+        guard report != nil, phase == .ready else { return }
+        selection.formUnion(safeCleanFindings.map(\.id))
+    }
+
     var selectedFindings: [Finding] {
         guard let report else { return [] }
         return report.deletable.filter { selection.contains($0.id) }
