@@ -152,6 +152,23 @@ struct SourceContractTests {
         )
     }
 
+    @Test func everyPopoverNavigationOpensTheWindow() throws {
+        let file = viewsDirectory.appendingPathComponent("MenuBarContent.swift")
+        let all = try lines(of: file)
+        var offenders: [Int] = []
+        for (index, line) in all.enumerated() {
+            guard line.contains("router.select(") || line.contains("showingConfirmation = true") else { continue }
+            let window = all[max(0, index - 8)..<index]
+            if !window.contains(where: { $0.contains("onOpenWindow()") }) {
+                offenders.append(index + 1)
+            }
+        }
+        #expect(
+            offenders.isEmpty,
+            "a popover action changes the module or asks for the confirmation without opening the main window, lines \(offenders)"
+        )
+    }
+
     @Test func noViewRendersAReasonCodeDirectly() throws {
         var offenders: [String] = []
         for file in try sourceFiles() {
