@@ -274,6 +274,9 @@ export class UiApp {
     this.captureOutput();
     try {
       await this.find("toolbar.scan", 30_000);
+      await this.find("overview.header", 30_000);
+      await this.find("sidebar.module.overview", 30_000);
+      await Bun.sleep(600);
     } catch (error) {
       throw new Error(
         `DustlessE2E did not show its window (pid ${this.pid}).\n` +

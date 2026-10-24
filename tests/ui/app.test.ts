@@ -212,7 +212,8 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.dump(name).catch(() => {});
     };
     await withApp("acceptance-en", {}, async (app) => {
-      await app.find("overview.header");
+      await app.find("overview.hero", 20_000);
+      await Bun.sleep(400);
       await capture(app, "acceptance-overview");
       await app.openMenuBar();
       await app.find("menubar.status");
@@ -233,7 +234,8 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     }, seedCleanup);
 
     await withApp("acceptance-vi", { language: "vi" }, async (app) => {
-      await app.find("overview.header");
+      await app.find("overview.hero", 20_000);
+      await Bun.sleep(400);
       await capture(app, "acceptance-overview-vi");
       await app.openMenuBar();
       await app.find("menubar.status");
