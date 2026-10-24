@@ -202,6 +202,45 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     );
   });
 
+  test("captures the acceptance screens from the running app", async () => {
+    const capture = async (app: UiApp, name: string) => {
+      try {
+        await app.screenshot(name);
+      } catch (error) {
+        console.log(`screenshot ${name} unavailable: ${String(error)}`);
+      }
+      await app.dump(name).catch(() => {});
+    };
+    await withApp("acceptance-en", {}, async (app) => {
+      await app.find("overview.header");
+      await capture(app, "acceptance-overview");
+      await app.openMenuBar();
+      await app.find("menubar.status");
+      await capture(app, "acceptance-popover");
+      await app.press("menubar.quickClean");
+      await app.find("confirm.delete");
+      await capture(app, "acceptance-confirm");
+      await app.press("confirm.cancel");
+      await app.waitGone("confirm.cancel");
+      await app.openMenuBar();
+      await app.press("menubar.module.memory");
+      await app.find("memory.header");
+      await capture(app, "acceptance-memory");
+      await app.openMenuBar();
+      await app.press("menubar.module.storage");
+      await app.find("storage.header");
+      await capture(app, "acceptance-storage");
+    }, seedCleanup);
+
+    await withApp("acceptance-vi", { language: "vi" }, async (app) => {
+      await app.find("overview.header");
+      await capture(app, "acceptance-overview-vi");
+      await app.openMenuBar();
+      await app.find("menubar.status");
+      await capture(app, "acceptance-popover-vi");
+    }, seedCleanup);
+  });
+
   test("persists a setting in the isolated preferences file", async () => {
     await withApp("settings", { language: "en" }, async (app) => {
       await app.press("toolbar.settings");
