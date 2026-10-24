@@ -230,7 +230,10 @@ struct MenuBarContent: View {
             .accessibilityIdentifier("menubar.quickClean")
         } else {
             Button {
-                leave { router.select(.cleanup) }
+                leave {
+                    onOpenWindow()
+                    router.select(.cleanup)
+                }
             } label: {
                 Text(settings.t("menuPickToClean")).frame(maxWidth: .infinity)
             }
@@ -265,6 +268,7 @@ struct MenuBarContent: View {
 
     private func reviewAndClean() {
         leave {
+            onOpenWindow()
             router.select(.cleanup)
             store.showingConfirmation = true
         }
@@ -272,6 +276,7 @@ struct MenuBarContent: View {
 
     private func quickClean() {
         leave {
+            onOpenWindow()
             store.tierTab = .safe
             store.selectQuickClean()
             router.select(.cleanup)
@@ -290,7 +295,10 @@ struct MenuBarContent: View {
     private func destinationRow(_ module: Module) -> some View {
         let title = settings.t(module.titleKey)
         return Button {
-            leave { router.select(module) }
+            leave {
+                onOpenWindow()
+                router.select(module)
+            }
         } label: {
             HStack(spacing: PanelStyle.Space.s) {
                 Image(systemName: module.symbolName)
