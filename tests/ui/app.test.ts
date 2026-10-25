@@ -116,7 +116,19 @@ int main(void) {
   }
   const child = spawn(binary, [], { stdio: "ignore" });
   const canary = spawn(binary, [], { stdio: "ignore" });
-  return { child, canary, root, binary };
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (child.pid && canary.pid && processAlive(child.pid) && processAlive(canary.pid)) {
+      return { child, canary, root, binary };
+    }
+    await Bun.sleep(50);
+  }
+  if (child.pid) child.kill("SIGKILL");
+  if (canary.pid) canary.kill("SIGKILL");
+  await rm(root, { recursive: true, force: true });
+  throw new Error(
+    `memory fixture did not reach a running state (child ${child.pid ?? "-"}, canary ${canary.pid ?? "-"})`,
+  );
 }
 
 describe.skipIf(!testApp)("Dustless macOS UI", () => {
@@ -403,7 +415,6 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
   test("stops only the sandboxed fixture process", async () => {
     const fixture = await startMemoryFixture();
     try {
-      await Bun.sleep(750);
       await withApp("memory", {}, async (app) => {
         expect(fixture.child.pid).toBeGreaterThan(0);
         expect(fixture.canary.pid).toBeGreaterThan(0);
