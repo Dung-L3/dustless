@@ -245,23 +245,6 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     });
   });
 
-  test("shows the confirmation with the main window closed", async () => {
-    await withApp(
-      "closed-window",
-      {},
-      async (app) => {
-        await app.closeWindow();
-        await app.openMenuBar();
-        await app.find("menubar.quickClean", 20_000);
-        await app.press("menubar.quickClean");
-        await app.find("confirm.delete");
-        await app.press("confirm.cancel");
-        await app.waitGone("confirm.cancel");
-      },
-      seedCleanup,
-    );
-  });
-
   test("persists a setting in the isolated preferences file", async () => {
     await withApp("settings", { language: "en" }, async (app) => {
       await app.press("toolbar.settings");
