@@ -29,6 +29,7 @@ struct StorageView: View {
         .task {
             await store.ensureStorageVolumes()
             await store.ensureStorageApps()
+            await store.ensureStorageFiles()
         }
         .sheet(item: $control.sheet, onDismiss: { control.presentNext() }) { item in
             sheetContent(item)
