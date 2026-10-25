@@ -271,6 +271,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     await withApp("network", { intercepted: "both" }, async (app) => {
       await app.pressMenuItem("Network");
       await app.find("network.header");
+      await app.press("network.advanced");
       await app.find("network.run.reset-dns");
       expect(await app.exists("network.remembered")).toBe(true);
       await app.waitForEngineLog((line) => line.includes("net --advanced"));
@@ -301,6 +302,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
         const large = join(app.home, "Downloads", "e2e-large.bin");
         const trash = join(app.home, ".Trash", "e2e-large.bin");
+        await seedStorage(app);
         await seedLargeFile(app);
         await app.pressMenuItem("Storage");
         await app.find("storage.header");
@@ -408,6 +410,8 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.find(`memory.group.${fixture.binary}`, 20_000);
         await app.find(`memory.stop.${fixture.child.pid}`, 20_000);
         await app.press(`memory.stop.${fixture.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
         const deadline = Date.now() + 10_000;
         while (processAlive(fixture.child.pid!) && Date.now() < deadline) await Bun.sleep(100);
         expect(processAlive(fixture.child.pid!)).toBe(false);
