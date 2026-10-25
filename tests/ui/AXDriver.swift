@@ -274,10 +274,9 @@ func pressAncestors(_ element: AXUIElement) -> Bool {
 }
 
 func press(_ element: AXUIElement, pid: pid_t) {
-    let error = AXUIElementPerformAction(element, kAXPressAction as CFString)
-    if error != .success {
-        click(element, pid: pid)
-    }
+    if AXUIElementPerformAction(element, kAXPressAction as CFString) == .success { return }
+    if pressAncestors(element) { return }
+    click(element, pid: pid)
 }
 
 func keyCode(_ key: String) -> CGKeyCode? {
