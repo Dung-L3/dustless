@@ -367,6 +367,10 @@ export class UiApp {
     await this.driver(["menu", "--item", item]);
   }
 
+  async closeWindow(): Promise<void> {
+    await this.driver(["close-window"]);
+  }
+
   async openMenuBar(): Promise<void> {
     await this.driver(["menubar"]);
   }
