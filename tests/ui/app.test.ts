@@ -304,10 +304,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
         const large = join(app.home, "Downloads", "e2e-large.bin");
         const trash = join(app.home, ".Trash", "e2e-large.bin");
-        await seedStorage(app);
-        await seedLargeFile(app);
         await app.pressMenuItem("Storage");
         await app.find("storage.header");
+        await app.press("storage.advanced");
         await app.find("storage.app.uninstall.dev.dustless.e2e.toy");
         await app.press("storage.app.uninstall.dev.dustless.e2e.toy");
         await app.find("storage.uninstall.cancel");
@@ -339,7 +338,10 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         expect(await exists(trash)).toBe(true);
         await app.screenshot("storage");
       },
-      seedStorage,
+      async (app) => {
+        await seedStorage(app);
+        await seedLargeFile(app);
+      },
     );
   });
 

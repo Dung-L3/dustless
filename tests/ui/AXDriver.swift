@@ -212,7 +212,10 @@ func windowOwner(at point: CGPoint) -> pid_t? {
 }
 
 func click(_ element: AXUIElement, pid: pid_t) {
-    guard let (point, size) = frame(element) else { fail("element has no frame") }
+    guard let (point, size) = frame(element) else {
+        if pressAncestors(element) { return }
+        fail("element has no frame")
+    }
     let target = CGPoint(x: point.x + size.width / 2, y: point.y + size.height / 2)
     activate(pid)
     let app = AXUIElementCreateApplication(pid)
