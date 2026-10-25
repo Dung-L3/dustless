@@ -276,6 +276,8 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       expect(await app.exists("network.remembered")).toBe(true);
       await app.waitForEngineLog((line) => line.includes("net --advanced"));
       await app.press("network.run.reset-dns");
+      await app.find("network.advanced.confirm");
+      await app.press("network.advanced.confirm");
       await app.find("network.outcome.reset-dns", 20_000);
       await app.waitForEngineLog((line) => line.includes("net --reset-dns"));
       const outcome = await app.find("network.outcome.reset-dns");
