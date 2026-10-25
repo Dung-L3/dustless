@@ -140,7 +140,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
 
   test("navigates modules through the sidebar and Go menu", async () => {
     await withApp("navigation", {}, async (app) => {
-      await app.click("sidebar.module.storage");
+      await app.pressMenuItem("Storage");
       await app.find("storage.header");
       await app.pressMenuItem("Memory");
       await app.find("memory.header");
@@ -286,7 +286,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
 
   test("runs network and AirDrop actions through the injected engine", async () => {
     await withApp("network", { intercepted: "both" }, async (app) => {
-      await app.click("sidebar.module.network");
+      await app.pressMenuItem("Network");
       await app.find("network.header");
       await app.find("network.run.reset-dns");
       expect(await app.exists("network.remembered")).toBe(true);
@@ -319,7 +319,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         const large = join(app.home, "Downloads", "e2e-large.bin");
         const trash = join(app.home, ".Trash", "e2e-large.bin");
         await seedLargeFile(app);
-        await app.click("sidebar.module.storage");
+        await app.pressMenuItem("Storage");
         await app.find("storage.header");
         await app.find("storage.app.uninstall.dev.dustless.e2e.toy");
         await app.press("storage.app.uninstall.dev.dustless.e2e.toy");
@@ -418,7 +418,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await withApp("memory", {}, async (app) => {
         expect(fixture.child.pid).toBeGreaterThan(0);
         expect(fixture.canary.pid).toBeGreaterThan(0);
-        await app.click("sidebar.module.memory");
+        await app.pressMenuItem("Memory");
         await app.find("memory.header");
         await app.click("memory.filter.container");
         await app.find("memory.summary");

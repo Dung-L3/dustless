@@ -34,6 +34,7 @@ struct NetView: View {
                 pendingOp = nil
                 Task { await net.run(op) }
             }
+            .accessibilityIdentifier("network.advanced.confirm")
             Button(settings.t("confirmCancel"), role: .cancel) {
                 pendingOp = nil
             }
@@ -44,7 +45,6 @@ struct NetView: View {
             pendingPrivilege = false
             Task { await net.awdl.installPrivilege() }
         }
-        .accessibilityIdentifier("network.advanced.confirm")
     }
 
     private var confirmMessage: String {
