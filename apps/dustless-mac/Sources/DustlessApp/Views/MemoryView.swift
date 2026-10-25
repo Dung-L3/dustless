@@ -86,13 +86,13 @@ struct MemoryView: View {
                 pendingStop = nil
                 killProcess(pid: pending.pid, force: pending.force, sigkill: pending.sigkill)
             }
+            .accessibilityIdentifier("memory.stop.confirm")
             Button(settings.t("confirmCancel"), role: .cancel) {
                 pendingStop = nil
             }
         } message: {
             Text(stopMessage)
         }
-        .accessibilityIdentifier("memory.stop.confirm")
     }
 
     private var stopTitle: String {

@@ -236,7 +236,7 @@ func click(_ element: AXUIElement, pid: pid_t) {
         if pressAncestors(element) { return }
         fail("target is outside the test app window; refusing to click")
     }
-    guard windowOwner(at: target) == pid else {
+    if let owner = windowOwner(at: target), owner != pid {
         fail("another window is above the click target; refusing to click")
     }
     let source = CGEventSource(stateID: .hidSystemState)
