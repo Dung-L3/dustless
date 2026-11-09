@@ -14,6 +14,24 @@ struct AppsModelTests {
         #expect(first.relatedPaths.allSatisfy { $0.hasPrefix("/") || $0.hasPrefix("~") })
     }
 
+    @Test func decodesRelatedItemsAndTheProtectedFlag() throws {
+        let json = #"[{"bundleId":"com.example.toy","name":"Toy","path":"/Applications/Toy.app","bytes":100,"relatedPaths":["/Users/me/Library/Caches/com.example.toy"],"related":[{"path":"/Users/me/Library/Caches/com.example.toy","kind":"caches","category":"cache","bytes":40},{"path":"/Users/me/Library/Application Support/com.example.toy","kind":"app-support","category":"user-data","bytes":60}],"protected":false}]"#
+        let app = try #require(try JSONDecoder().decode([InstalledApp].self, from: Data(json.utf8)).first)
+        #expect(app.relatedItems.count == 2)
+        #expect(app.relatedItems.first?.kind == "caches")
+        #expect(app.relatedBytes == 100)
+        #expect(app.isProtected == false)
+        #expect(app.relatedItems.first?.category == "cache")
+    }
+
+    @Test func anOldPayloadWithoutRelatedItemsStillDecodes() throws {
+        let json = #"[{"bundleId":"com.example.old","name":"Old","path":"/Applications/Old.app","bytes":100,"relatedPaths":["/Users/me/Library/Caches/com.example.old"]}]"#
+        let app = try #require(try JSONDecoder().decode([InstalledApp].self, from: Data(json.utf8)).first)
+        #expect(app.relatedItems.count == 1)
+        #expect(app.relatedBytes == nil)
+        #expect(app.isProtected == false)
+    }
+
     @Test func installedAppsSortByBytesDescending() throws {
         let apps = try JSONDecoder().decode([InstalledApp].self, from: fixture("apps.json"))
         let bytes = apps.map(\.bytes).sorted(by: >)

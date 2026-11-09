@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -92,6 +92,116 @@ async function seedLargeFile(app: UiApp) {
   if (truncate.exitCode !== 0) throw new Error(`truncate failed: ${truncate.stderr.toString()}`);
 }
 
+async function startRunningAppFixture(destination: string, bundleId: string, name: string) {
+  await mkdir(join(destination, "Contents", "MacOS"), { recursive: true });
+  await writeFile(
+    join(destination, "Contents", "Info.plist"),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>${bundleId}</string>
+<key>CFBundleName</key><string>${name}</string>
+<key>CFBundleExecutable</key><string>Fixture</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>`,
+  );
+  const source = join(destination, "fixture.m");
+  await writeFile(
+    source,
+    `#import <Cocoa/Cocoa.h>
+int main(void) {
+  @autoreleasepool {
+    NSApplication *app = [NSApplication sharedApplication];
+    [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 320, 220)
+                                                   styleMask:NSWindowStyleMaskTitled
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    [window makeKeyAndOrderFront:nil];
+    [app run];
+  }
+  return 0;
+}`,
+  );
+  const binary = join(destination, "Contents", "MacOS", "Fixture");
+  const built = Bun.spawnSync(["clang", "-framework", "Cocoa", "-o", binary, source]);
+  if (built.exitCode !== 0) throw new Error(`fixture build failed: ${built.stderr.toString()}`);
+  const opened = Bun.spawnSync(["open", "-a", destination]);
+  if (opened.exitCode !== 0) throw new Error(`fixture open failed: ${opened.stderr.toString()}`);
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const found = Bun.spawnSync(["pgrep", "-f", binary]);
+    const pid = Number((found.stdout?.toString() ?? "").trim().split("\n")[0]);
+    if (Number.isInteger(pid) && pid > 0) {
+      return { appPath: destination, bundlePath: await realpath(destination), pid };
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error("running app fixture did not start");
+}
+
+async function startQuitFixture() {
+  const root = await mkdtemp(join(tmpdir(), "e2e-quit-"));
+  const app = join(root, "E2E Quit Fixture.app");
+  const macos = join(app, "Contents", "MacOS");
+  await mkdir(macos, { recursive: true });
+  await writeFile(
+    join(app, "Contents", "Info.plist"),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>dev.dustless.e2e.quitfixture</string>
+<key>CFBundleName</key><string>E2E Quit Fixture</string>
+<key>CFBundleDisplayName</key><string>E2E Quit Fixture</string>
+<key>CFBundleExecutable</key><string>Fixture</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>`,
+  );
+  const source = join(root, "fixture.m");
+  await writeFile(
+    source,
+    `#import <Cocoa/Cocoa.h>
+int main(void) {
+  @autoreleasepool {
+    NSApplication *app = [NSApplication sharedApplication];
+    [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 320, 220)
+                                                   styleMask:NSWindowStyleMaskTitled
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    [window makeKeyAndOrderFront:nil];
+    [app run];
+  }
+  return 0;
+}`,
+  );
+  const binary = join(macos, "Fixture");
+  const built = Bun.spawnSync(["clang", "-framework", "Cocoa", "-o", binary, source], { stderr: "pipe" });
+  if (built.exitCode !== 0) {
+    await rm(root, { recursive: true, force: true });
+    throw new Error(`fixture build failed: ${built.stderr.toString()}`);
+  }
+  const opened = Bun.spawnSync(["open", "-a", app], { stderr: "pipe" });
+  if (opened.exitCode !== 0) {
+    await rm(root, { recursive: true, force: true });
+    throw new Error(`fixture open failed: ${opened.stderr.toString()}`);
+  }
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const found = Bun.spawnSync(["pgrep", "-f", binary]);
+    const output = found.stdout?.toString() ?? "";
+    const pid = Number(output.trim().split("\n")[0]);
+    if (Number.isInteger(pid) && pid > 0) {
+      return { root, app, bundlePath: await realpath(app), pid };
+    }
+    await Bun.sleep(100);
+  }
+  await rm(root, { recursive: true, force: true });
+  throw new Error("quit fixture did not start");
+}
+
 async function startMemoryFixture() {
   const root = await mkdtemp(join(tmpdir(), "e2e-mem-"));
   const source = join(root, "fixture.c");
@@ -138,13 +248,13 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       expect(app.home).not.toBe(process.env["HOME"]);
       expect(await app.exists("sidebar.module.overview")).toBe(true);
       expect(await app.exists("overview.header")).toBe(true);
-      expect(await app.exists("overview.tier.safe")).toBe(true);
+      expect(await app.exists("overview.findings")).toBe(true);
       expect(
       (await app.exists("overview.scan")) || (await app.exists("overview.pick")),
     ).toBe(true);
       expect(await app.exists("toolbar.scan")).toBe(true);
-      const hero = await app.find("overview.tier.safe");
-      expect(String(hero.description ?? "")).toContain("Safe");
+      const hero = await app.find("overview.hero");
+      expect(String(hero.value ?? "")).toContain("Reclaimable");
       const screenshot = await app.screenshot("launch");
       expect(await exists(screenshot)).toBe(true);
     });
@@ -168,7 +278,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.find("network.header");
       await app.click("sidebar.module.overview");
       await app.find("overview.header");
-      await app.click("sidebar.tier.safe");
+      await app.click("sidebar.module.cleanup");
+      await app.find("cleanup.title");
+      await app.click("cleanup.tier.safe");
       await app.find("cleanup.rescan");
       await app.find("cleanup.search");
     });
@@ -179,7 +291,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.openMenuBar();
       await app.find("menubar.open");
       expect(await app.exists("menubar.module.storage")).toBe(true);
-      expect(await app.exists("menubar.status")).toBe(true);
+      expect(await app.exists("menubar.summary")).toBe(true);
       expect(await app.exists("menubar.busy")).toBe(false);
       await app.screenshot("menubar-open");
       await app.press("menubar.module.storage");
@@ -368,7 +480,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       "cleanup-filter",
       {},
       async (app) => {
-        await app.click("sidebar.tier.safe");
+        await app.pressMenuItem("Cleanup");
+        await app.find("cleanup.title");
+        await app.click("cleanup.tier.safe");
         await app.find("cleanup.search");
         await app.typeText("cleanup.search", "zzz-no-match");
         await app.find("cleanup.noMatches");
@@ -450,6 +564,98 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     });
   });
 
+  test("uninstalls the app bundle without touching related data when asked", async () => {
+    await withApp(
+      "applications-keep-data",
+      {},
+      async (app) => {
+        const bundle = join(app.home, "Applications", "E2E Toy.app");
+        const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
+        await app.click("sidebar.module.applications");
+        await app.find("applications.header");
+        await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.confirm");
+        await app.press("applications.confirm");
+        await app.find("storage.result.close", 20_000);
+        expect(await exists(bundle)).toBe(false);
+        expect(await exists(cache)).toBe(true);
+        await app.press("storage.result.close");
+        await app.waitGone("storage.result.close");
+        await app.waitGone("applications.app.dev.dustless.e2e.toy", 10_000);
+      },
+      async (app) => {
+        await seedStorage(app);
+      },
+    );
+  });
+
+  test("reports a partial application uninstall without claiming success", async () => {
+    if (process.getuid?.() === 0) return;
+    await withApp(
+      "applications-partial",
+      {},
+      async (app) => {
+        const bundle = join(app.home, "Applications", "E2E Toy.app");
+        const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
+        const cachesParent = join(app.home, "Library", "Caches");
+        await chmod(cachesParent, 0o500);
+        try {
+          await app.click("sidebar.module.applications");
+          await app.find("applications.header");
+          await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+          await app.press("applications.uninstall.dev.dustless.e2e.toy");
+          await app.find("applications.confirm");
+          await app.press("applications.includeRelated");
+          await Bun.sleep(200);
+          await app.press("applications.confirm");
+          await app.find("storage.result.title", 20_000);
+          const title = await app.find("storage.result.title");
+          expect(String(title.value ?? "")).toBe("Partially removed");
+          expect(await exists(bundle)).toBe(false);
+          expect(await exists(cache)).toBe(true);
+          await app.screenshot("applications-partial");
+          await app.press("storage.result.close");
+          await app.waitGone("storage.result.close");
+        } finally {
+          await chmod(cachesParent, 0o700);
+        }
+      },
+      seedStorage,
+    );
+  });
+
+  test("uninstalls a running app only after it agrees to quit", async () => {
+    await withApp(
+      "applications-running",
+      {},
+      async (app) => {
+        const fixture = await startRunningAppFixture(
+          join(app.home, "Applications", "Running Fixture.app"),
+          "dev.dustless.e2e.running",
+          "Running Fixture",
+        );
+        try {
+          await app.click("sidebar.module.applications");
+          await app.find("applications.header");
+          await app.find("applications.uninstall.dev.dustless.e2e.running", 20_000);
+          await app.press("applications.uninstall.dev.dustless.e2e.running");
+          await app.find("applications.confirm");
+          await app.press("applications.confirm");
+          await app.find("storage.result.title", 30_000);
+          const deadline = Date.now() + 10_000;
+          while (processAlive(fixture.pid) && Date.now() < deadline) await Bun.sleep(100);
+          expect(processAlive(fixture.pid)).toBe(false);
+          expect(await exists(fixture.appPath)).toBe(false);
+          await app.screenshot("applications-running");
+        } finally {
+          Bun.spawnSync(["pkill", "-f", fixture.appPath]);
+        }
+      },
+      seedStorage,
+    );
+  });
+
   test("uninstalls a sandboxed app and moves a sandboxed large file to Trash", async () => {
     await withApp(
       "storage",
@@ -459,26 +665,29 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
         const large = join(app.home, "Downloads", "e2e-large.bin");
         const trash = join(app.home, ".Trash", "e2e-large.bin");
-        await app.pressMenuItem("Storage");
-        await app.find("storage.header");
-        await app.press("storage.advanced");
-        await app.find("storage.app.uninstall.dev.dustless.e2e.toy");
-        await app.press("storage.app.uninstall.dev.dustless.e2e.toy");
-        await app.find("storage.uninstall.cancel");
-        await app.press("storage.uninstall.cancel");
-        await app.waitGone("storage.uninstall.cancel");
+        await app.click("sidebar.module.applications");
+        await app.find("applications.header");
+        await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.cancel");
+        await app.press("applications.cancel");
+        await app.waitGone("applications.cancel");
         expect(await exists(bundle)).toBe(true);
         expect(await exists(cache)).toBe(true);
-        await app.press("storage.app.uninstall.dev.dustless.e2e.toy");
-        await app.find("storage.uninstall.confirm");
-        await app.press("storage.uninstall.confirm");
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.confirm");
+        await app.press("applications.includeRelated");
+        await Bun.sleep(200);
+        await app.press("applications.confirm");
         await app.find("storage.result.close", 20_000);
+        await app.screenshot("applications-result");
         expect(await exists(bundle)).toBe(false);
         expect(await exists(cache)).toBe(false);
         await app.press("storage.result.close");
         await app.waitGone("storage.result.close");
 
-        await app.click("storage.advanced");
+        await app.pressMenuItem("Storage");
+        await app.find("storage.header");
         await app.find(`storage.file.trash.${large}`, 20_000);
         await app.press(`storage.file.trash.${large}`);
         await app.find("storage.trash.cancel");
@@ -508,7 +717,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         const green = join(app.home, ".dustless-e2e", "green");
         const fail = join(app.home, ".dustless-e2e", "fail");
         const blocked = join(app.home, ".e2e-node", "node_modules");
-        await app.click("sidebar.tier.safe");
+        await app.pressMenuItem("Cleanup");
+        await app.find("cleanup.title");
+        await app.click("cleanup.tier.safe");
         await app.find("cleanup.selectAll");
         await app.press("cleanup.selectAll");
         const selected = await app.find("cleanup.selected");
@@ -522,12 +733,12 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         expect(await exists(fail)).toBe(true);
         await app.press("cleanup.selectNone");
 
-        await app.click("sidebar.tier.locked");
+        await app.click("cleanup.tier.locked");
         await app.find(`cleanup.locked.${blocked}`);
         const review = await app.find("cleanup.review");
         expect(review.enabled).toBe(false);
 
-        await app.click("sidebar.tier.safe");
+        await app.click("cleanup.tier.safe");
         await app.find("cleanup.selectAll");
         await app.press("cleanup.selectAll");
         const selectedAgain = await app.find("cleanup.selected");
@@ -555,6 +766,29 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     );
   });
 
+  test("quits a running app directly from its memory row", async () => {
+    const fixture = await startQuitFixture();
+    try {
+      await withApp("memory-quit", {}, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.typeText("memory.search", "E2E Quit Fixture");
+        await app.find(`memory.group.${fixture.bundlePath}`, 20_000);
+        const quit = await app.find(`memory.quit.${fixture.bundlePath}`, 10_000);
+        expect(quit.enabled).toBe(true);
+        await app.press(`memory.quit.${fixture.bundlePath}`);
+        const deadline = Date.now() + 10_000;
+        while (processAlive(fixture.pid) && Date.now() < deadline) await Bun.sleep(100);
+        expect(processAlive(fixture.pid)).toBe(false);
+        await app.waitGone(`memory.group.${fixture.bundlePath}`, 10_000);
+        await app.screenshot("memory-quit");
+      });
+    } finally {
+      Bun.spawnSync(["pkill", "-f", fixture.root]);
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   test("stops only the sandboxed fixture process", async () => {
     const fixture = await startMemoryFixture();
     try {
@@ -566,6 +800,9 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.click("memory.filter.container");
         await app.find("memory.summary");
         await app.find(`memory.group.${fixture.binary}`, 20_000);
+        if (!(await app.exists(`memory.stop.${fixture.child.pid}`))) {
+          await app.press(`memory.expand.${fixture.binary}`);
+        }
         await app.find(`memory.stop.${fixture.child.pid}`, 20_000);
         await app.press(`memory.stop.${fixture.child.pid}`);
         await app.find("memory.stop.cancel");

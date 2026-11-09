@@ -10,7 +10,11 @@ struct OverviewView: View {
 
     var body: some View {
         PanelScaffold {
-            PanelHeader(title: settings.t("overviewTitle"), subtitle: provenance, identifier: "overview.header") {
+            PanelHeader(
+                title: settings.t("overviewTitle"),
+                subtitle: provenance,
+                identifier: "overview.header"
+            ) {
                 cta
             }
         } summary: {
@@ -18,7 +22,10 @@ struct OverviewView: View {
         } filters: {
             EmptyView()
         } content: {
-            OverviewContent(store: store, net: net, router: router)
+            ScrollView {
+                OverviewContent(store: store, net: net, router: router)
+            }
+            .scrollIndicators(.automatic)
         }
         .task {
             await store.ensureMemory()
@@ -32,24 +39,25 @@ struct OverviewView: View {
     }
 
     private var hero: some View {
-        HStack(alignment: .top, spacing: PanelStyle.Space.l) {
-            VStack(alignment: .leading, spacing: PanelStyle.Space.xs) {
+        HStack(alignment: .top, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Theme.Palette.accent)
                     Text(settings.t("reclaimableMetric").uppercased())
-                        .font(PanelFont.caption)
-                        .tracking(0.8)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.micro)
+                        .tracking(0.6)
+                        .foregroundStyle(Theme.Palette.textSecondary)
                 }
                 Text(store.report == nil ? "—" : ByteFormat.string(reclaimable))
-                    .font(PanelFont.hero)
+                    .font(Theme.Font.display)
+                    .foregroundStyle(Theme.Palette.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    .minimumScaleFactor(0.7)
                 Text(heroHint)
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let apply = store.lastApply {
                     Text(settings.t("resultSummary", [
@@ -57,8 +65,8 @@ struct OverviewView: View {
                         "elapsed": Duration.milliseconds(apply.elapsedMs),
                         "free": ByteFormat.string(apply.freeAfter),
                     ]))
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -67,21 +75,21 @@ struct OverviewView: View {
             .accessibilityLabel("\(settings.t("reclaimableMetric")): \(store.report.map { ByteFormat.string($0.reclaimable) } ?? "—")")
             .accessibilityIdentifier("overview.hero")
 
-            VStack(alignment: .trailing, spacing: PanelStyle.Space.s) {
-                PanelStat(label: settings.t("selectedMetric"), value: selectedValue)
-                    .help(selectedHelp)
-                    .accessibilityIdentifier("overview.selected")
-                PanelStat(label: settings.t("freeNow"), value: freeValue)
-                    .help(settings.t("freeNowHelp"))
-                    .accessibilityIdentifier("overview.freeSpace")
+            HStack(spacing: Theme.Space.m) {
+                MetricTile(
+                    label: settings.t("selectedMetric"),
+                    value: selectedValue,
+                    detail: selectedHelp,
+                    identifier: "overview.selected"
+                )
+                MetricTile(
+                    label: settings.t("freeNow"),
+                    value: freeValue,
+                    detail: nil,
+                    identifier: "overview.freeSpace"
+                )
             }
-            .frame(width: 190, alignment: .trailing)
-        }
-    }
-
-    private func presentConfirmation() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            store.showingConfirmation = true
+            .frame(width: 330)
         }
     }
 
@@ -92,9 +100,7 @@ struct OverviewView: View {
     }
 
     private var selectedHelp: String {
-        store.selectedFindings.isEmpty
-            ? settings.t("selectedNone")
-            : settings.itemCount(store.selectedFindings.count)
+        store.selectedFindings.isEmpty ? settings.t("selectedNone") : settings.itemCount(store.selectedFindings.count)
     }
 
     private var freeValue: String {
@@ -116,14 +122,12 @@ struct OverviewView: View {
                 } label: {
                     HStack(spacing: 6) {
                         if store.isBusy {
-                            ProgressView()
-                                .controlSize(.small)
-                                .scaleEffect(0.7)
+                            ProgressView().controlSize(.small).scaleEffect(0.7)
                         }
                         Text(store.isBusy ? settings.t("scanningShort") : settings.t("scanNow"))
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(store.isBusy)
                 .help(settings.t("rescanHelp"))
                 .accessibilityIdentifier("overview.scan")
@@ -135,7 +139,7 @@ struct OverviewView: View {
                 } label: {
                     Text(settings.t("menuPickToClean"))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .help(settings.t("menuPickToClean"))
                 .accessibilityIdentifier("overview.pick")
             } else {
@@ -150,7 +154,7 @@ struct OverviewView: View {
                         "size": ByteFormat.string(store.safeCleanBytes),
                     ]))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(store.isBusy || store.phase != .ready)
                 .help(settings.t("menubar.cleanSafelyHelp"))
                 .accessibilityHint(settings.t("menubar.cleanSafelyHelp"))
@@ -163,7 +167,7 @@ struct OverviewView: View {
             } label: {
                 Text(settings.t("reviewAndDelete"))
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PrimaryButtonStyle())
             .disabled(!store.canClean)
             .help(settings.t("reviewAndDeleteHelp"))
             .accessibilityLabel(settings.t("overviewReview", [
@@ -171,6 +175,12 @@ struct OverviewView: View {
                 "size": ByteFormat.string(store.selectedBytes),
             ]))
             .accessibilityIdentifier("overview.review")
+        }
+    }
+
+    private func presentConfirmation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            store.showingConfirmation = true
         }
     }
 }

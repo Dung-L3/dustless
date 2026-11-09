@@ -81,10 +81,24 @@ struct NetView: View {
     }
 
     private var connection: some View {
-        HStack(spacing: PanelStyle.Space.m) {
-            connectionStat(settings.t("networkInterface"), net.report?.iface)
-            connectionStat(settings.t("networkGateway"), net.report?.gateway)
-            connectionStat(settings.t("networkDns"), dnsServers)
+        HStack(spacing: Theme.Space.m) {
+            MetricTile(
+                label: settings.t("networkInterface"),
+                value: net.report?.iface ?? "—",
+                detail: net.report?.soloRoute == true ? settings.t("networkSoloRoute") : nil,
+                tone: net.report?.soloRoute == true ? .warning : .neutral,
+                identifier: "network.interface"
+            )
+            MetricTile(
+                label: settings.t("networkGateway"),
+                value: net.report?.gateway ?? "—",
+                identifier: "network.gateway"
+            )
+            MetricTile(
+                label: settings.t("networkDns"),
+                value: dnsServers ?? "—",
+                identifier: "network.dns"
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(settings.t("networkState"))
@@ -96,11 +110,6 @@ struct NetView: View {
         return dns.joined(separator: ", ")
     }
 
-    private func connectionStat(_ label: String, _ value: String?) -> some View {
-        PanelStat(label: label, value: value ?? "—")
-            .truncationMode(.middle)
-            .help(value ?? label)
-    }
 
     private var airDrop: some View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
@@ -129,8 +138,7 @@ struct NetView: View {
 
                 airDropControls
             }
-            .padding(PanelStyle.Space.m)
-            .panelCard()
+            .surfaceCard(padding: Theme.Space.m)
 
             if let error = net.awdl.error, error != net.loadError {
                 errorLabel(error)

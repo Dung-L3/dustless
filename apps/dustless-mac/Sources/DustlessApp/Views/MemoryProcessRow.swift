@@ -1,6 +1,6 @@
+import AppKit
 import DustlessKit
 import SwiftUI
-import AppKit
 
 struct KillStatus: Identifiable {
     let id = UUID()
@@ -26,19 +26,25 @@ struct MemoryProcessRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: PanelStyle.Space.s) {
+        HStack(spacing: Theme.Space.s) {
             Text(proc.name)
-                .font(PanelFont.mono(12))
+                .font(Theme.Font.mono)
+                .foregroundStyle(Theme.Palette.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help(proc.command)
                 .accessibilityLabel(rowDescription)
 
+            if protected {
+                StatusPill(text: settings.t("appsProtected"), tone: .danger, icon: "lock.fill")
+                    .help(settings.t("memoryPressureHelp"))
+            }
+
             Spacer(minLength: 6)
 
             Text(String(proc.pid))
-                .font(PanelFont.mono(12))
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.mono)
+                .foregroundStyle(Theme.Palette.textMuted)
                 .frame(width: 52, alignment: .trailing)
                 .textSelection(.enabled)
                 .contextMenu {
@@ -50,12 +56,17 @@ struct MemoryProcessRow: View {
                 .accessibilityLabel("\(settings.t("memoryProcessPID")) \(proc.pid)")
 
             Text(ByteFormat.string(proc.mem))
-                .font(PanelFont.number())
+                .font(Theme.Font.number(size: 12))
                 .frame(minWidth: 64, alignment: .trailing)
 
+            forceMenu
             stopButton
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
+    }
+
+    private var protected: Bool {
+        proc.root || proc.name.lowercased().contains("dustless")
     }
 
     private var rowDescription: String {
@@ -67,6 +78,32 @@ struct MemoryProcessRow: View {
         ].joined(separator: ", ")
     }
 
+    private var forceMenu: some View {
+        Menu {
+            Button {
+                onStop(proc)
+            } label: {
+                Label(settings.t("memoryStopAction"), systemImage: "stop.circle")
+            }
+            Button {
+                onForceStop(proc)
+            } label: {
+                Label(settings.t("memoryForceStopNamed", ["name": proc.name]), systemImage: "exclamationmark.octagon.fill")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Palette.textMuted)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 18)
+        .help(settings.t("memoryStopNamed", ["name": proc.name]))
+        .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
+        .accessibilityIdentifier("memory.forceStop.menu.\(proc.pid)")
+        .disabled(isStopping)
+    }
+
     @ViewBuilder
     private var stopButton: some View {
         if let status {
@@ -74,36 +111,32 @@ struct MemoryProcessRow: View {
         } else {
             Button(action: { onStop(proc) }) {
                 HStack(spacing: 4) {
-                    Image(systemName: "stop.circle.fill")
-                        .font(.system(size: 11, weight: .bold))
+                    if isStopping {
+                        ProgressView().controlSize(.mini).scaleEffect(0.55).frame(width: 11, height: 11)
+                    } else {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                    }
                     Text(settings.t("memoryStopAction"))
-                        .font(PanelFont.caption)
+                        .font(Theme.Font.caption)
                 }
-                .foregroundStyle(DestructiveStyle.red)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(DestructiveStyle.red.opacity(0.12), in: .rect(cornerRadius: 5))
+                .foregroundStyle(Theme.Palette.danger)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Theme.Palette.dangerFill, in: .capsule)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .help(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityLabel(settings.t("memoryStopNamed", ["name": proc.name]))
             .accessibilityIdentifier("memory.stop.\(proc.pid)")
-            .contextMenu {
-                Button(action: { onForceStop(proc) }) {
-                    Label(
-                        settings.t("memoryForceStopNamed", ["name": proc.name]),
-                        systemImage: "exclamationmark.octagon.fill"
-                    )
-                }
-            }
             .disabled(isStopping)
         }
     }
 
     @ViewBuilder
     private func statusView(_ status: KillStatus) -> some View {
-        let tint = status.ok ? Color.green : Color.red
+        let tint = status.ok ? Theme.Palette.accent : Theme.Palette.danger
         let label = status.ok
             ? settings.t("memoryStoppedNamed", ["name": proc.name])
             : (status.reason.map { reasonText($0) } ?? settings.t("memoryStopError"))
@@ -115,6 +148,7 @@ struct MemoryProcessRow: View {
             .accessibilityIdentifier("memory.status.\(proc.pid)")
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
             .onAppear {
+                guard status.ok else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     withAnimation { clearStatus(status.pid) }
                 }

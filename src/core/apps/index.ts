@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import type { Reason } from "../../types.ts";
-import type { AppInfo, ListAppsOptions, UninstallOptions, UninstallOutcome, UninstallReport } from "./types.ts";
+import type { AppInfo, ListAppsOptions, RelatedCategory, RelatedItem, RelatedKind, UninstallOptions, UninstallOutcome, UninstallReport } from "./types.ts";
 import { realGuard, refusalCode } from "../paths.ts";
 
 export type DeleteHook = { beforeDelete?: () => void | Promise<void> };
@@ -29,19 +30,23 @@ export function homeAppDirs(home: string): string[] {
   return defaultAppDirs(home).filter((dir) => isUnder(dir, resolvedHome));
 }
 
-const RELATIVE_LEFTOVER_PATHS = [
-  "Library/Application Support/{id}",
-  "Library/Caches/{id}",
-  "Library/Preferences/{id}.plist",
-  "Library/Logs/{id}",
-  "Library/Saved Application State/{id}.savedState",
-  "Library/Containers/{id}",
-  "Library/Group Containers/{id}",
-  "Library/WebKit/{id}",
-  "Library/HTTPStorages/{id}",
-  "Library/Application Scripts/{id}",
-  "Library/LaunchAgents/{id}.plist",
-  "Library/Cookies/{id}.binarycookies",
+const RELATED_TEMPLATES: Array<{
+  template: string;
+  kind: RelatedKind;
+  category: RelatedCategory;
+}> = [
+  { template: "Library/Application Support/{id}", kind: "app-support", category: "user-data" },
+  { template: "Library/Caches/{id}", kind: "caches", category: "cache" },
+  { template: "Library/Preferences/{id}.plist", kind: "preferences", category: "config" },
+  { template: "Library/Logs/{id}", kind: "logs", category: "diagnostic" },
+  { template: "Library/Saved Application State/{id}.savedState", kind: "saved-state", category: "diagnostic" },
+  { template: "Library/Containers/{id}", kind: "container", category: "user-data" },
+  { template: "Library/Group Containers/{id}", kind: "group-container", category: "integration" },
+  { template: "Library/WebKit/{id}", kind: "webkit", category: "cache" },
+  { template: "Library/HTTPStorages/{id}", kind: "http-storage", category: "cache" },
+  { template: "Library/Application Scripts/{id}", kind: "app-scripts", category: "integration" },
+  { template: "Library/LaunchAgents/{id}.plist", kind: "launch-agent", category: "integration" },
+  { template: "Library/Cookies/{id}.binarycookies", kind: "cookies", category: "config" },
 ];
 
 const DENY_PATHS = [
@@ -110,17 +115,28 @@ function parseInfoPlist(xml: string): { bundleId?: string; name?: string; displa
   return result;
 }
 
-async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name: string } | null> {
-  const plistPath = join(appPath, "Contents", "Info.plist");
+async function readPlistXML(plistPath: string): Promise<string | null> {
+  let xml: string;
   try {
-    const xml = await readFile(plistPath, "utf8");
-    const parsed = parseInfoPlist(xml);
-    if (!parsed.bundleId) return null;
-    const name = parsed.displayName ?? parsed.name ?? parsed.bundleId;
-    return { bundleId: parsed.bundleId, name };
+    xml = await readFile(plistPath, "utf8");
   } catch {
     return null;
   }
+  if (!xml.startsWith("bplist") || process.platform !== "darwin") return xml;
+  const converted = spawnSync("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", plistPath], {
+    encoding: "utf8",
+  });
+  return converted.status === 0 ? converted.stdout : null;
+}
+
+async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name: string } | null> {
+  const plistPath = join(appPath, "Contents", "Info.plist");
+  const xml = await readPlistXML(plistPath);
+  if (!xml) return null;
+  const parsed = parseInfoPlist(xml);
+  if (!parsed.bundleId) return null;
+  const name = parsed.displayName ?? parsed.name ?? parsed.bundleId;
+  return { bundleId: parsed.bundleId, name };
 }
 
 function isSafeBundleId(bundleId: string): boolean {
@@ -129,14 +145,47 @@ function isSafeBundleId(bundleId: string): boolean {
   return !/[\u0000-\u001f\u007f]/.test(bundleId);
 }
 
-function deriveRelatedPaths(home: string, bundleId: string): string[] {
+function deriveRelatedItems(home: string, bundleId: string): RelatedItem[] {
   if (!isSafeBundleId(bundleId)) return [];
-  const out: string[] = [];
-  for (const template of RELATIVE_LEFTOVER_PATHS) {
-    const path = expandHome(join(home, template.replace(/{id}/g, bundleId)), home);
-    out.push(path);
+  return RELATED_TEMPLATES.map(({ template, kind, category }) => ({
+    path: expandHome(join(home, template.replace(/{id}/g, bundleId)), home),
+    kind,
+    category,
+    bytes: null,
+  }));
+}
+
+function deriveRelatedPaths(home: string, bundleId: string): string[] {
+  return deriveRelatedItems(home, bundleId).map((item) => item.path);
+}
+
+async function boundedDirSize(path: string, limit = 20_000): Promise<number | null> {
+  const root = await lstat(path).catch(() => null);
+  if (!root) return null;
+  if (root.isSymbolicLink()) return root.size;
+  if (root.isFile()) return root.size;
+  let total = 0;
+  let seen = 0;
+  const stack = [resolve(path)];
+  while (stack.length) {
+    const current = stack.pop();
+    if (current === undefined) continue;
+    try {
+      const entries = await readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        seen += 1;
+        if (seen > limit) return null;
+        const full = join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(full);
+        } else {
+          total += (await lstat(full)).size;
+        }
+      }
+    } catch {
+    }
   }
-  return out;
+  return total;
 }
 
 function isSystemApp(appPath: string): boolean {
@@ -203,6 +252,24 @@ function isDenied(path: string, home: string): boolean {
   return false;
 }
 
+async function concurrentMap<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await run(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, Math.max(1, items.length)) }, worker));
+  return results;
+}
+
 export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   const home = opts.home ?? homedir();
   const appDirs = scopedAppDirs(home, opts.appDirs);
@@ -217,25 +284,31 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
       continue;
     }
 
-    for (const name of entries) {
+    const scanned = await concurrentMap(entries, 4, async (name) => {
       const appPath = join(appDir, name);
       const info = await readBundleInfo(appPath);
-      if (!info) continue;
+      if (!info) return null;
 
       const bytes = await dirSize(appPath);
-      const allRelated = deriveRelatedPaths(home, info.bundleId);
-      const existingRelated = [];
-      for (const p of allRelated) {
-        if (await exists(p)) existingRelated.push(p);
+      const candidates = deriveRelatedItems(home, info.bundleId);
+      const related: RelatedItem[] = [];
+      for (const item of candidates) {
+        if (!(await exists(item.path))) continue;
+        related.push({ ...item, bytes: await boundedDirSize(item.path) });
       }
 
-      results.push({
+      return {
         bundleId: info.bundleId,
         name: info.name,
         path: appPath,
         bytes,
-        relatedPaths: existingRelated,
-      });
+        relatedPaths: related.map((item) => item.path),
+        related,
+        protected: isSystemApp(appPath) || info.bundleId.startsWith("com.apple."),
+      } satisfies AppInfo;
+    });
+    for (const app of scanned) {
+      if (app) results.push(app);
     }
   }
 
@@ -345,6 +418,12 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
       outcomes: [
         { path: appPath, status: "failed", bytes: 0, detail: { code: "bad_bundle_id", params: { id: bundleInfo.bundleId } } },
       ],
+      summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
+    };
+  }
+  if (bundleInfo.bundleId.startsWith("com.apple.")) {
+    return {
+      outcomes: [{ path: appPath, status: "failed", bytes: 0, detail: { code: "system_app" } }],
       summary: { trashed: 0, purged: 0, skipped: 0, failed: 1, totalBytes: 0 },
     };
   }

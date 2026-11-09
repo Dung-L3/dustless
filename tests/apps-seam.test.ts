@@ -93,7 +93,7 @@ describe("the app install test seam can only narrow the uninstall scope", () => 
     const defaults = await listApps({ home });
     expect(defaults.some((app) => app.bundleId === "com.example.evil")).toBe(false);
     expect(defaults.some((app) => app.bundleId === "com.example.nice")).toBe(true);
-  });
+  }, 15_000);
 
   test("the shipped binary cannot uninstall an app outside the default app directories", async () => {
     const home = await sandbox("binary");

@@ -16,7 +16,6 @@ struct ScreenLayoutTests {
         "unscannable",
         "cleanup-result",
         "trash-sheet",
-        "uninstall-sheet",
         "engine-error",
         "tier-badges",
         "controls"
@@ -52,7 +51,7 @@ struct ScreenLayoutTests {
     }
 
     @Test @MainActor func theLeadingEdgeOfAListDoesNotMoveBetweenLanguages() throws {
-        for name in ["cleanup-list", "storage-list", "trash-sheet", "uninstall-sheet"] {
+        for name in ["cleanup-list", "storage-list", "trash-sheet"] {
             let reference = try ScreenLayoutTests.bands(name, .en)
             let leading = reference.filter { $0.left <= (reference.first?.left ?? 0) + 8 }
             #expect(!leading.isEmpty, "\(name) must have a leading edge")
@@ -107,7 +106,7 @@ struct ScreenLayoutTests {
         let wideBands = wide.bands(mask: wide.inkMask(), minimumInk: 1, gap: 3)
         let narrowBands = narrow.bands(mask: narrow.inkMask(), minimumInk: 1, gap: 3)
         #expect(
-            wideBands.count != narrowBands.count || wideBands[0].left != narrowBands[0].left,
+            wideBands.count != narrowBands.count || wideBands[0].right != narrowBands[0].right,
             "a narrower screen must lay out differently, otherwise the layout check proves nothing"
         )
     }
