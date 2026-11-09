@@ -151,12 +151,11 @@ func openMainWindow() {
 @MainActor
 final class MainWindowTracker {
     static let shared = MainWindowTracker()
-    var window: NSWindow?
+    weak var window: NSWindow?
 }
 
 final class WindowCaptureView: NSView {
     override func viewDidMoveToWindow() {
-        guard let window else { return }
         MainWindowTracker.shared.window = window
     }
 }
