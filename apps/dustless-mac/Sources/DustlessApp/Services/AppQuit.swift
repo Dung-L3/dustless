@@ -6,7 +6,7 @@ enum AppQuit {
     struct Target {
         let bundleID: String
         let name: String
-        let app: NSRunningApplication
+        let apps: [NSRunningApplication]
     }
 
     struct Facts {
@@ -33,7 +33,8 @@ enum AppQuit {
     static func target(for group: ProcessGroup) -> Target? {
         guard let path = group.bundlePath else { return nil }
         let bundleID = bundleIdentifier(at: path)
-        let app = bundleID.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0).first }
+        let apps = bundleID.map { NSRunningApplication.runningApplications(withBundleIdentifier: $0) } ?? []
+        let regular = apps.filter { $0.activationPolicy == .regular }
         let facts = Facts(
             bundlePath: path,
             bundleID: bundleID,
@@ -41,15 +42,15 @@ enum AppQuit {
             owners: Set(group.processes.map(\.owner)),
             currentUser: NSUserName(),
             anyRoot: group.processes.contains(where: \.root),
-            isRunning: app != nil,
-            policy: app?.activationPolicy
+            isRunning: !regular.isEmpty,
+            policy: regular.first?.activationPolicy
         )
-        guard isEligible(facts), let bundleID, let app else { return nil }
-        return Target(bundleID: bundleID, name: group.label, app: app)
+        guard isEligible(facts), let bundleID else { return nil }
+        return Target(bundleID: bundleID, name: group.label, apps: regular)
     }
 
     static func requestQuit(_ target: Target) -> Bool {
-        target.app.terminate()
+        target.apps.map { $0.terminate() }.allSatisfy { $0 }
     }
 
     private static var bundleIDCache: [String: String?] = [:]

@@ -7,6 +7,7 @@ final class ApplicationsControl: ObservableObject {
     @Published var pendingSheet: InstalledApp?
     @Published private(set) var result: UninstallReport?
     @Published private(set) var resultIsPartial = false
+    @Published private(set) var resultIsFailure = false
     @Published private(set) var workingApp: String?
     @Published private(set) var isQuitting = false
     @Published private(set) var error: L10nText?
@@ -58,7 +59,9 @@ final class ApplicationsControl: ObservableObject {
                 includeRelated: includeRelated
             )
             result = report
-            resultIsPartial = report.summary.failed > 0
+            let moved = report.summary.trashed + report.summary.purged
+            resultIsPartial = report.summary.failed > 0 && moved > 0
+            resultIsFailure = report.summary.failed > 0 && moved == 0
             pendingSheet = nil
             if let appOutcome = report.outcomes.first,
                appOutcome.status == .trashed || appOutcome.status == .purged {
@@ -80,6 +83,7 @@ final class ApplicationsControl: ObservableObject {
     func clearResult() {
         result = nil
         resultIsPartial = false
+        resultIsFailure = false
     }
 
     private func quitIfNeeded(_ app: InstalledApp) async -> Bool {
@@ -98,7 +102,9 @@ final class ApplicationsControl: ObservableObject {
         regular.forEach { $0.terminate() }
         let deadline = Date().addingTimeInterval(8)
         while Date() < deadline {
-            if NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId).isEmpty {
+            let remaining = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId)
+                .filter { $0.activationPolicy == .regular }
+            if remaining.isEmpty {
                 isQuitting = false
                 return true
             }

@@ -10,7 +10,7 @@ enum Theme {
         static let hairline = adaptive(dark: 0x2A2E30, light: 0xDDDBD4)
         static let textPrimary = adaptive(dark: 0xF2F4F2, light: 0x1D1F1C)
         static let textSecondary = adaptive(dark: 0xA7ADA8, light: 0x626861)
-        static let textMuted = adaptive(dark: 0x747B76, light: 0x8A8F88)
+        static let textMuted = adaptive(dark: 0x747B76, light: 0x6E746D)
         static let accent = adaptive(dark: 0x8BD49C, light: 0x4F9D65)
         static let accentDeep = adaptive(dark: 0x5FAF72, light: 0x3C7D4E)
         static let warning = adaptive(dark: 0xE3B25C, light: 0xA66A14)
@@ -22,6 +22,7 @@ enum Theme {
         static let accentFill = accent.opacity(0.14)
         static let infoFill = info.opacity(0.14)
         static let sheetShadow = Color.black.opacity(0.28)
+        static let highlight = adaptive(dark: 0xF2F4F2, light: 0x1D1F1C).opacity(0.06)
     }
 
     enum Space {
@@ -39,7 +40,7 @@ enum Theme {
         static let card: CGFloat = 16
         static let inner: CGFloat = 12
         static let row: CGFloat = 10
-        static let control: CGFloat = 9
+        static let control: CGFloat = 8
         static let pill: CGFloat = 999
     }
 
@@ -130,7 +131,7 @@ struct SurfaceCard: ViewModifier {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.06), .clear],
+                            colors: [Theme.Palette.highlight, .clear],
                             startPoint: .top,
                             endPoint: .center
                         )

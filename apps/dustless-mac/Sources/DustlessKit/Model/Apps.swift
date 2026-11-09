@@ -32,7 +32,7 @@ public struct InstalledApp: Codable, Identifiable, Sendable, Hashable {
     }
 
     public var isProtected: Bool {
-        protected ?? bundleId.hasPrefix("com.apple.")
+        protected ?? (bundleId.hasPrefix("com.apple.") || path.hasPrefix("/System/Applications"))
     }
 
     public var relatedBytes: UInt64? {
