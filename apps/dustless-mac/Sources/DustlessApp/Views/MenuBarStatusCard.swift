@@ -36,7 +36,7 @@ struct MenuBarStatusCard: View {
         }
         .padding(PanelStyle.Space.m)
         .panelCard()
-        .accessibilityIdentifier("menubar.status")
+        .accessibilityIdentifier("menubar.summary")
     }
 
     private var topConsumer: String? {

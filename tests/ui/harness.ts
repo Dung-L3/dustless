@@ -46,6 +46,7 @@ export type LaunchOptions = {
   label: string;
   intercepted?: "net" | "awdl" | "both";
   language?: "en" | "vi" | "zh";
+  appearance?: "system" | "light" | "dark";
 };
 
 export type Seed = (app: UiApp) => Promise<void> | void;
@@ -234,7 +235,10 @@ export class UiApp {
     await mkdir(join(this.root, "sudoers"), { recursive: true });
     await mkdir(this.artifactDir, { recursive: true });
     await writeFile(join(this.outside, "canary.txt"), "dustless-ui-canary\n");
-    await writeFile(this.prefs, preferencesPlist(this.launchOptions.language ?? "en"));
+    await writeFile(
+      this.prefs,
+      preferencesPlist(this.launchOptions.language ?? "en", this.launchOptions.appearance),
+    );
     await writeFile(join(this.root, "sudoers", "dustless-net"), "");
     await writeFile(join(this.root, "sudoers", "dustless-awdl"), "");
   }
@@ -359,8 +363,24 @@ export class UiApp {
     await this.driver(["press", "--id", identifier, "--timeout", String(timeout / 1000)]);
   }
 
+  async pressLabel(label: string, timeout = 10_000): Promise<void> {
+    await this.driver(["press", "--label", label, "--timeout", String(timeout / 1000)]);
+  }
+
   async click(identifier: string, timeout = 10_000): Promise<void> {
     await this.driver(["click", "--id", identifier, "--timeout", String(timeout / 1000)]);
+  }
+
+  async setValue(identifier: string, value: string): Promise<void> {
+    await this.driver(["set", "--id", identifier, "--value", value]);
+  }
+
+  async typeText(identifier: string, text: string): Promise<void> {
+    await this.driver(["type", "--id", identifier, "--text", text, "--clear"]);
+  }
+
+  async resize(width: number, height: number): Promise<void> {
+    await this.driver(["resize", "--width", String(width), "--height", String(height)]);
   }
 
   async pressMenuItem(item: string): Promise<void> {
@@ -369,6 +389,20 @@ export class UiApp {
 
   async closeWindow(): Promise<void> {
     await this.driver(["close-window"]);
+  }
+
+  async windowCount(): Promise<number> {
+    const windows = await this.driver(["windows"]);
+    if (!Array.isArray(windows)) return 0;
+    return (windows as Array<{ subrole?: string }>).filter(
+      (window) => window.subrole === "AXStandardWindow",
+    ).length;
+  }
+
+  async dialogs(): Promise<Array<{ subrole?: string; text?: string[] }>> {
+    const result = await this.driver(["dialogs"]);
+    if (!Array.isArray(result)) return [];
+    return result as Array<{ subrole?: string; text?: string[] }>;
   }
 
   async openMenuBar(): Promise<void> {
@@ -432,12 +466,13 @@ export class UiApp {
   }
 }
 
-function preferencesPlist(language: string): string {
+function preferencesPlist(language: string, appearance?: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>dustless.language</key><string>${language}</string>
+  ${appearance ? `<key>dustless.appearance</key><string>${appearance}</string>` : ""}
 </dict>
 </plist>
 `;

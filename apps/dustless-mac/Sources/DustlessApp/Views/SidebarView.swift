@@ -1,10 +1,6 @@
 import DustlessKit
 import SwiftUI
 
-enum SidebarItem: Hashable {
-    case module(Module)
-}
-
 struct ModuleSidebar: View {
     @ObservedObject var store: ScanStore
     let selection: Module
@@ -13,12 +9,10 @@ struct ModuleSidebar: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        List(selection: selectionBinding) {
+        List {
             Section(settings.t("modules")) {
                 ForEach(Module.allCases) { module in
-                    Label(settings.t(module.titleKey), systemImage: module.symbolName)
-                        .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
-                        .tag(SidebarItem.module(module))
+                    moduleRow(module)
                 }
             }
 
@@ -32,15 +26,34 @@ struct ModuleSidebar: View {
         .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 260)
     }
 
-    private var selectionBinding: Binding<SidebarItem?> {
-        Binding(
-            get: { .module(selection) },
-            set: { item in
-                if case .module(let module) = item {
-                    onSelect(module)
-                }
+    private func moduleRow(_ module: Module) -> some View {
+        let title = settings.t(module.titleKey)
+        let isActive = selection == module
+        return Button {
+            onSelect(module)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: module.symbolName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text(title)
+                    .font(PanelFont.body)
+                Spacer(minLength: 4)
             }
-        )
+            .frame(minHeight: PanelStyle.rowMinHeight)
+            .contentShape(.rect)
+            .background(
+                isActive ? Color.accentColor.opacity(0.12) : Color.clear,
+                in: .rect(cornerRadius: 5)
+            )
+        }
+        .buttonStyle(.plain)
+        .selectionDisabled()
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     private func tierRow(_ tab: TierTab) -> some View {
@@ -70,6 +83,7 @@ struct ModuleSidebar: View {
             )
         }
         .buttonStyle(.plain)
+        .selectionDisabled()
         .help(title)
         .accessibilityLabel("\(title): \(settings.itemCount(items.count))")
         .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")

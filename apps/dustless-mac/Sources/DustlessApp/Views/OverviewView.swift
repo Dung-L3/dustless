@@ -79,6 +79,12 @@ struct OverviewView: View {
         }
     }
 
+    private func presentConfirmation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            store.showingConfirmation = true
+        }
+    }
+
     private var reclaimable: UInt64 { store.report?.reclaimable ?? 0 }
 
     private var selectedValue: String {
@@ -137,7 +143,7 @@ struct OverviewView: View {
                     store.tierTab = .safe
                     store.selectQuickClean()
                     router.select(.cleanup)
-                    store.showingConfirmation = true
+                    presentConfirmation()
                 } label: {
                     Text(settings.t("menubar.cleanSafely", [
                         "items": settings.itemCount(store.safeCleanFindings.count),
@@ -153,7 +159,7 @@ struct OverviewView: View {
         } else {
             Button {
                 router.select(.cleanup)
-                store.showingConfirmation = true
+                presentConfirmation()
             } label: {
                 Text(settings.t("reviewAndDelete"))
             }

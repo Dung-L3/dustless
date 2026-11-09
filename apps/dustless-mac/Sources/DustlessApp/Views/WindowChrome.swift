@@ -84,7 +84,7 @@ struct PanelScaffold<Header: View, Summary: View, Filters: View, Content: View>:
             summary()
             filters()
             content()
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(PanelStyle.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

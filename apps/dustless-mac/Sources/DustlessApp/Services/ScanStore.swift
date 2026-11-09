@@ -61,6 +61,7 @@ final class ScanStore: ObservableObject {
     @Published private(set) var storageLargeFiles: [LargeFile] = []
     @Published private(set) var isLoadingStorageApps = false
     @Published private(set) var isLoadingStorageFiles = false
+    private var isLoadingStorageVolumes = false
     @Published private(set) var storageAppsError: L10nText?
     @Published private(set) var storageFilesError: L10nText?
     @Published private(set) var selectionChange: SelectionChange?
@@ -187,7 +188,7 @@ final class ScanStore: ObservableObject {
         } catch {
             engineError = Self.describe(error)
             busyMessage = nil
-            phase = .idle
+            phase = report == nil ? .idle : .ready
         }
     }
 
@@ -221,11 +222,13 @@ final class ScanStore: ObservableObject {
             memoryLoadedAt = Date()
             memoryPhase = .loaded
         } catch {
-            memoryReport = nil
-            memoryLoadedAt = nil
             memoryError = Self.describe(error)
-            memoryPhase = .failed
+            memoryPhase = memoryReport == nil ? .failed : .loaded
         }
+    }
+
+    func dismissMemoryError() {
+        memoryError = nil
     }
 
     func ensureMemory(maxAge: TimeInterval = 45) async {
@@ -265,8 +268,11 @@ final class ScanStore: ObservableObject {
     }
 
     func fetchStorageVolumes() async {
+        guard !isLoadingStorageVolumes else { return }
+        isLoadingStorageVolumes = true
         storageVolumes = await Task.detached { Self.readVolumes() }.value
         storageVolumesLoadedAt = Date()
+        isLoadingStorageVolumes = false
     }
 
     private nonisolated static func readVolumes() -> [VolumeInfo] {

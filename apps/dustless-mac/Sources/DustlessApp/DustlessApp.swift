@@ -12,13 +12,14 @@ struct DustlessApp: App {
     @StateObject private var router = AppRouter()
 
     var body: some Scene {
-        WindowGroup("Dustless") {
+        WindowGroup("Dustless", id: "main") {
             RootView(store: store, router: router, net: net)
                 .environmentObject(store)
                 .environmentObject(net)
                 .environmentObject(settings)
                 .frame(minWidth: 940, minHeight: 560)
                 .background(WindowCapture())
+                .registerWindowOpener()
                 .task {
                     login.refresh()
                     await store.rescan()
@@ -26,6 +27,11 @@ struct DustlessApp: App {
         }
         .defaultSize(width: 1280, height: 800)
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button(settings.t("openDustless")) { openMainWindow() }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .accessibilityIdentifier("menu.openWindow")
+            }
             CommandGroup(after: .newItem) {
                 Button(settings.t("rescan")) { Task { await store.rescan() } }
                     .keyboardShortcut("r", modifiers: .command)
@@ -49,9 +55,11 @@ struct DustlessApp: App {
         MenuBarExtra {
             MenuBarContent(store: store, router: router, net: net, awdl: awdl, onOpenWindow: openMainWindow)
                 .environmentObject(settings)
+                .registerWindowOpener()
         } label: {
             MenuBarLabel()
                 .accessibilityIdentifier("menubar.status")
+                .registerWindowOpener()
         }
         .menuBarExtraStyle(.window)
     }
@@ -64,6 +72,50 @@ struct MenuBarLabel: View {
         } else {
             Image(systemName: "leaf.fill")
         }
+    }
+}
+
+@MainActor
+final class WindowOpener {
+    static let shared = WindowOpener()
+
+    private var action: (() -> Void)?
+    private var isOpening = false
+    private var pending = false
+
+    func register(_ action: @escaping () -> Void) {
+        self.action = action
+        if pending {
+            pending = false
+            open()
+        }
+    }
+
+    func open() {
+        guard !isOpening else { return }
+        guard let action else {
+            pending = true
+            return
+        }
+        isOpening = true
+        action()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.isOpening = false }
+    }
+}
+
+private struct WindowOpenerRegistration: ViewModifier {
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            WindowOpener.shared.register { openWindow(id: "main") }
+        }
+    }
+}
+
+extension View {
+    func registerWindowOpener() -> some View {
+        modifier(WindowOpenerRegistration())
     }
 }
 
@@ -82,11 +134,16 @@ enum MenuBarIcon {
 @MainActor
 func openMainWindow() {
     NSApp.activate(ignoringOtherApps: true)
-    if let window = MainWindowTracker.shared.window {
-        if window.isMiniaturized { window.deminiaturize(nil) }
+    guard let window = MainWindowTracker.shared.window else {
+        WindowOpener.shared.open()
+        NSApp.activate(ignoringOtherApps: true)
+        return
+    }
+    if window.isMiniaturized { window.deminiaturize(nil) }
+    if window.isVisible {
         window.makeKeyAndOrderFront(nil)
     } else {
-        NSApp.sendAction(#selector(NSDocumentController.newDocument(_:)), to: nil, from: nil)
+        WindowOpener.shared.open()
     }
     NSApp.activate(ignoringOtherApps: true)
 }
@@ -94,11 +151,12 @@ func openMainWindow() {
 @MainActor
 final class MainWindowTracker {
     static let shared = MainWindowTracker()
-    weak var window: NSWindow?
+    var window: NSWindow?
 }
 
 final class WindowCaptureView: NSView {
     override func viewDidMoveToWindow() {
+        guard let window else { return }
         MainWindowTracker.shared.window = window
     }
 }
@@ -146,6 +204,15 @@ final class AutoCloseGate {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            let visible = NSApp.windows.contains { $0.title == "Dustless" && $0.isVisible }
+            if MainWindowTracker.shared.window == nil && !visible {
+                openMainWindow()
+            }
+        }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { openMainWindow() }
         return true
@@ -161,13 +228,15 @@ struct RootView: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             ModuleSidebar(store: store, selection: router.module) { module in
                 router.select(module)
             }
-        } detail: {
+            .frame(width: 224)
+            Divider()
             ModuleContent(store: store, router: router, net: net)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Dustless")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

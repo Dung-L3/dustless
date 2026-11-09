@@ -303,6 +303,7 @@ struct StorageView: View {
         .help(notes)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(settings.t("reclaimableMetric")): \(ByteFormat.string(reclaimable)). \(notes)")
+        .accessibilityIdentifier("storage.reclaimable")
     }
 
     private var notes: String {

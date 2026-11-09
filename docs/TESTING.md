@@ -2,9 +2,9 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # 474 tests, about 40s; 20 skips unless DUSTLESS_UI=1
+bun test              # 530 tests, about 45s; 31 skips unless DUSTLESS_UI=1
 bun run lint          # repository policy checks
-cd apps/dustless-mac && swift test   # 148 Swift tests, about 100s
+cd apps/dustless-mac && swift test   # 163 Swift tests, about 105s
 bun run test:ui       # real macOS app UI suite; needs Accessibility trust; see below
 ```
 
@@ -103,6 +103,21 @@ read the engine's output from a file.
 It builds both the engine and a test-only app bundle (`dev.dustless.e2e`,
 process `DustlessE2E`), presses the controls a user would press, and asserts on
 the filesystem afterwards.
+
+The window and popover cases are user-journey tests now, not just source
+contracts. `UiApp.closeWindow()` closes only a real `AXStandardWindow`, so an
+`AXHelpTag` or a tooltip cannot be mistaken for the main window;
+`UiApp.dialogs()` reads `AXDialog` and `AXSheet` windows and their text, so a
+system alert is a test failure rather than a screenshot detail. The cases cover
+closing the window and waiting 30 seconds before reopening it from the popover
+(the old `NSDocumentController` path raised "No document could be created."
+there), opening the Quick Clean review when the main window is closed, reopening
+the popover after a module row, the File menu's Open Dustless item, a live
+language switch, a cleanup search with no matches, cancelling a network
+operation without invoking the engine, and cancelling a process stop before
+confirming it. The 30-second wait is deliberate: the release of a closed
+SwiftUI window is what used to make the document fallback run, and shortening
+the wait would stop the case from exercising the regression.
 
 Requirements: macOS, Xcode or the Command Line Tools (`swiftc`), and
 Accessibility trust for the terminal or process that starts the tests. Without
