@@ -8,6 +8,10 @@
 
 **Memory actions are direct.** Each app group has a graceful Quit action on the row that targets only that group's bundle path; per-process Stop and a visible Force Stop menu live in the expansion. Per-item state replaces the global lock, so one action never freezes the list.
 
+**A scan can no longer hang on cloud-backed user folders.** Glob expansion used to read every directory under HOME before the red check, so `~/*/*/node_modules` opened `~/Desktop` and could wait indefinitely on an iCloud-managed folder. A red path is now dropped before it is traversed, and `CloudStorage` is red. Ordinary project `node_modules` still resolve; the real-home scan completes in 2.96 s.
+
+**Contrast is part of the design system.** The popover primary action uses the same dark-on-accent treatment as the rest of the app instead of the system white-on-accent fill, and the muted metadata token was raised to meet WCAG AA on both raised and window surfaces. A test resolves the live dynamic tokens under Aqua and Dark Aqua and fails below 4.5:1.
+
 **The window still reopens without a document alert.** Dustless no longer asks AppKit for a document it does not have. Closing the main window and opening it later from the menu bar used to produce "No document could be created."; the window is now reopened through its SwiftUI scene, the popover keeps working after a module row navigated, and the main content is laid out inside the window instead of a split view that grew to the height of the current module. The Storage wording no longer promises a password for every advanced action, the memory panel keeps its last reading with an error banner instead of blanking, and a running engine's "not found" stderr is no longer mistaken for a missing engine. The Accessibility suite now detects system dialogs, waits for a released window, and covers the window/popover/language/search/cancel journeys.
 
 ## 0.6.0

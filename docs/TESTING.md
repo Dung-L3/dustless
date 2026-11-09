@@ -2,9 +2,9 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # 538 tests, about 25s; 36 skips unless DUSTLESS_UI=1
+bun test              # 539 tests, about 25s; 36 skips unless DUSTLESS_UI=1
 bun run lint          # repository policy checks
-cd apps/dustless-mac && swift test   # 171 Swift tests, about 105s
+cd apps/dustless-mac && swift test   # 174 Swift tests, about 105s
 bun run test:ui       # real macOS app UI suite; needs Accessibility trust; see below
 ```
 
@@ -45,6 +45,12 @@ What the render suite proves:
   and the cancel control next to it is neither red nor the same colour.
 - the SAFE tier badge is painted green, YOUR CALL is orange, PROTECTED is red,
   and the blocked reason is red, wherever those appear.
+- a glob never traverses a red path such as `Desktop` or `CloudStorage`, so a
+  cache rule cannot hang on a cloud-backed folder before the red check.
+- the primary action's text and the muted metadata meet WCAG AA contrast on
+  their actual fills in both Aqua and Dark Aqua, resolved from the live tokens.
+  The popover uses the shared dark-on-accent primary style, not the system
+  white-on-accent fill.
 - the three languages draw the same rows in the same places: same number of
   text bands, same vertical centres, same leading edge, and the delete button
   does not move. A translation that wraps into an extra row or pushes the
