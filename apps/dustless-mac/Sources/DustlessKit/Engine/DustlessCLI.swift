@@ -270,9 +270,6 @@ public struct DustlessCLI: Sendable {
                 let reason = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 throw DustlessError.unreadableOutput(reason.isEmpty ? String(describing: error) : reason)
             }
-            if result.stderr.localizedCaseInsensitiveContains("not found") {
-                throw BinaryLocationError.notFound([executable])
-            }
             if let message = Self.engineMessage(in: result.data) {
                 throw DustlessError.exited(status: result.status, stderr: message)
             }

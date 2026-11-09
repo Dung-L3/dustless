@@ -436,7 +436,10 @@ func main() {
         press(items[index], pid: pid)
         print(json(elementInfo(items[index])))
     case "close-window":
-        guard let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement], let window = windows.first else {
+        guard let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement],
+              let window = windows.first(where: {
+                  stringAttribute($0, kAXSubroleAttribute as String) == "AXStandardWindow"
+              }) else {
             fail("no window", code: 3)
         }
         guard let close = attribute(window, kAXCloseButtonAttribute as String) as! AXUIElement? else {
@@ -444,13 +447,38 @@ func main() {
         }
         press(close, pid: pid)
         print(json(["closed": true]))
+    case "dialogs":
+        var result: [[String: Any]] = []
+        walk(app) { element, _ in
+            guard stringAttribute(element, kAXRoleAttribute as String) == "AXWindow" else { return true }
+            guard let subrole = stringAttribute(element, kAXSubroleAttribute as String),
+                  subrole == "AXDialog" || subrole == "AXSheet" else { return true }
+            var text: [String] = []
+            walk(element) { child, _ in
+                if stringAttribute(child, kAXRoleAttribute as String) == "AXStaticText",
+                   let value = stringAttribute(child, kAXValueAttribute as String) {
+                    text.append(value)
+                }
+                return true
+            }
+            result.append(["subrole": subrole, "text": text])
+            return true
+        }
+        print(json(result))
     case "windows":
         let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
         print(json(windows.map(elementInfo)))
     case "window-id":
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let ids = windows.filter { ($0[kCGWindowOwnerPID as String] as? Int) == Int(pid) }
-            .compactMap { $0[kCGWindowNumber as String] as? Int }
+        let ids = windows.filter { window in
+            guard (window[kCGWindowOwnerPID as String] as? Int) == Int(pid) else { return false }
+            let bounds = window[kCGWindowBounds as String] as? [String: Any] ?? [:]
+            return (bounds["Height"] as? Double ?? 0) >= 100
+        }.sorted {
+            let left = $0[kCGWindowLayer as String] as? Int ?? 0
+            let right = $1[kCGWindowLayer as String] as? Int ?? 0
+            return left > right
+        }.compactMap { $0[kCGWindowNumber as String] as? Int }
         print(json(ids))
     case "dump":
         let root = options.value("id").flatMap { id in
@@ -474,6 +502,21 @@ func main() {
         } else {
             print(output)
         }
+    case "resize":
+        guard let width = options.double("width"), let height = options.double("height") else {
+            fail("missing --width or --height", code: 2)
+        }
+        guard let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement],
+              let window = windows.first(where: {
+                  stringAttribute($0, kAXSubroleAttribute as String) == "AXStandardWindow"
+              }) else {
+            fail("no window", code: 3)
+        }
+        var size = CGSize(width: width, height: height)
+        guard let value = AXValueCreate(.cgSize, &size) else { fail("could not make a size") }
+        let result = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, value)
+        if result != .success { fail("resize failed: \(result.rawValue)") }
+        print(json(["width": width, "height": height]))
     case "activate":
         activate(pid)
         print(json(["active": true]))

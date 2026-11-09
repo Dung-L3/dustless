@@ -3,6 +3,12 @@ import Combine
 import DustlessKit
 import SwiftUI
 
+@MainActor
+private final class ModuleDismissGate {
+    static let shared = ModuleDismissGate()
+    var module: Module?
+}
+
 struct MenuBarContent: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var router: AppRouter
@@ -31,7 +37,14 @@ struct MenuBarContent: View {
         }
         .padding(PanelStyle.Space.m)
         .frame(width: 320)
-        .onChange(of: router.module) { _, _ in dismiss() }
+        .onChange(of: router.module) { _, module in
+            if ModuleDismissGate.shared.module == module {
+                ModuleDismissGate.shared.module = nil
+                return
+            }
+            ModuleDismissGate.shared.module = nil
+            dismiss()
+        }
         .task { await refreshLive() }
         .awdlPrivilegeConfirm(isPresented: $pendingPrivilege) {
             pendingPrivilege = false
@@ -112,9 +125,19 @@ struct MenuBarContent: View {
         .accessibilityIdentifier("menubar.refresh")
     }
 
-    private func leave(_ action: () -> Void) {
+    private func leave(after delay: TimeInterval = 0, _ action: @escaping () -> Void) {
         dismiss()
-        action()
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+        } else {
+            action()
+        }
+    }
+
+    private func prepareDismiss(for module: Module) {
+        if router.module != module {
+            ModuleDismissGate.shared.module = module
+        }
     }
 
     private var actions: some View {
@@ -230,6 +253,7 @@ struct MenuBarContent: View {
             .accessibilityIdentifier("menubar.quickClean")
         } else {
             Button {
+                prepareDismiss(for: .cleanup)
                 leave {
                     onOpenWindow()
                     router.select(.cleanup)
@@ -267,19 +291,28 @@ struct MenuBarContent: View {
     }
 
     private func reviewAndClean() {
-        leave {
+        prepareDismiss(for: .cleanup)
+        leave(after: 0.25) {
             onOpenWindow()
             router.select(.cleanup)
-            store.showingConfirmation = true
+            presentConfirmation()
         }
     }
 
     private func quickClean() {
-        leave {
+        prepareDismiss(for: .cleanup)
+        leave(after: 0.25) {
             onOpenWindow()
             store.tierTab = .safe
             store.selectQuickClean()
             router.select(.cleanup)
+            presentConfirmation()
+        }
+    }
+
+    private func presentConfirmation() {
+        onOpenWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             store.showingConfirmation = true
         }
     }
@@ -295,6 +328,7 @@ struct MenuBarContent: View {
     private func destinationRow(_ module: Module) -> some View {
         let title = settings.t(module.titleKey)
         return Button {
+            prepareDismiss(for: module)
             leave {
                 onOpenWindow()
                 router.select(module)

@@ -162,6 +162,12 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.find("overview.header");
       await app.pressMenuItem("Storage");
       await app.find("storage.header");
+      await app.click("sidebar.module.memory");
+      await app.find("memory.header");
+      await app.click("sidebar.module.network");
+      await app.find("network.header");
+      await app.click("sidebar.module.overview");
+      await app.find("overview.header");
       await app.click("sidebar.tier.safe");
       await app.find("cleanup.rescan");
       await app.find("cleanup.search");
@@ -178,6 +184,68 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await app.screenshot("menubar-open");
       await app.press("menubar.module.storage");
       await app.find("storage.header");
+    });
+  });
+
+  test("reopens the main window after it is closed and released", async () => {
+    await withApp("window-reopen", {}, async (app) => {
+      await app.closeWindow();
+      expect(await app.windowCount()).toBe(0);
+      await Bun.sleep(30_000);
+      await app.openMenuBar();
+      await app.find("menubar.status");
+      await app.press("menubar.open");
+      await app.find("overview.header", 20_000);
+      expect(await app.windowCount()).toBe(1);
+      expect(await app.dialogs()).toEqual([]);
+      const header = await app.find("overview.header");
+      expect(typeof header["y"]).toBe("number");
+      expect(Number(header["y"])).toBeGreaterThan(0);
+      await app.screenshot("window-reopen");
+    });
+  });
+
+  test("opens the review from the popover with the main window closed", async () => {
+    await withApp(
+      "popover-closed-window",
+      {},
+      async (app) => {
+        await app.closeWindow();
+        expect(await app.windowCount()).toBe(0);
+        await app.openMenuBar();
+        await app.find("menubar.quickClean", 20_000);
+        await app.press("menubar.quickClean");
+        await app.find("confirm.delete", 20_000);
+        expect(await app.windowCount()).toBe(1);
+        expect(await app.dialogs()).toEqual([]);
+        await app.press("confirm.cancel");
+        await app.waitGone("confirm.cancel");
+      },
+      seedCleanup,
+    );
+  });
+
+  test("reopens the popover after routing to a module", async () => {
+    await withApp("popover-reopen", {}, async (app) => {
+      await app.openMenuBar();
+      await app.press("menubar.module.storage");
+      await app.find("storage.header");
+      await app.openMenuBar();
+      await app.find("menubar.open");
+      await app.press("menubar.open");
+      await app.find("storage.header");
+      expect(await app.dialogs()).toEqual([]);
+      await app.screenshot("popover-reopen");
+    });
+  });
+
+  test("opens the main window from the File menu", async () => {
+    await withApp("menu-open-window", {}, async (app) => {
+      await app.closeWindow();
+      await app.pressMenuItem("Open Dustless");
+      await app.find("overview.header", 20_000);
+      expect(await app.windowCount()).toBe(1);
+      expect(await app.dialogs()).toEqual([]);
     });
   });
 
@@ -230,7 +298,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await Bun.sleep(400);
       await capture(app, "acceptance-overview");
       await app.openMenuBar();
-      await app.find("menubar.status");
+      await app.find("menubar.open");
       await capture(app, "acceptance-popover");
       await app.press("menubar.quickClean");
       await app.find("confirm.delete");
@@ -244,7 +312,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       await Bun.sleep(400);
       await capture(app, "acceptance-overview-vi");
       await app.openMenuBar();
-      await app.find("menubar.status");
+      await app.find("menubar.open");
       await capture(app, "acceptance-popover-vi");
     }, seedCleanup);
   });
@@ -272,10 +340,85 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     });
   });
 
+  test("switches language live from settings", async () => {
+    await withApp("language-live", { language: "en" }, async (app) => {
+      await app.press("toolbar.settings");
+      await app.find("settings.language");
+      await app.press("settings.language");
+      await app.pressLabel("Tiếng Việt");
+      await Bun.sleep(500);
+      expect(String((await app.find("overview.header")).value ?? "")).toBe("Tổng quan");
+      await app.press("settings.language");
+      await app.pressLabel("简体中文");
+      await Bun.sleep(500);
+      expect(String((await app.find("overview.header")).value ?? "")).toBe("概览");
+      await app.screenshot("language-live");
+    });
+  });
+
   test("reads the selected language from the isolated preferences file", async () => {
     await withApp("language-vi", { language: "vi" }, async (app) => {
       const header = await app.find("overview.header");
       expect(String(header.value ?? "")).toBe("Tổng quan");
+    });
+  });
+
+  test("filters cleanup findings and shows no matches", async () => {
+    await withApp(
+      "cleanup-filter",
+      {},
+      async (app) => {
+        await app.click("sidebar.tier.safe");
+        await app.find("cleanup.search");
+        await app.typeText("cleanup.search", "zzz-no-match");
+        await app.find("cleanup.noMatches");
+      },
+      seedCleanup,
+    );
+  });
+
+  test("cleans safely from the overview after a cancelled review", async () => {
+    await withApp(
+      "overview-quickclean",
+      {},
+      async (app) => {
+        const green = join(app.home, ".dustless-e2e", "green");
+        const fail = join(app.home, ".dustless-e2e", "fail");
+        await app.find("overview.cleanSafely", 20_000);
+        await app.press("overview.cleanSafely");
+        await app.find("confirm.delete");
+        await app.press("confirm.cancel");
+        await app.waitGone("confirm.cancel");
+        expect(await exists(green)).toBe(true);
+        expect(await exists(fail)).toBe(true);
+        expect(await app.engineLog()).not.toContain("apply --json");
+        await Bun.sleep(500);
+        await app.find("cleanup.review");
+        await app.press("cleanup.review");
+        await app.find("confirm.delete");
+        await app.press("confirm.delete");
+        await app.find("cleanup.result.counts", 30_000);
+        const counts = await app.find("cleanup.result.counts");
+        expect(String(counts.value ?? "")).toBe("2 deleted · 1 skipped · 0 failed");
+        expect(await exists(green)).toBe(false);
+        expect(await exists(fail)).toBe(false);
+      },
+      seedCleanup,
+    );
+  });
+
+  test("cancels an advanced network operation without running it", async () => {
+    await withApp("network-cancel", { intercepted: "both" }, async (app) => {
+      await app.pressMenuItem("Network");
+      await app.find("network.header");
+      await app.press("network.advanced");
+      await app.find("network.run.reset-dns");
+      await app.press("network.run.reset-dns");
+      await app.find("network.advanced.confirm");
+      await app.press("network.advanced.cancel");
+      await app.waitGone("network.advanced.cancel");
+      expect(await app.engineLog()).not.toContain("net --reset-dns");
+      expect(await app.exists("network.outcome.reset-dns")).toBe(false);
     });
   });
 
@@ -424,6 +567,11 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.find("memory.summary");
         await app.find(`memory.group.${fixture.binary}`, 20_000);
         await app.find(`memory.stop.${fixture.child.pid}`, 20_000);
+        await app.press(`memory.stop.${fixture.child.pid}`);
+        await app.find("memory.stop.cancel");
+        await app.press("memory.stop.cancel");
+        await app.waitGone("memory.stop.cancel");
+        expect(processAlive(fixture.child.pid!)).toBe(true);
         await app.press(`memory.stop.${fixture.child.pid}`);
         await app.find("memory.stop.confirm");
         await app.press("memory.stop.confirm");

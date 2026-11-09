@@ -39,6 +39,23 @@ struct EngineProcessContractTests {
         }
     }
 
+    @Test func aRuntimeNotFoundStaysAnEngineFailure() async throws {
+        let cli = DustlessCLI(executable: try script("echo 'helper not found' >&2\nexit 2"), timeout: 5)
+        do {
+            _ = try await cli.scan()
+            Issue.record("expected the non-zero exit to throw")
+        } catch let error as DustlessError {
+            guard case .exited(let status, let stderr) = error else {
+                Issue.record("expected .exited, got \(error)")
+                return
+            }
+            #expect(status == 2)
+            #expect(stderr.contains("helper not found"))
+        } catch let error as BinaryLocationError {
+            Issue.record("a running engine's stderr must not be reported as a missing engine: \(error)")
+        }
+    }
+
     @Test func aHungEngineIsKilledAtTheDeadline() async throws {
         let cli = DustlessCLI(executable: try script("exec sleep 30"), timeout: 1)
         do {

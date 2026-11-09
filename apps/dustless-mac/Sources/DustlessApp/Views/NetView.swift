@@ -38,6 +38,7 @@ struct NetView: View {
             Button(settings.t("confirmCancel"), role: .cancel) {
                 pendingOp = nil
             }
+            .accessibilityIdentifier("network.advanced.cancel")
         } message: {
             Text(confirmMessage)
         }

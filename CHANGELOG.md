@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Nothing yet.
+Dustless no longer asks AppKit for a document it does not have. Closing the main window and opening it later from the menu bar used to produce "No document could be created."; the window is now reopened through its SwiftUI scene, the popover keeps working after a module row navigated, and the main content is laid out inside the window instead of a split view that grew to the height of the current module. The Storage wording no longer promises a password for every advanced action, the memory panel keeps its last reading with an error banner instead of blanking, and a running engine's "not found" stderr is no longer mistaken for a missing engine. The Accessibility suite now detects system dialogs, waits for a released window, and covers the window/popover/language/search/cancel journeys.
 
 ## 0.6.0
 

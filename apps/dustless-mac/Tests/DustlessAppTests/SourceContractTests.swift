@@ -152,6 +152,23 @@ struct SourceContractTests {
         )
     }
 
+    @Test func theAppNeverAsksAppKitForADocument() throws {
+        let file = appSources.appendingPathComponent("DustlessApp/DustlessApp.swift")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(
+            !text.contains("NSDocumentController") && !text.contains("newDocument"),
+            "Dustless has no document types; asking NSDocumentController for a document only produces a system alert"
+        )
+        #expect(
+            text.contains("WindowGroup(\"Dustless\", id: \"main\")"),
+            "the main window needs a stable scene id so openWindow can recreate it"
+        )
+        #expect(
+            text.contains("openWindow(id: \"main\")"),
+            "the app must reopen its own window instead of asking for a document"
+        )
+    }
+
     @Test func everyPopoverNavigationOpensTheWindow() throws {
         let file = viewsDirectory.appendingPathComponent("MenuBarContent.swift")
         let all = try lines(of: file)

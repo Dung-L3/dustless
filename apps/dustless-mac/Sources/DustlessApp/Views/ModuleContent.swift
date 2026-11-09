@@ -9,7 +9,6 @@ struct ModuleContent: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity)
     }
 
     @ViewBuilder

@@ -90,6 +90,7 @@ struct MemoryView: View {
             Button(settings.t("confirmCancel"), role: .cancel) {
                 pendingStop = nil
             }
+            .accessibilityIdentifier("memory.stop.cancel")
         } message: {
             Text(stopMessage)
         }
@@ -208,6 +209,10 @@ struct MemoryView: View {
                     .accessibilityIdentifier("memory.summary")
             }
 
+            if let error = store.memoryError, store.memoryReport != nil {
+                staleBanner(error)
+            }
+
             if groups.isEmpty {
                 if let error = store.memoryError {
                     PanelStateView(
@@ -238,6 +243,32 @@ struct MemoryView: View {
                 .frame(maxHeight: .infinity)
             }
         }
+    }
+
+    private func staleBanner(_ error: L10nText) -> some View {
+        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            EngineErrorMessage(
+                text: error,
+                retry: { Task { await store.fetchMemory() } },
+                retryIdentifier: "memory.retry"
+            )
+            Button(action: { store.dismissMemoryError() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(settings.t("close"))
+            .accessibilityLabel(settings.t("close"))
+            .accessibilityIdentifier("memory.error.dismiss")
+            Spacer(minLength: 0)
+        }
+        .padding(PanelStyle.Space.s)
+        .panelCard(PanelStyle.rowFill)
+        .accessibilityIdentifier("memory.error")
     }
 
     private func processGroups(_ report: MemoryReport?) -> [ProcessGroup] {
