@@ -22,7 +22,7 @@ struct ApplicationsModuleView: View {
 
     var body: some View {
         ApplicationsView()
-            .task { await store.fetchStorageApps() }
+            .task { await store.ensureStorageApps() }
     }
 }
 
@@ -103,7 +103,10 @@ struct ApplicationsView: View {
         case .name:
             return base.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         case .size:
-            return base.sorted { $0.bytes > $1.bytes }
+            return base.sorted {
+                if $0.bytes != $1.bytes { return $0.bytes > $1.bytes }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
         }
     }
 
@@ -184,7 +187,11 @@ struct ApplicationsView: View {
         if let report = control.result {
             StorageResultCard(
                 report: report,
-                title: settings.t(control.resultIsPartial ? "appsPartialTitle" : "appsUninstalled"),
+                title: settings.t(
+                    control.resultIsFailure
+                        ? "appsUninstallFailed"
+                        : (control.resultIsPartial ? "appsPartialTitle" : "appsUninstalled")
+                ),
                 onClose: { control.clearResult() }
             )
             .frame(maxHeight: 190)

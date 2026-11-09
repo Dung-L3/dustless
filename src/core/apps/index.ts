@@ -122,7 +122,8 @@ async function readPlistXML(plistPath: string): Promise<string | null> {
   } catch {
     return null;
   }
-  if (!xml.startsWith("bplist") || process.platform !== "darwin") return xml;
+  if (!xml.startsWith("bplist")) return xml;
+  if (process.platform !== "darwin") return null;
   const converted = spawnSync("/usr/bin/plutil", ["-convert", "xml1", "-o", "-", plistPath], {
     encoding: "utf8",
   });
@@ -256,14 +257,18 @@ async function concurrentMap<T, R>(
   items: readonly T[],
   limit: number,
   run: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
+): Promise<Array<R | null>> {
+  const results: Array<R | null> = new Array(items.length);
   let next = 0;
   const worker = async () => {
     while (true) {
       const index = next++;
       if (index >= items.length) return;
-      results[index] = await run(items[index]!);
+      try {
+        results[index] = await run(items[index]!);
+      } catch {
+        results[index] = null;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, Math.max(1, items.length)) }, worker));
@@ -469,7 +474,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallReport
   const summary = outcomes.reduce(
     (acc, o) => {
       acc[o.status]++;
-      acc.totalBytes += o.bytes;
+      if (o.status === "trashed" || o.status === "purged") acc.totalBytes += o.bytes;
       return acc;
     },
     { trashed: 0, purged: 0, skipped: 0, failed: 0, totalBytes: 0 } as UninstallReport["summary"],
