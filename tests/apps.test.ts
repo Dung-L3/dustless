@@ -165,7 +165,7 @@ describe("listApps", () => {
 });
 
 describe("uninstall", () => {
-  test("reports a partial uninstall when one related path cannot be moved", async () => {
+  test.skipIf(process.platform === "win32")("reports a partial uninstall when one related path cannot be moved", async () => {
     if (process.getuid?.() === 0) return;
     const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-partial-")));
     try {
