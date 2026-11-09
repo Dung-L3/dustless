@@ -15,7 +15,7 @@ final class ApplicationsControl: ObservableObject {
     var isWorking: Bool { workingApp != nil }
 
     func isRunning(_ app: InstalledApp) -> Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId).isEmpty
+        !RunningAppIdentity.running(bundleId: app.bundleId, appPath: app.path).isEmpty
     }
 
     func requestUninstall(_ app: InstalledApp) {
@@ -87,24 +87,14 @@ final class ApplicationsControl: ObservableObject {
     }
 
     private func quitIfNeeded(_ app: InstalledApp) async -> Bool {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId)
+        let running = RunningAppIdentity.running(bundleId: app.bundleId, appPath: app.path)
         guard !running.isEmpty else { return true }
-        let regular = running.filter { $0.activationPolicy == .regular }
-        guard !regular.isEmpty,
-              regular.contains(where: {
-                  $0.bundleURL?.standardizedFileURL.path == URL(fileURLWithPath: app.path).standardizedFileURL.path
-              }) else {
-            error = L10nText("appsQuitFailed", ["name": app.name])
-            return false
-        }
 
         isQuitting = true
-        regular.forEach { $0.terminate() }
+        running.forEach { $0.terminate() }
         let deadline = Date().addingTimeInterval(8)
         while Date() < deadline {
-            let remaining = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleId)
-                .filter { $0.activationPolicy == .regular }
-            if remaining.isEmpty {
+            if RunningAppIdentity.running(bundleId: app.bundleId, appPath: app.path).isEmpty {
                 isQuitting = false
                 return true
             }
