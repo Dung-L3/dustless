@@ -35,7 +35,8 @@ struct OverviewView: View {
     }
 
     private var provenance: String {
-        settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
+        if store.report == nil, store.isBusy { return settings.t("scanningShort") }
+        return settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
     }
 
     private var hero: some View {
@@ -110,6 +111,7 @@ struct OverviewView: View {
 
     private var heroHint: String {
         if store.report != nil { return settings.t("reclaimableHelp") }
+        if store.isBusy { return settings.t("busyScanning") }
         return store.engineError == nil ? settings.t("overviewNoScan") : settings.t("engineUnavailable")
     }
 
