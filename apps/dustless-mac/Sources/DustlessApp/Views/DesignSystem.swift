@@ -10,8 +10,9 @@ enum Theme {
         static let hairline = adaptive(dark: 0x2A2E30, light: 0xDDDBD4)
         static let textPrimary = adaptive(dark: 0xF2F4F2, light: 0x1D1F1C)
         static let textSecondary = adaptive(dark: 0xA7ADA8, light: 0x626861)
-        static let textMuted = adaptive(dark: 0x747B76, light: 0x6E746D)
+        static let textMuted = adaptive(dark: 0x7E857F, light: 0x6A7069)
         static let accent = adaptive(dark: 0x8BD49C, light: 0x4F9D65)
+        static let onAccent = adaptive(dark: 0x0B0C0D, light: 0x0B0C0D)
         static let accentDeep = adaptive(dark: 0x5FAF72, light: 0x3C7D4E)
         static let warning = adaptive(dark: 0xE3B25C, light: 0xA66A14)
         static let danger = adaptive(dark: 0xE06C75, light: 0xB3474F)
@@ -171,7 +172,7 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Theme.Font.label)
-            .foregroundStyle(isEnabled ? Theme.Palette.ink : Theme.Palette.textMuted)
+            .foregroundStyle(isEnabled ? Theme.Palette.onAccent : Theme.Palette.textMuted)
             .padding(.horizontal, Theme.Space.m)
             .padding(.vertical, 7)
             .background(isEnabled ? Theme.Palette.accent : Theme.Palette.raised, in: .capsule)
@@ -182,6 +183,30 @@ struct PrimaryButtonStyle: ButtonStyle {
                 )
             }
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(Motion.gated(reduceMotion, Motion.control), value: configuration.isPressed)
+    }
+}
+
+struct WidePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Font.label)
+            .foregroundStyle(isEnabled ? Theme.Palette.onAccent : Theme.Palette.textMuted)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity)
+            .background(isEnabled ? Theme.Palette.accent : Theme.Palette.raised, in: .capsule)
+            .overlay {
+                Capsule().stroke(
+                    isEnabled ? Color.white.opacity(0.18) : Theme.Palette.hairline,
+                    lineWidth: 1
+                )
+            }
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
             .animation(Motion.gated(reduceMotion, Motion.control), value: configuration.isPressed)
     }

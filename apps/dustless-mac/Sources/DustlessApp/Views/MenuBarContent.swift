@@ -219,8 +219,7 @@ struct MenuBarContent: View {
             } label: {
                 Text(scanLabel).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(WidePrimaryButtonStyle())
             .help(settings.t("rescanHelp"))
             .transition(.opacity)
             .accessibilityIdentifier("menubar.scan")
@@ -229,8 +228,7 @@ struct MenuBarContent: View {
                 Text(settings.t("reviewAndDelete"))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(WidePrimaryButtonStyle())
             .disabled(!store.canClean)
             .help(settings.t("reviewAndDeleteHelp"))
             .accessibilityLabel(settings.t("overviewReview", [
@@ -247,8 +245,7 @@ struct MenuBarContent: View {
                 ]))
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(WidePrimaryButtonStyle())
             .disabled(store.isBusy || store.phase != .ready)
             .help(settings.t("menubar.cleanSafelyHelp"))
             .accessibilityHint(settings.t("menubar.cleanSafelyHelp"))
@@ -264,8 +261,7 @@ struct MenuBarContent: View {
             } label: {
                 Text(settings.t("menuPickToClean")).frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(WidePrimaryButtonStyle())
             .help(settings.t("menuPickToClean"))
             .transition(.opacity)
             .accessibilityIdentifier("menubar.pick")

@@ -23,8 +23,9 @@ Dustless is a quiet, premium macOS utility. It should feel like a precision inst
 | `hairline` | white 8% | separators and edges |
 | `textPrimary` | `#F2F4F2` | headings and values |
 | `textSecondary` | `#A7ADA8` | labels and body support |
-| `textMuted` | `#6F7671` | tertiary metadata |
+| `textMuted` | `#7E857F` | tertiary metadata |
 | `accent` | `#8BD49C` | safe / primary action |
+| `onAccent` | `#0B0C0D` | text and icons on the accent fill, both modes |
 | `accentDeep` | `#5FAF72` | pressed accent |
 | `warning` | `#E3B25C` | review / caution |
 | `danger` | `#E06C75` | destructive only |
@@ -63,7 +64,7 @@ Metrics use rounded, monospaced digits. All byte values use one byte formatter.
 - **Surface card:** tonal fill, 16 radius, 16–20 padding, optional disclosure header.
 - **List row:** 44–52 pt minimum; leading icon/checkbox, title, secondary line, trailing value and action. Hover raises tone; selected uses accent at 12%.
 - **Status badge:** small capsule or dot + text; green safe, amber review, red destructive/blocked, blue neutral.
-- **Primary button:** accent fill, dark text, 10 radius or pill for toolbar actions; pressed scales to 0.98; disabled uses 40% opacity.
+- **Primary button:** accent fill, `onAccent` dark text, 10 radius or pill for toolbar actions; pressed scales to 0.98; disabled uses a raised fill and muted text. The popover uses the same treatment at full width.
 - **Secondary button:** raised surface, hairline edge, primary text.
 - **Destructive button:** danger fill or danger outline; never accent.
 - **Search field:** raised surface, magnifier, clear button, 10 radius, 220–320 pt.

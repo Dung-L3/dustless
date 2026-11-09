@@ -195,6 +195,13 @@ struct SourceContractTests {
         #expect(text.contains("isRunning"), "the sheet must know whether the app is running")
     }
 
+    @Test func thePopoverPrimaryActionUsesTheSharedAccentText() throws {
+        let file = viewsDirectory.appendingPathComponent("MenuBarContent.swift")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(!text.contains(".buttonStyle(.borderedProminent)"), "the popover must not use the system white-on-accent fill")
+        #expect(text.contains(".buttonStyle(WidePrimaryButtonStyle())"), "the popover primary action must use the shared style")
+    }
+
     @Test func everyPopoverNavigationOpensTheWindow() throws {
         let file = viewsDirectory.appendingPathComponent("MenuBarContent.swift")
         let all = try lines(of: file)
