@@ -35,6 +35,7 @@ enum AppQuit {
         let bundleID = bundleIdentifier(at: path)
         let apps = bundleID.map { NSRunningApplication.runningApplications(withBundleIdentifier: $0) } ?? []
         let regular = apps.filter { $0.activationPolicy == .regular }
+        let owning = RunningAppIdentity.matching(regular, appPath: path)
         let facts = Facts(
             bundlePath: path,
             bundleID: bundleID,
@@ -42,11 +43,11 @@ enum AppQuit {
             owners: Set(group.processes.map(\.owner)),
             currentUser: NSUserName(),
             anyRoot: group.processes.contains(where: \.root),
-            isRunning: !regular.isEmpty,
-            policy: regular.first?.activationPolicy
+            isRunning: !owning.isEmpty,
+            policy: owning.first?.activationPolicy
         )
-        guard isEligible(facts), let bundleID else { return nil }
-        return Target(bundleID: bundleID, name: group.label, apps: regular)
+        guard isEligible(facts), let bundleID, !owning.isEmpty else { return nil }
+        return Target(bundleID: bundleID, name: group.label, apps: owning)
     }
 
     static func requestQuit(_ target: Target) -> Bool {

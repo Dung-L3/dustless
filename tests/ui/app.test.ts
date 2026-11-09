@@ -625,6 +625,44 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     );
   });
 
+  test("leaves a same-bundle-id copy at another path alone", async () => {
+    const foreign: { value: Awaited<ReturnType<typeof startRunningAppFixture>> | null } = { value: null };
+    try {
+      await withApp(
+        "applications-foreign-copy",
+        {},
+        async (app) => {
+          await app.click("sidebar.module.applications");
+          await app.find("applications.header");
+          await app.find("applications.uninstall.dev.dustless.e2e.foreign", 20_000);
+          await app.press("applications.uninstall.dev.dustless.e2e.foreign");
+          await app.find("applications.confirm");
+          await app.press("applications.confirm");
+          await app.find("storage.result.title", 20_000);
+          const target = join(app.home, "Applications", "Foreign Fixture.app");
+          expect(await exists(target)).toBe(false);
+          expect(processAlive(foreign.value!.pid)).toBe(true);
+          await app.screenshot("applications-foreign-copy");
+        },
+        async (app) => {
+          await seedStorage(app);
+          foreign.value = await startRunningAppFixture(
+            join(app.home, "Other", "Foreign Fixture.app"),
+            "dev.dustless.e2e.foreign",
+            "Foreign Fixture",
+          );
+          const target = join(app.home, "Applications", "Foreign Fixture.app");
+          await mkdir(join(app.home, "Applications"), { recursive: true });
+          const copied = Bun.spawnSync(["cp", "-R", foreign.value.appPath, target]);
+          if (copied.exitCode !== 0) throw new Error("copy fixture failed");
+        },
+      );
+    } finally {
+      if (foreign.value) Bun.spawnSync(["pkill", "-f", foreign.value.appPath]);
+      if (foreign.value) await rm(foreign.value.appPath, { recursive: true, force: true });
+    }
+  });
+
   test("uninstalls a running app only after it agrees to quit", async () => {
     await withApp(
       "applications-running",
