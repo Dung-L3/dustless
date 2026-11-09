@@ -20,6 +20,8 @@ struct OverviewContent: View {
                 }
                 largestFindings(report)
                 moduleShortcuts
+            } else if store.isBusy {
+                scanningHint
             } else {
                 emptyHint
             }
@@ -170,6 +172,23 @@ struct OverviewContent: View {
     private var memoryDetail: String {
         guard let memory = store.memoryReport?.memory else { return "—" }
         return "\(settings.pressureLabel(memory.pressure)) · \(memory.pressurePercent)%"
+    }
+
+    private var scanningHint: some View {
+        HStack(spacing: Theme.Space.m) {
+            ProgressView().controlSize(.small).tint(Theme.Palette.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settings.t("scanningShort"))
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                Text(settings.t("busyScanning"))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textMuted)
+            }
+            Spacer()
+        }
+        .surfaceCard(padding: Theme.Space.m, tone: Theme.Palette.raised)
+        .accessibilityIdentifier("overview.scanning")
     }
 
     private var emptyHint: some View {
