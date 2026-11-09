@@ -7,65 +7,41 @@ struct FindingRow: View {
     let onToggle: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
+    @State private var hovered = false
 
     private var deletable: Bool { finding.isDeletableByEngine }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if deletable {
-                Button(action: onToggle) {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
-                }
-                .buttonStyle(.plain)
-                .help(settings.t(isSelected ? "includeInCleanup" : "excludeFromCleanup"))
-                .accessibilityLabel(settings.t(isSelected ? "includedLabel" : "excludedLabel"))
-                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-                .accessibilityIdentifier("cleanup.toggle.\(finding.path)")
-            } else {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 15, height: 18)
-                    .help(settings.t("lockedTooltip"))
-                    .accessibilityLabel(settings.t("lockedNeverDeleted"))
-                    .accessibilityIdentifier("cleanup.locked.\(finding.path)")
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: Theme.Space.m) {
+            control
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: Theme.Space.s) {
                     TierBadge(tier: finding.effectiveTier, compact: true)
-                    Text(finding.ruleId)
-                        .font(PanelFont.emphasis(.semibold))
-                        .foregroundStyle(.primary)
+                    Text(RuleText.description(of: finding, lang: settings.language))
+                        .font(Theme.Font.label)
+                        .foregroundStyle(Theme.Palette.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Spacer(minLength: 8)
+                    Spacer(minLength: Theme.Space.s)
                     Text(ByteFormat.string(finding.bytes))
-                        .font(PanelFont.number(.semibold))
-                        .foregroundStyle(deletable ? .primary : .secondary)
-                        .frame(width: PanelStyle.byteColumnWidth, alignment: .trailing)
+                        .font(Theme.Font.number(.semibold, size: 13))
+                        .foregroundStyle(deletable ? Theme.Palette.textPrimary : Theme.Palette.textSecondary)
+                        .frame(width: Theme.Size.byteColumn, alignment: .trailing)
                     Text(settings.age(finding.ageDays))
-                        .font(PanelFont.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 58, alignment: .trailing)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textMuted)
+                        .frame(width: 56, alignment: .trailing)
                 }
 
-                Text(finding.path)
-                    .font(PanelFont.mono(11))
-                    .foregroundStyle(deletable ? .secondary : .tertiary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(nil)
-                    .multilineTextAlignment(.leading)
-                    .accessibilityLabel(settings.t("pathA11y", ["path": finding.path]))
-
-                Text(RuleText.description(of: finding, lang: settings.language))
-                    .font(PanelFont.secondary)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(nil)
+                HStack(spacing: 6) {
+                    Text(finding.ruleId)
+                        .font(Theme.Font.mono)
+                        .foregroundStyle(Theme.Palette.textMuted)
+                        .lineLimit(1)
+                    Text("·")
+                        .foregroundStyle(Theme.Palette.textMuted)
+                    PathText(path: finding.path, font: Theme.Font.caption)
+                }
 
                 if let reasonText {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -73,19 +49,55 @@ struct FindingRow: View {
                             .font(.system(size: 9))
                         Text(reasonText)
                             .fixedSize(horizontal: false, vertical: true)
-                            .lineLimit(nil)
+                            .lineLimit(2)
                     }
-                    .font(PanelFont.caption)
-                    .foregroundStyle(finding.effectiveTier == .blocked ? Color.red : Color.secondary)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(finding.effectiveTier == .blocked ? Color(nsColor: .systemRed) : Theme.Palette.textSecondary)
                 }
             }
         }
-        .padding(.vertical, PanelStyle.Space.s)
-        .padding(.horizontal, PanelStyle.Space.m)
-        .frame(minHeight: PanelStyle.rowMinHeight)
-        .background(rowBackground)
+        .padding(.vertical, 9)
+        .padding(.horizontal, Theme.Space.m)
+        .frame(minHeight: Theme.Size.row)
+        .background(
+            isSelected && deletable ? Theme.Palette.selection : (hovered ? Theme.Palette.hover : Color.clear),
+            in: .rect(cornerRadius: Theme.Radius.row)
+        )
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(finding.effectiveTier.tint)
+                .frame(width: isSelected && deletable ? 2.5 : 0)
+                .padding(.vertical, 10)
+        }
         .contentShape(.rect)
+        .onHover { hovered = $0 }
         .pathContextMenu(finding.path)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        if deletable {
+            Button(action: onToggle) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(isSelected ? Theme.Palette.accent : Theme.Palette.textMuted)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help(settings.t(isSelected ? "includeInCleanup" : "excludeFromCleanup"))
+            .accessibilityLabel(settings.t(isSelected ? "includedLabel" : "excludedLabel"))
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityIdentifier("cleanup.toggle.\(finding.path)")
+        } else {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.Palette.textMuted)
+                .frame(width: 22, height: 22)
+                .help(settings.t("lockedTooltip"))
+                .accessibilityLabel(settings.t("lockedNeverDeleted"))
+                .accessibilityIdentifier("cleanup.locked.\(finding.path)")
+        }
     }
 
     private var reasonText: String? {
@@ -96,21 +108,5 @@ struct FindingRow: View {
             return settings.tierExplanation(finding.effectiveTier)
         }
         return nil
-    }
-
-    private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: PanelStyle.radius)
-            .fill(isSelected && deletable ? Color.accentColor.opacity(0.07) : Color.clear)
-            .overlay(alignment: .leading) {
-                if deletable {
-                    Capsule()
-                        .fill(isSelected ? Color.accentColor : Color.clear)
-                        .frame(width: 2.5)
-                } else {
-                    Capsule()
-                        .fill(Color.secondary.opacity(0.35))
-                        .frame(width: 2.5)
-                }
-            }
     }
 }

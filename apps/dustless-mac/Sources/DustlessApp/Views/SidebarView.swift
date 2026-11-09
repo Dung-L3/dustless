@@ -2,89 +2,114 @@ import DustlessKit
 import SwiftUI
 
 struct ModuleSidebar: View {
-    @ObservedObject var store: ScanStore
     let selection: Module
     let onSelect: (Module) -> Void
 
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var activePill
 
     var body: some View {
-        List {
-            Section(settings.t("modules")) {
-                ForEach(Module.allCases) { module in
-                    moduleRow(module)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                    ForEach(ModuleGroup.allCases, id: \.self) { group in
+                        VStack(alignment: .leading, spacing: 5) {
+                            SectionEyebrow(text: settings.t(group.titleKey))
+                                .padding(.horizontal, 10)
+                            ForEach(Module.allCases.filter { $0.group == group }) { module in
+                                SidebarRow(
+                                    module: module,
+                                    title: settings.t(module.titleKey),
+                                    isActive: selection == module,
+                                    namespace: activePill
+                                ) {
+                                    onSelect(module)
+                                }
+                            }
+                        }
+                    }
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, Theme.Space.l)
             }
+            .scrollIndicators(.never)
 
-            Section(settings.t("tiers")) {
-                ForEach(TierTab.allCases) { tab in
-                    tierRow(tab)
+            Divider()
+                .overlay(Theme.Palette.hairline)
+
+            Button {
+                openSettings()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 18)
+                    Text(settings.t("settingsOpen"))
+                        .font(Theme.Font.label)
+                    Spacer(minLength: 0)
                 }
+                .foregroundStyle(Theme.Palette.textSecondary)
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("sidebar.settings")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
         }
-        .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 260)
+        .frame(width: Theme.Size.sidebar)
+        .background(Theme.Palette.ink)
+        .animation(Motion.gated(reduceMotion, Motion.control), value: selection)
     }
+}
 
-    private func moduleRow(_ module: Module) -> some View {
-        let title = settings.t(module.titleKey)
-        let isActive = selection == module
-        return Button {
-            onSelect(module)
-        } label: {
-            HStack(spacing: 8) {
+private struct SidebarRow: View {
+    let module: Module
+    let title: String
+    let isActive: Bool
+    let namespace: Namespace.ID
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
                 Image(systemName: module.symbolName)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .medium))
                     .frame(width: 18)
                 Text(title)
-                    .font(PanelFont.body)
-                Spacer(minLength: 4)
+                    .font(Theme.Font.label)
+                Spacer(minLength: 0)
             }
-            .frame(minHeight: PanelStyle.rowMinHeight)
+            .foregroundStyle(isActive ? Theme.Palette.textPrimary : Theme.Palette.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(height: 38)
             .contentShape(.rect)
-            .background(
-                isActive ? Color.accentColor.opacity(0.12) : Color.clear,
-                in: .rect(cornerRadius: 5)
-            )
+            .background {
+                if isActive {
+                    RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                        .fill(Theme.Palette.selection)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Theme.Palette.accent)
+                                .frame(width: 2, height: 16)
+                                .padding(.leading, 4)
+                        }
+                        .matchedGeometryEffect(id: "sidebar.active", in: namespace)
+                } else if hovered {
+                    RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                        .fill(Theme.Palette.hover)
+                }
+            }
         }
         .buttonStyle(.plain)
-        .help(title)
+        .onHover { hovered = $0 }
         .accessibilityLabel(title)
         .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    private func tierRow(_ tab: TierTab) -> some View {
-        let items = store.report.map { tab.findings(in: $0) } ?? []
-        let title = settings.tabTitle(tab)
-        let isActive = selection == .cleanup && store.tierTab == tab
-        return Button {
-            store.tierTab = tab
-            onSelect(.cleanup)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: tab.symbolName)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(tab.tint)
-                Text(title)
-                    .font(PanelFont.body)
-                Spacer(minLength: 4)
-                Text("\(items.count)")
-                    .font(PanelFont.caption)
-                    .foregroundStyle(items.isEmpty ? Color.secondary.opacity(0.7) : tab.tint)
-            }
-            .frame(minHeight: PanelStyle.rowMinHeight)
-            .contentShape(.rect)
-            .background(
-                isActive ? Color.accentColor.opacity(0.12) : Color.clear,
-                in: .rect(cornerRadius: 5)
-            )
-        }
-        .buttonStyle(.plain)
-        .help(title)
-        .accessibilityLabel("\(title): \(settings.itemCount(items.count))")
-        .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }

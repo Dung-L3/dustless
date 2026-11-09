@@ -228,14 +228,14 @@ struct RootView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ModuleSidebar(store: store, selection: router.module) { module in
+            ModuleSidebar(selection: router.module) { module in
                 router.select(module)
             }
-            .frame(width: 224)
             Divider()
             ModuleContent(store: store, router: router, net: net)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Palette.ink)
         .navigationTitle("Dustless")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

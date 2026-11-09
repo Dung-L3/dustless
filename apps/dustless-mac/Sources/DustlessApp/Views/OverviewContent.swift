@@ -9,40 +9,33 @@ struct OverviewContent: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.l) {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
             if let error = store.engineError {
                 engineErrorCard(error)
             }
 
             if let report = store.report {
-                UnscannableNotice(report: report, showsDetail: true, identifier: "overview.unscannable")
-                tierStrip(report)
-            }
-
-            HStack(alignment: .top, spacing: PanelStyle.Space.l) {
-                VStack(alignment: .leading, spacing: PanelStyle.Space.l) {
-                    if let report = store.report {
-                        topFindings(report)
-                    }
+                if blockedCount > 0 || report.unscannableSummary.total > 0 {
+                    attentionCard(report)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: PanelStyle.Space.l) {
-                    if let blocked = blocked {
-                        coverage(blocked)
-                    }
-                    moduleLines
-                }
-                .frame(width: 300, alignment: .leading)
+                largestFindings(report)
+                moduleShortcuts
+            } else {
+                emptyHint
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var blockedCount: Int {
+        store.report?.totals.blocked.count ?? 0
     }
 
     private func engineErrorCard(_ error: L10nText) -> some View {
-        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+        HStack(alignment: .top, spacing: Theme.Space.s) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.Palette.warning)
             EngineErrorMessage(
                 text: error,
                 retry: { Task { await store.rescan() } },
@@ -50,202 +43,177 @@ struct OverviewContent: View {
             )
             Spacer(minLength: 0)
         }
-        .padding(PanelStyle.Space.m)
-        .panelCard(PanelStyle.rowFill)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(padding: Theme.Space.m, tone: Theme.Palette.warningFill)
         .accessibilityIdentifier("overview.engineError")
     }
 
-    private var blocked: (count: Int, bytes: UInt64)? {
-        guard let blocked = store.report?.totals.blocked, blocked.count > 0 else { return nil }
-        return (blocked.count, blocked.bytes)
-    }
-
-    private func tierStrip(_ report: ScanReport) -> some View {
-        HStack(spacing: PanelStyle.Space.s) {
-            ForEach(TierTab.allCases) { tab in
-                tierCard(tab, report: report)
+    private func attentionCard(_ report: ScanReport) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(spacing: Theme.Space.s) {
+                Image(systemName: "eye.trianglebadge.exclamationmark")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Palette.warning)
+                Text(settings.t("overviewAttention"))
+                    .font(Theme.Font.section)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                Spacer()
             }
-        }
-    }
-
-    private func tierCard(_ tab: TierTab, report: ScanReport) -> some View {
-        let items = tab.findings(in: report)
-        let bytes = items.reduce(0) { $0 + $1.bytes }
-        let title = settings.tabTitle(tab)
-        return Button {
-            store.tierTab = tab
-            router.select(.cleanup)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Image(systemName: tab.symbolName)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(tab.tint)
-                    Text(title)
-                        .font(PanelFont.emphasis())
-                    Spacer(minLength: 0)
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(ByteFormat.string(bytes))
-                        .font(PanelFont.number(.semibold))
-                        .foregroundStyle(bytes == 0 ? Color.secondary : Color.primary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(PanelStyle.Space.m)
-            .panelCard(PanelStyle.rowFill)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(title): \(settings.itemCount(items.count)) · \(ByteFormat.string(bytes))")
-        .accessibilityIdentifier("overview.tier.\(tab.rawValue)")
-    }
-
-    private func coverage(_ blocked: (count: Int, bytes: UInt64)) -> some View {
-        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(settings.t("overviewCoverage", ["count": settings.itemCount(blocked.count)]))
-                    .font(PanelFont.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("\(ByteFormat.string(blocked.bytes)) · \(settings.t("blockedNotice"))")
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.secondary)
+            if blockedCount > 0 {
+                Text(settings.t("overviewBlocked", ["count": settings.itemCount(blockedCount)]))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
+            UnscannableNotice(report: report, compact: true, identifier: "overview.unscannable")
         }
-        .padding(PanelStyle.Space.m)
-        .panelCard(PanelStyle.rowFill)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("overview.blocked")
+        .surfaceCard(padding: Theme.Space.m, tone: Theme.Palette.raised)
+        .accessibilityIdentifier("overview.attention")
     }
 
-    private func topFindings(_ report: ScanReport) -> some View {
-        let items = Array(report.deletable.sorted { $0.bytes > $1.bytes }.prefix(5))
-        return VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-            Text(settings.t("findings"))
-                .panelSectionHeader()
-            ForEach(items) { finding in
-                topFindingRow(finding)
+    private func largestFindings(_ report: ScanReport) -> some View {
+        let findings = report.deletable.sorted { $0.bytes > $1.bytes }.prefix(3)
+        return VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack {
+                Text(settings.t("overviewWhatFound"))
+                    .font(Theme.Font.section)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                Spacer()
+                Button(settings.t("menuPickToClean")) {
+                    router.select(.cleanup)
+                }
+                .buttonStyle(.plain)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.accent)
+                .accessibilityIdentifier("overview.seeAll")
+            }
+            if findings.isEmpty {
+                Text(settings.t("overviewNothingFound"))
+                    .font(Theme.Font.body)
+                    .foregroundStyle(Theme.Palette.textMuted)
+                    .padding(.vertical, Theme.Space.s)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(Array(findings.enumerated()), id: \.element.id) { index, finding in
+                        HStack(spacing: Theme.Space.s) {
+                            TierBadge(tier: finding.effectiveTier, compact: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(RuleText.description(of: finding, lang: settings.language))
+                                    .font(Theme.Font.label)
+                                    .foregroundStyle(Theme.Palette.textPrimary)
+                                    .lineLimit(1)
+                                PathText(path: finding.path, font: Theme.Font.caption)
+                            }
+                            Spacer(minLength: Theme.Space.s)
+                            Text(ByteFormat.string(finding.bytes))
+                                .font(Theme.Font.number(.semibold, size: 12))
+                                .foregroundStyle(Theme.Palette.textPrimary)
+                        }
+                        .padding(.vertical, 6)
+                        .staggeredAppear(index)
+                    }
+                }
             }
         }
-        .padding(PanelStyle.Space.m)
-        .panelCard()
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(padding: Theme.Space.m)
         .accessibilityIdentifier("overview.findings")
     }
 
-    private func topFindingRow(_ finding: Finding) -> some View {
-        Button {
-            store.tierTab = tierTab(for: finding.effectiveTier)
-            router.select(.cleanup)
-        } label: {
-            HStack(spacing: PanelStyle.Space.s) {
-                TierBadge(tier: finding.effectiveTier, compact: true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(finding.ruleId)
-                        .font(PanelFont.emphasis())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(RuleText.description(of: finding, lang: settings.language))
-                        .font(PanelFont.secondary)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(finding.path)
-                        .font(PanelFont.mono(10.5))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer(minLength: PanelStyle.Space.s)
-                Text(ByteFormat.string(finding.bytes))
-                    .font(PanelFont.number(.semibold))
-                    .frame(width: PanelStyle.byteColumnWidth, alignment: .trailing)
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("overview.finding.\(finding.ruleId)")
-    }
-
-    private func tierTab(for tier: Tier) -> TierTab {
-        switch tier {
-        case .green: .safe
-        case .yellow: .review
-        case .red, .blocked: .locked
-        }
-    }
-
-    private var moduleLines: some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
+    private var moduleShortcuts: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(settings.t("modules"))
-                .panelSectionHeader()
-            moduleLine(.memory, settings.t("memory"), memoryLine, identifier: "memory")
-            moduleLine(.network, settings.t("networkTitle"), networkLine, identifier: "network")
-            moduleLine(.network, settings.t("awdlTitle"), airDropLine, identifier: "awdl")
+                .font(Theme.Font.section)
+                .foregroundStyle(Theme.Palette.textPrimary)
+            HStack(spacing: Theme.Space.s) {
+                ModuleShortcut(
+                    title: settings.t("cleanupModule"),
+                    detail: cleanupDetail,
+                    symbol: "sparkles",
+                    action: { router.select(.cleanup) }
+                )
+                ModuleShortcut(
+                    title: settings.t("storage"),
+                    detail: storageDetail,
+                    symbol: "internaldrive",
+                    action: { router.select(.storage) }
+                )
+                ModuleShortcut(
+                    title: settings.t("appsTitle"),
+                    detail: appsDetail,
+                    symbol: "square.stack.3d.up",
+                    action: { router.select(.applications) }
+                )
+                ModuleShortcut(
+                    title: settings.t("memory"),
+                    detail: memoryDetail,
+                    symbol: "memorychip",
+                    action: { router.select(.memory) }
+                )
+            }
         }
-        .padding(PanelStyle.Space.m)
-        .panelCard()
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("overview.modules")
     }
 
-    private func moduleLine(_ module: Module, _ title: String, _ value: String, identifier: String) -> some View {
-        HStack(spacing: PanelStyle.Space.s) {
-            Image(systemName: module.symbolName)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            Text(title)
-                .font(PanelFont.emphasis())
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: PanelStyle.Space.s)
-            Text(value)
-                .font(PanelFont.secondary)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(value)
-            Button(settings.t("overviewView")) { router.select(module) }
-                .controlSize(.small)
-                .help(title)
-                .accessibilityLabel("\(settings.t("overviewView")): \(title)")
-                .accessibilityIdentifier("overview.view.\(identifier)")
-        }
-        .padding(.vertical, PanelStyle.Space.xs)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("overview.line.\(identifier)")
+    private var cleanupDetail: String {
+        guard let report = store.report else { return "—" }
+        return "\(settings.itemCount(report.deletable.count)) · \(ByteFormat.string(report.reclaimable))"
     }
 
-    private var memoryLine: String {
-        guard let memory = store.memoryReport?.memory else {
-            return store.memoryPhase == .loading ? settings.t("busyMemory") : "—"
-        }
-        let label = settings.pressureLabel(memory.pressure)
-        return "\(label) (\(memory.pressurePercent)%)"
+    private var storageDetail: String {
+        guard let free = store.diskSpace?.available else { return "—" }
+        return "\(settings.t("freeNow")) \(ByteFormat.string(free))"
     }
 
-    private var networkLine: String {
-        guard let report = net.report else {
-            return net.isLoading ? settings.t("busyNetwork") : "—"
-        }
-        let iface = report.iface ?? "—"
-        let gateway = report.gateway ?? "—"
-        return "\(iface) · \(gateway)"
+    private var appsDetail: String {
+        store.storageApps.isEmpty ? settings.t("appsInstalledShort") : settings.appCount(store.storageApps.count)
     }
 
-    private var airDropLine: String {
-        switch net.awdl.state {
-        case .on: settings.t("awdlOnShort")
-        case .off: settings.t("awdlOffShort")
-        default: settings.t("awdlUnknownShort")
+    private var memoryDetail: String {
+        guard let memory = store.memoryReport?.memory else { return "—" }
+        return "\(settings.pressureLabel(memory.pressure)) · \(memory.pressurePercent)%"
+    }
+
+    private var emptyHint: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(settings.t("overviewNoScan"))
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
+            Text(settings.t("emptyStateBody"))
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textMuted)
         }
+        .surfaceCard(padding: Theme.Space.m)
+    }
+}
+
+private struct ModuleShortcut: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.Palette.accent)
+                Text(title)
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textMuted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.Space.m)
+            .surfaceCard(padding: 0, radius: Theme.Radius.inner, tone: hovered ? Theme.Palette.hover : Theme.Palette.surface)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .accessibilityLabel("\(title), \(detail)")
     }
 }

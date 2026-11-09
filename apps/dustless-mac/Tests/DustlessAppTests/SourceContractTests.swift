@@ -109,17 +109,17 @@ struct SourceContractTests {
 
     @Test func theStorageGuardsLockOutReentry() throws {
         let file = servicesDirectory.appendingPathComponent("StorageControl.swift")
-        let uninstall = try functionBody(of: file, startingAt: "func uninstall(")
-        let first = try #require(uninstall.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
-        #expect(
-            first.contains("guard !isUninstalling else { return }"),
-            "uninstall must refuse a second run while one is in flight, first body line was \(first)"
-        )
         let trash = try functionBody(of: file, startingAt: "func trash(")
         let firstTrash = try #require(trash.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
         #expect(
             firstTrash.contains("guard !isTrashingFile else { return }"),
             "trash must refuse a second run while one is in flight, first body line was \(firstTrash)"
+        )
+        let applications = servicesDirectory.appendingPathComponent("ApplicationsControl.swift")
+        let uninstall = try functionBody(of: applications, startingAt: "func uninstall(")
+        #expect(
+            uninstall.contains { $0.contains("guard !isWorking else { return }") },
+            "uninstall must refuse a second run while one is in flight"
         )
     }
 
@@ -167,6 +167,32 @@ struct SourceContractTests {
             text.contains("openWindow(id: \"main\")"),
             "the app must reopen its own window instead of asking for a document"
         )
+    }
+
+    @Test func theModuleWriteStaysSynchronous() throws {
+        let router = try String(contentsOf: appSources.appendingPathComponent("DustlessApp/Services/AppRouter.swift"), encoding: .utf8)
+        let sidebar = try String(contentsOf: viewsDirectory.appendingPathComponent("SidebarView.swift"), encoding: .utf8)
+        #expect(!router.contains("withAnimation"), "the module value must be written synchronously")
+        #expect(!sidebar.contains("List(selection:"), "the sidebar must not have a list selection binding")
+        #expect(sidebar.contains("sidebar.module."), "the sidebar rows must keep their stable identifiers")
+    }
+
+    @Test func memoryHasADirectQuitAction() throws {
+        let file = viewsDirectory.appendingPathComponent("MemoryView.swift")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(!text.contains("private func quitRow("), "the quit action must live on the group row, not inside the expansion")
+        #expect(text.contains("memory.quit.\\(group.id)"), "the group row must expose its direct quit action")
+        #expect(text.contains("stopping.contains(proc.pid)"), "a process stop must only lock its own row")
+    }
+
+    @Test func theApplicationSheetIsTheOnlyDestructiveApplicationGate() throws {
+        let view = try String(contentsOf: viewsDirectory.appendingPathComponent("ApplicationsView.swift"), encoding: .utf8)
+        let sheet = try String(contentsOf: viewsDirectory.appendingPathComponent("ApplicationsSheet.swift"), encoding: .utf8)
+        let text = view + "\n" + sheet
+        #expect(text.contains("applications.confirm"), "the application sheet must expose one confirm control")
+        #expect(text.contains("applications.cancel"), "the application sheet must expose one cancel control")
+        #expect(text.contains("appsIncludeRelated"), "the sheet must let the user keep related data")
+        #expect(text.contains("isRunning"), "the sheet must know whether the app is running")
     }
 
     @Test func everyPopoverNavigationOpensTheWindow() throws {

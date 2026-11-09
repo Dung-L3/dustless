@@ -57,7 +57,7 @@ export async function runApps(_rest: string[]): Promise<number> {
       await uninstall({
         home,
         appPath: target.path,
-        relatedPaths: target.relatedPaths,
+        relatedPaths: flag("bundle-only") ? [] : target.relatedPaths,
         confirm,
         appDirs: appDirs(),
         purge,

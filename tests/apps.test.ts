@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, readdir, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, rm, stat, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listApps, uninstall } from "../src/core/apps/index.ts";
@@ -146,6 +147,12 @@ describe("listApps", () => {
     for (const p of myApp.relatedPaths) {
       expect(p).toContain("com.example.myapp");
     }
+    expect(myApp.related.length).toBe(12);
+    expect(myApp.related.every((item) => item.bytes !== null && item.bytes > 0)).toBe(true);
+    expect(new Set(myApp.related.map((item) => item.category))).toEqual(
+      new Set(["user-data", "cache", "config", "diagnostic", "integration"]),
+    );
+    expect(myApp.protected).toBe(false);
   });
 
   test("excludes non-existing related paths for apps without leftovers", async () => {
@@ -158,6 +165,42 @@ describe("listApps", () => {
 });
 
 describe("uninstall", () => {
+  test("reports a partial uninstall when one related path cannot be moved", async () => {
+    if (process.getuid?.() === 0) return;
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-partial-")));
+    try {
+      const appsDir2 = join(root, "Applications");
+      const appPath = join(appsDir2, "Partial.app");
+      await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
+      await writeFile(join(appPath, "Contents", "Info.plist"), `<?xml version="1.0"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.partial</string><key>CFBundleName</key><string>Partial</string></dict></plist>`);
+      await writeFile(join(appPath, "Contents", "MacOS", "Partial"), "fixture\n");
+      const cache = join(root, "Library", "Caches", "com.example.partial");
+      await mkdir(cache, { recursive: true });
+      await writeFile(join(cache, "cache.bin"), "cache");
+      const cachesParent = join(root, "Library", "Caches");
+      await chmod(cachesParent, 0o500);
+      try {
+        const apps = await listApps({ home: root, appDirs: [appsDir2] });
+        const target = apps.find((app) => app.bundleId === "com.example.partial")!;
+        const report = await uninstall({
+          home: root,
+          appPath: target.path,
+          relatedPaths: target.relatedPaths,
+          confirm: true,
+          appDirs: [appsDir2],
+        });
+        expect(report.summary.trashed).toBeGreaterThanOrEqual(1);
+        expect(report.summary.failed).toBeGreaterThanOrEqual(1);
+        expect(await stat(cache).then(() => true, () => false)).toBe(true);
+      } finally {
+        await chmod(cachesParent, 0o700);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("refuses without confirm", async () => {
     const apps = await listApps({ home, appDirs: [appsDir] });
     const target = apps.find((a) => a.bundleId === "com.example.myapp")!;
@@ -416,5 +459,47 @@ describe("a crafted CFBundleIdentifier cannot aim the uninstall outside HOME", (
     expect(report.outcomes[0]!.detail?.code).toBe("leftover_escapes_home");
     expect(await survives()).toBe(true);
     expect(await stat(good).then(() => true, () => false)).toBe(true);
+  });
+});
+
+describe("application inventory safety", () => {
+  test("marks an Apple bundle id protected and refuses its removal", async () => {
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-apple-")));
+    try {
+      const dir = join(root, "Applications");
+      const app = join(dir, "Fake Apple.app");
+      await mkdir(join(app, "Contents", "MacOS"), { recursive: true });
+      await writeFile(join(app, "Contents", "Info.plist"), `<?xml version="1.0"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.apple.fake</string><key>CFBundleName</key><string>Fake Apple</string></dict></plist>`);
+      await writeFile(join(app, "Contents", "MacOS", "FakeApple"), "fixture\n");
+      const apps = await listApps({ home: root, appDirs: [dir] });
+      expect(apps.length).toBe(1);
+      expect(apps[0]?.protected).toBe(true);
+      const report = await uninstall({ home: root, appPath: app, relatedPaths: [], confirm: true });
+      expect(report.summary.failed).toBe(1);
+      expect(report.outcomes[0]?.detail?.code).toBe("system_app");
+      expect((await stat(app)).isDirectory()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.platform !== "darwin")("reads a binary Info.plist", async () => {
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-bplist-")));
+    try {
+      const dir = join(root, "Applications");
+      const app = join(dir, "Binary.app");
+      await mkdir(join(app, "Contents", "MacOS"), { recursive: true });
+      const plist = join(app, "Contents", "Info.plist");
+      await writeFile(plist, `<?xml version="1.0"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.binary</string><key>CFBundleName</key><string>Binary</string></dict></plist>`);
+      const converted = spawnSync("/usr/bin/plutil", ["-convert", "binary1", plist]);
+      expect(converted.status).toBe(0);
+      await writeFile(join(app, "Contents", "MacOS", "Binary"), "fixture\n");
+      const apps = await listApps({ home: root, appDirs: [dir] });
+      expect(apps.map((entry) => entry.bundleId)).toContain("com.example.binary");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

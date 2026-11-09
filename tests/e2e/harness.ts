@@ -195,6 +195,7 @@ export async function sandbox(label: string): Promise<Sandbox> {
     XDG_CONFIG_HOME: join(home, ".config"),
     NO_COLOR: "1",
     TMPDIR: TMP,
+    DUSTLESS_UI_TESTING: "1",
   };
   const run = (args: string[], opts: { cwd?: string } = {}): Promise<Result> => {
     assertTempRoot(env["HOME"] as string);

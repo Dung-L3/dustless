@@ -2,9 +2,9 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # 530 tests, about 45s; 31 skips unless DUSTLESS_UI=1
+bun test              # 537 tests, about 25s; 35 skips unless DUSTLESS_UI=1
 bun run lint          # repository policy checks
-cd apps/dustless-mac && swift test   # 163 Swift tests, about 105s
+cd apps/dustless-mac && swift test   # 168 Swift tests, about 105s
 bun run test:ui       # real macOS app UI suite; needs Accessibility trust; see below
 ```
 
@@ -29,13 +29,14 @@ draws them off screen with `ImageRenderer`. It needs no window server, no
 Accessibility trust and no launched application, so it runs on any macOS
 machine and in CI. The images land in `artifacts/ui-render/` (ignored by git).
 
-The catalogue in `Screens.swift` holds 18 screens: the overview, the cleanup
+The catalogue in `Screens.swift` holds 19 screens: the overview, the cleanup
 screen and its finding list, the confirm sheet, the storage screen and its
 application and file list, the memory panel, the network panel, the menu bar
 popover, the settings window, the unscannable notice, the engine error state
 and its message, the uninstall sheet, the trash sheet, the cleanup result card,
-the tier badges and the destructive controls. Every screen is drawn in
-Vietnamese, English and Chinese, so 54 images.
+the tier badges and the destructive controls. The application inventory and the
+application sheet join them. Every screen is drawn in Vietnamese, English and
+Chinese, so 57 images.
 
 What the render suite proves:
 
@@ -115,7 +116,14 @@ there), opening the Quick Clean review when the main window is closed, reopening
 the popover after a module row, the File menu's Open Dustless item, a live
 language switch, a cleanup search with no matches, cancelling a network
 operation without invoking the engine, and cancelling a process stop before
-confirming it. The 30-second wait is deliberate: the release of a closed
+confirming it. Application management adds a cancelled uninstall, a full
+uninstall with related data, an uninstall that keeps related data, a partial
+result that does not claim success, a running app that quits and is then removed,
+and a direct memory Quit on a compiled Cocoa fixture. The application cases cover a cancelled uninstall, a full
+uninstall with related data, an uninstall that keeps related data, and the
+direct Quit button on a running fixture app. The fixture is a compiled Cocoa
+app with a window, so `NSRunningApplication.terminate()` is exercised end to
+end and the process disappearance is asserted. The 30-second wait is deliberate: the release of a closed
 SwiftUI window is what used to make the document fallback run, and shortening
 the wait would stop the case from exercising the regression.
 
@@ -154,7 +162,7 @@ Each case gets an `mkdtemp` root and launches the app with `HOME`,
 `DUSTLESS_PREFS_FILE`, not `UserDefaults` (`CFFIXED_USER_HOME` does not redirect
 `UserDefaults`), and privilege files are read from `DUSTLESS_SUDOERS_DIR`, never
 `/etc/sudoers.d`. The engine receives `DUSTLESS_APPS_DIRS` pointing only at the
-sandbox's `~/Applications`, so the Storage panel never lists or offers to
+sandbox's `~/Applications`, so the Applications panel never lists or offers to
 uninstall a real app; without that seam the first run listed 23 real
 `/Applications` entries. The rules file also overrides every bundled rule id
 with a sandbox-only no-op path, so absolute defaults such as

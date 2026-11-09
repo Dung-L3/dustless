@@ -3,12 +3,10 @@ import DustlessKit
 import Foundation
 
 enum StorageSheet: Identifiable {
-    case confirmApp(InstalledApp)
     case confirmFile(LargeFile)
 
     var id: String {
         switch self {
-        case .confirmApp(let app): "app-confirm:\(app.id)"
         case .confirmFile(let file): "file-confirm:\(file.id)"
         }
     }
@@ -25,29 +23,11 @@ struct StorageResult: Identifiable {
 final class StorageControl: ObservableObject {
     @Published var sheet: StorageSheet?
     @Published private(set) var result: StorageResult?
-    @Published private(set) var isUninstalling = false
     @Published private(set) var isTrashingFile = false
     @Published private(set) var actionErrorTitleKey = ""
     @Published private(set) var actionError: L10nText?
 
     private var nextAlert: (titleKey: String, message: L10nText)?
-
-    func uninstall(_ app: InstalledApp, purge: Bool, store: ScanStore) async {
-        guard !isUninstalling else { return }
-        isUninstalling = true
-        defer { isUninstalling = false }
-        do {
-            let cli = try DustlessCLI.resolve()
-            let report = try await cli.uninstallApp(path: app.path, purge: purge)
-            result = StorageResult(report: report, titleKey: "appsUninstalled")
-            sheet = nil
-            store.removeStorageApp(atPath: app.path)
-            await store.fetchStorageApps()
-            await store.fetchStorageVolumes()
-        } catch {
-            fail(error, titleKey: "appsUninstall")
-        }
-    }
 
     func trash(_ file: LargeFile, store: ScanStore) async {
         guard !isTrashingFile else { return }

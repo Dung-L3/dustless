@@ -5,10 +5,15 @@ struct ModuleContent: View {
     @ObservedObject var store: ScanStore
     @ObservedObject var router: AppRouter
     @ObservedObject var net: NetControl
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack {
+            content
+                .transition(.opacity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(Motion.gated(reduceMotion, Motion.fade), value: router.module)
     }
 
     @ViewBuilder
@@ -20,7 +25,6 @@ struct ModuleContent: View {
             VStack(spacing: 0) {
                 SummaryHeader(
                     report: store.report,
-                    tier: store.tierTab,
                     isScanning: store.isBusy
                 ) {
                     Task { await store.rescan() }
@@ -29,6 +33,8 @@ struct ModuleContent: View {
             }
         case .storage:
             StorageModuleView()
+        case .applications:
+            ApplicationsModuleView()
         case .memory:
             MemoryModuleView()
         case .network:

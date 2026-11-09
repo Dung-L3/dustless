@@ -30,6 +30,7 @@ struct StorageResultCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(PanelFont.emphasis(.semibold))
+                    .accessibilityIdentifier("storage.result.title")
                 Text(summaryText)
                     .font(PanelFont.secondary)
                     .foregroundStyle(.secondary)
@@ -54,8 +55,11 @@ struct StorageResultCard: View {
     }
 
     private var summaryText: String {
-        settings.t("appsResultSummary", [
-            "freed": ByteFormat.string(report.summary.totalBytes),
+        let moved = report.outcomes
+            .filter { $0.status == .trashed || $0.status == .purged }
+            .reduce(UInt64(0)) { $0 + $1.bytes }
+        return settings.t("appsResultSummary", [
+            "freed": ByteFormat.string(moved),
             "count": "\(report.outcomes.count)",
         ])
     }

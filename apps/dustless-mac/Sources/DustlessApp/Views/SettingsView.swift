@@ -164,8 +164,9 @@ struct SettingsView: View {
             pendingPrivilege = false
             Task { await awdl.installPrivilege() }
         }
-        .frame(width: 460)
+        .frame(width: 500)
         .fixedSize(horizontal: false, vertical: true)
+        .tint(Theme.Palette.accent)
     }
 
     private var appVersion: String {

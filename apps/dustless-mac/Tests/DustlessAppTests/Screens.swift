@@ -23,6 +23,7 @@ enum Screens {
             confirmSheet(),
             storage(),
             storageList(),
+            applications(),
             memory(),
             network(),
             menuBar(),
@@ -172,23 +173,21 @@ enum Screens {
                     apps: try TestData.apps(),
                     files: try TestData.largeFiles()
                 )
-                let apps = try TestData.apps()
                 let files = try TestData.largeFiles()
                 return AnyView(
-                    VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-                        ForEach(apps) { app in
-                            AppRow(app: app, isUninstalling: false, onUninstall: {})
-                        }
+                    VStack(alignment: .leading, spacing: Theme.Space.s) {
                         ForEach(files) { file in
                             LargeFileRow(file: file, isTrashing: false, onTrash: {})
                         }
                     }
+                    .padding(Theme.Space.page)
                     .environmentObject(settings)
                     .environmentObject(store)
                 )
             }
         )
     }
+
 
     private static func memory() -> Screen {
         Screen(
@@ -383,24 +382,6 @@ enum Screens {
         )
     }
 
-    private static func uninstallSheet() -> Screen {
-        Screen(
-            name: "uninstall-sheet",
-            width: 680,
-            height: 520,
-            stable: true,
-            make: { language in
-                let settings = TestData.settings(language)
-                let store = try TestData.store(apps: try TestData.apps())
-                let app = try #require(try TestData.apps().first)
-                return AnyView(
-                    UninstallConfirmationSheet(app: app, onCancel: {}, onConfirm: { _ in })
-                        .environmentObject(settings)
-                        .environmentObject(store)
-                )
-            }
-        )
-    }
 
     private static func trashSheet() -> Screen {
         Screen(

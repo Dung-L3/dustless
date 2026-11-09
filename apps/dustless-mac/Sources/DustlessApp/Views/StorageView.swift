@@ -1,39 +1,57 @@
+import AppKit
 import DustlessKit
 import SwiftUI
-import AppKit
+
+enum LargeFileSort: String, CaseIterable, Identifiable {
+    case size
+    case name
+    case date
+
+    var id: String { rawValue }
+
+    var labelKey: String {
+        switch self {
+        case .size: "sortSize"
+        case .name: "sortName"
+        case .date: "sortDate"
+        }
+    }
+}
 
 struct StorageView: View {
     let space: DiskSpace
     let reclaimable: UInt64?
+
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: ScanStore
     @StateObject private var control = StorageControl()
 
-    @State private var showAdvanced = false
-    @State private var appsQuery = ""
     @State private var filesQuery = ""
+    @State private var sort: LargeFileSort = .size
 
     var body: some View {
-        let appsVisible = filteredApps
-        let filesVisible = filteredFiles
-
         PanelScaffold {
             header
         } summary: {
             volumeStrip
         } filters: {
-            filterBar(shown: filesVisible.count, total: store.storageLargeFiles.count)
+            filterBar
         } content: {
-            inventory(apps: appsVisible, files: filesVisible)
+            inventory
         }
         .task {
             await store.ensureStorageVolumes()
-            await store.ensureStorageApps()
             await store.ensureStorageFiles()
         }
         .sheet(item: $control.sheet, onDismiss: { control.presentNext() }) { item in
-            sheetContent(item)
+            if case .confirmFile(let file) = item {
+                LargeFileTrashSheet(
+                    file: file,
+                    onCancel: { control.sheet = nil },
+                    onConfirm: { Task { await control.trash(file, store: store) } }
+                )
                 .onExitCommand { control.sheet = nil }
+            }
         }
         .alert(
             settings.t(control.actionErrorTitleKey),
@@ -53,43 +71,6 @@ struct StorageView: View {
         )
     }
 
-    @ViewBuilder
-    private func sheetContent(_ item: StorageSheet) -> some View {
-        switch item {
-        case .confirmApp(let app):
-            UninstallConfirmationSheet(
-                app: app,
-                onCancel: { control.sheet = nil },
-                onConfirm: { purge in Task { await control.uninstall(app, purge: purge, store: store) } }
-            )
-        case .confirmFile(let file):
-            LargeFileTrashSheet(
-                file: file,
-                onCancel: { control.sheet = nil },
-                onConfirm: { Task { await control.trash(file, store: store) } }
-            )
-        }
-    }
-
-    private func inventory(apps: [InstalledApp], files: [LargeFile]) -> some View {
-        VStack(alignment: .leading, spacing: PanelStyle.Space.m) {
-            if let result = control.result {
-                StorageResultCard(
-                    report: result.report,
-                    title: settings.t(result.titleKey),
-                    onClose: { control.clearResult() }
-                )
-                .frame(maxHeight: 160)
-            }
-
-            largeFilesBody(files)
-
-            Divider()
-
-            advancedArea(apps)
-        }
-    }
-
     private var header: some View {
         PanelHeader(
             title: settings.t("storage"),
@@ -104,122 +85,77 @@ struct StorageView: View {
 
     private var volumeStrip: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: PanelStyle.Space.s) {
+            HStack(spacing: Theme.Space.s) {
                 ForEach(store.storageVolumes) { volume in
                     VolumeCard(volume: volume)
                 }
             }
         }
+        .scrollIndicators(.never)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(settings.t("volumesTitle"))
     }
 
-    private func filterBar(shown: Int, total: Int) -> some View {
-        PanelFilterBar(
-            placeholder: settings.t("searchFiles"),
-            text: $filesQuery,
-            filter: { EmptyView() },
-            trailing: {
-                HStack(spacing: PanelStyle.Space.s) {
-                    if store.isLoadingStorageFiles {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    if total > 0 {
-                        countChip(shown, of: total, filtered: isFilesFiltering)
-                            .accessibilityLabel(filesCountLabel(shown: shown, total: total))
-                            .accessibilityIdentifier("storage.count")
-                    }
-                }
-            },
-            searchIdentifier: "storage.search"
-        )
-    }
-
-    private var isFilesFiltering: Bool {
-        !needle(filesQuery).isEmpty
-    }
-
-    private func filesCountLabel(shown: Int, total: Int) -> String {
-        isFilesFiltering
-            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
-            : settings.fileCount(total)
-    }
-
-    private func advancedArea(_ apps: [InstalledApp]) -> some View {
-        DisclosureGroup(isExpanded: $showAdvanced) {
-            VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
-                HStack(spacing: PanelStyle.Space.s) {
-                    Text(settings.t("appsTitle"))
-                        .font(PanelFont.emphasis())
-                    Text(settings.appCount(store.storageApps.count))
-                        .font(PanelFont.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: PanelStyle.Space.s)
-                    SearchField(
-                        placeholder: settings.t("searchApps"),
-                        text: $appsQuery,
-                        identifier: "storage.apps.search"
-                    )
-                    .frame(maxWidth: 220)
-                }
-                appsBody(filteredApps)
+    private var filterBar: some View {
+        HStack(spacing: Theme.Space.s) {
+            if store.isLoadingStorageFiles {
+                ProgressView().controlSize(.small)
             }
-            .padding(.top, PanelStyle.Space.s)
+            if !store.storageLargeFiles.isEmpty {
+                Text(filesCountLabel(shown: filteredFiles.count, total: store.storageLargeFiles.count))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .accessibilityIdentifier("storage.count")
+            }
+            Spacer(minLength: Theme.Space.s)
+            sortMenu
+            SearchField(
+                placeholder: settings.t("searchFiles"),
+                text: $filesQuery,
+                identifier: "storage.search"
+            )
+            .frame(maxWidth: Theme.Size.searchWidth)
+        }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(LargeFileSort.allCases) { option in
+                Button {
+                    sort = option
+                } label: {
+                    if sort == option {
+                        Label(settings.t(option.labelKey), systemImage: "checkmark")
+                    } else {
+                        Text(settings.t(option.labelKey))
+                    }
+                }
+            }
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(settings.t("advanced"))
-                    .font(PanelFont.emphasis())
-                Text(settings.t("advancedHint"))
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Label(settings.t(sort.labelKey), systemImage: "arrow.up.arrow.down")
+                .font(Theme.Font.label)
         }
-        .accessibilityIdentifier("storage.advanced")
+        .menuStyle(.borderlessButton)
+        .help(settings.t("sortBy"))
+        .accessibilityIdentifier("storage.sort")
     }
 
-    @ViewBuilder
-    private func appsBody(_ visible: [InstalledApp]) -> some View {
-        if let error = store.storageAppsError {
-            PanelStateView(
-                kind: .error,
-                message: settings.text(error),
-                error: error,
-                title: settings.t("appsTitle"),
-                actionTitle: settings.t("retry"),
-                action: { Task { await store.fetchStorageApps() } },
-                identifier: "storage.apps.state",
-                actionIdentifier: "storage.apps.retry"
-            )
-        } else if store.storageApps.isEmpty {
-            PanelStateView(
-                kind: store.isLoadingStorageApps ? .loading : .empty,
-                message: store.isLoadingStorageApps ? settings.t("busyApps") : settings.t("appsEmpty"),
-                identifier: "storage.apps.state"
-            )
-            .frame(minHeight: 120)
-        } else if visible.isEmpty {
-            NoMatchesView()
-                .frame(minHeight: 120)
-        } else {
-            ScrollView {
-                LazyVStack(spacing: PanelStyle.Space.s) {
-                    ForEach(visible) { app in
-                        AppRow(
-                            app: app,
-                            isUninstalling: control.isUninstalling,
-                            onUninstall: { control.sheet = .confirmApp(app) }
-                        )
-                    }
-                }
+    private var inventory: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            if let result = control.result {
+                StorageResultCard(
+                    report: result.report,
+                    title: settings.t(result.titleKey),
+                    onClose: { control.clearResult() }
+                )
+                .frame(maxHeight: 190)
             }
-            .frame(maxHeight: 260)
+            largeFilesBody
         }
     }
 
     @ViewBuilder
-    private func largeFilesBody(_ visible: [LargeFile]) -> some View {
+    private var largeFilesBody: some View {
         if let error = store.storageFilesError {
             PanelStateView(
                 kind: .error,
@@ -237,76 +173,63 @@ struct StorageView: View {
                 message: store.isLoadingStorageFiles ? settings.t("busyLargeFiles") : settings.t("largeFilesEmpty"),
                 identifier: "storage.files.state"
             )
-            .frame(minHeight: 120)
-        } else if visible.isEmpty {
-            NoMatchesView()
-                .frame(minHeight: 120)
+        } else if filteredFiles.isEmpty {
+            PanelStateView(
+                kind: .empty,
+                message: settings.t("noMatches"),
+                title: settings.t("largeFilesTitle"),
+                identifier: "storage.files.state"
+            )
         } else {
             ScrollView {
-                LazyVStack(spacing: PanelStyle.Space.s) {
-                    ForEach(visible) { file in
+                LazyVStack(spacing: 6) {
+                    ForEach(Array(filteredFiles.enumerated()), id: \.element.id) { index, file in
                         LargeFileRow(
                             file: file,
                             isTrashing: control.isTrashingFile,
                             onTrash: { control.sheet = .confirmFile(file) }
                         )
+                        .staggeredAppear(index)
                     }
                 }
             }
-            .frame(maxHeight: .infinity)
+            .scrollIndicators(.automatic)
         }
-    }
-
-    private func needle(_ query: String) -> String {
-        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private var filteredApps: [InstalledApp] {
-        let needle = needle(appsQuery)
-        guard !needle.isEmpty else { return store.storageApps }
-        return store.storageApps.filter { $0.matches(needle) }
     }
 
     private var filteredFiles: [LargeFile] {
-        let needle = needle(filesQuery)
-        guard !needle.isEmpty else { return store.storageLargeFiles }
-        return store.storageLargeFiles.filter { $0.matches(needle) }
+        let needle = filesQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base = store.storageLargeFiles.filter { needle.isEmpty || $0.matches(needle) }
+        switch sort {
+        case .size:
+            return base.sorted { $0.size > $1.size }
+        case .name:
+            return base.sorted { ($0.path as NSString).lastPathComponent.localizedStandardCompare(($1.path as NSString).lastPathComponent) == .orderedAscending }
+        case .date:
+            return base.sorted { $0.mtime > $1.mtime }
+        }
     }
 
-    private func countChip(_ shown: Int, of total: Int, filtered: Bool) -> some View {
-        Text(filtered
-            ? settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
-            : settings.fileCount(total))
-            .font(PanelFont.number(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(PanelStyle.rowFill, in: .capsule)
+    private func filesCountLabel(shown: Int, total: Int) -> String {
+        shown == total ? settings.fileCount(total) : settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
     }
 
     private func reclaimableStat(_ reclaimable: UInt64) -> some View {
-        HStack(spacing: PanelStyle.Space.xs) {
+        HStack(spacing: 6) {
             Text(settings.t("reclaimableMetric"))
-                .font(PanelFont.secondary)
-                .foregroundStyle(.secondary)
-            Image(systemName: "info.circle")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .help(settings.t("reclaimableHelp"))
-                .accessibilityLabel(settings.t("reclaimableHelp"))
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textSecondary)
             Text(ByteFormat.string(reclaimable))
-                .font(PanelFont.number(.semibold))
+                .font(Theme.Font.number(.semibold, size: 13))
+                .foregroundStyle(Theme.Palette.textPrimary)
         }
-        .padding(.horizontal, PanelStyle.Space.s)
-        .padding(.vertical, PanelStyle.Space.xs)
-        .background(PanelStyle.rowFill, in: .capsule)
-        .help(notes)
+        .padding(.horizontal, Theme.Space.s)
+        .padding(.vertical, 5)
+        .background(Theme.Palette.raised, in: .capsule)
+        .overlay { Capsule().stroke(Theme.Palette.hairline, lineWidth: 1) }
+        .help(settings.t("reclaimableHelp"))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(ByteFormat.string(reclaimable)). \(notes)")
+        .accessibilityLabel("\(settings.t("reclaimableMetric")): \(ByteFormat.string(reclaimable))")
         .accessibilityIdentifier("storage.reclaimable")
-    }
-
-    private var notes: String {
-        "\(settings.t("reclaimableHelp")) \(settings.t("storageNote"))"
     }
 }

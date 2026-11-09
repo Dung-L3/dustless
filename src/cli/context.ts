@@ -88,7 +88,7 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
   net: ["advanced", "flush-dns", "reset-dns", "renew-dhcp", "clear-arp", "reset-mtu", "flush-routing", "dry-run", "force", "print-privilege"],
   awdl: ["on", "off", "print-privilege"],
   ram: ["list", "kill", "confirm", "force", "sigkill", "filter", "sort"],
-  apps: ["uninstall", "confirm", "purge", "trash-dir"],
+  apps: ["uninstall", "confirm", "purge", "bundle-only", "trash-dir"],
   largefiles: ["min-size", "limit", "delete", "confirm", "trash-dir"],
   mcp: [],
   version: [],

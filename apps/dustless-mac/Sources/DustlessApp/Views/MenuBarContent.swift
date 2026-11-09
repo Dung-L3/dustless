@@ -36,7 +36,7 @@ struct MenuBarContent: View {
             footer
         }
         .padding(PanelStyle.Space.m)
-        .frame(width: 320)
+        .frame(width: Theme.Size.popover)
         .onChange(of: router.module) { _, module in
             if ModuleDismissGate.shared.module == module {
                 ModuleDismissGate.shared.module = nil
@@ -125,10 +125,13 @@ struct MenuBarContent: View {
         .accessibilityIdentifier("menubar.refresh")
     }
 
-    private func leave(after delay: TimeInterval = 0, _ action: @escaping () -> Void) {
+    private func leave(after delay: TimeInterval = 0, _ action: @escaping @MainActor () -> Void) {
         dismiss()
         if delay > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                action()
+            }
         } else {
             action()
         }
@@ -434,7 +437,7 @@ struct MenuBarContent: View {
     private var footer: some View {
         HStack(spacing: PanelStyle.Space.s) {
             Button {
-                leave(onOpenWindow)
+                leave { onOpenWindow() }
             } label: {
                 Text(settings.t("openDustless"))
             }

@@ -185,9 +185,14 @@ public struct DustlessCLI: Sendable {
         try await decode([InstalledApp].self, from: run(["apps", "--json"]))
     }
 
-    public func uninstallApp(path: String, purge: Bool = false) async throws -> UninstallReport {
+    public func uninstallApp(
+        path: String,
+        purge: Bool = false,
+        includeRelated: Bool = true
+    ) async throws -> UninstallReport {
         var args = ["apps", "--uninstall", path, "--confirm", "--json"]
         if purge { args.append("--purge") }
+        if !includeRelated { args.append("--bundle-only") }
         return try await decode(UninstallReport.self, from: run(args))
     }
 

@@ -13,32 +13,19 @@ struct DetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let message = store.busyMessage {
-                HStack(spacing: PanelStyle.Space.s) {
-                    ProgressView().controlSize(.small).scaleEffect(0.7)
-                    Text(settings.text(message))
-                        .font(PanelFont.body)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, PanelStyle.Space.s)
-                .background(.ultraThinMaterial)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                busyBanner(message)
             }
 
             if let report = store.report {
                 if let error = store.engineError {
                     staleBanner(error)
-                        .transition(.opacity)
                 }
                 UnscannableNotice(report: report, showsDetail: true, identifier: "cleanup.unscannable")
-                    .padding(.horizontal, PanelStyle.Space.l)
-                    .padding(.top, PanelStyle.Space.s)
+                    .padding(.horizontal, Theme.Space.page)
+                    .padding(.top, Theme.Space.s)
                 tierContent(report)
             } else if let error = store.engineError {
-                EngineErrorView(
-                    message: error,
-                    isBusy: store.isBusy
-                ) {
+                EngineErrorView(message: error, isBusy: store.isBusy) {
                     Task { await store.rescan() }
                 }
             } else {
@@ -47,19 +34,33 @@ struct DetailView: View {
                 }
             }
         }
-        .animation(reduceMotion ? nil : .snappy(duration: PanelMotion.banner), value: store.busyMessage)
-        .animation(PanelMotion.gated(reduceMotion, PanelMotion.fade), value: store.engineError == nil)
+        .animation(reduceMotion ? nil : Motion.fade, value: store.busyMessage)
+        .animation(Motion.gated(reduceMotion, Motion.fade), value: store.engineError == nil)
+        .frame(maxHeight: .infinity)
     }
 
     private var scanLabel: String {
         store.report == nil ? settings.t("scanNow") : settings.t("rescan")
     }
 
+    private func busyBanner(_ message: L10nText) -> some View {
+        HStack(spacing: Theme.Space.s) {
+            ProgressView().controlSize(.small).scaleEffect(0.7)
+            Text(settings.text(message))
+                .font(Theme.Font.small)
+                .foregroundStyle(Theme.Palette.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 7)
+        .background(Theme.Palette.surface)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
     private func staleBanner(_ error: L10nText) -> some View {
-        HStack(alignment: .top, spacing: PanelStyle.Space.s) {
+        HStack(alignment: .top, spacing: Theme.Space.s) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.Palette.warning)
             EngineErrorMessage(
                 text: error,
                 retry: { Task { await store.rescan() } },
@@ -70,61 +71,121 @@ struct DetailView: View {
                     .font(.system(size: 9, weight: .bold))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Palette.textMuted)
             .help(settings.t("close"))
             .accessibilityLabel(settings.t("close"))
             .accessibilityIdentifier("cleanup.error.dismiss")
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, PanelStyle.Space.l)
-        .padding(.vertical, PanelStyle.Space.s)
+        .padding(.horizontal, Theme.Space.page)
+        .padding(.vertical, Theme.Space.s)
+        .background(Theme.Palette.warningFill)
     }
 
     private func tierContent(_ report: ScanReport) -> some View {
         let allItems = store.tierTab.findings(in: report)
         let filteredItems = filteredFindings(allItems)
+
         return VStack(spacing: 0) {
+            HStack {
+                TierPillBar(store: store)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.Space.page)
+            .padding(.top, Theme.Space.s)
+
             if let apply = store.lastApply, store.showingCleanupResult {
                 CleanupResultCard(report: apply) { store.showingCleanupResult = false }
-                    .padding(.horizontal, PanelStyle.Space.l)
-                    .padding(.top, PanelStyle.Space.m)
+                    .padding(.horizontal, Theme.Space.page)
+                    .padding(.top, Theme.Space.m)
                     .transition(.opacity)
             }
 
-            PanelFilterBar(
-                placeholder: settings.t("searchFindings"),
-                text: $store.findingsQuery,
-                filter: { EmptyView() },
-                trailing: { EmptyView() },
-                searchIdentifier: "cleanup.search"
-            )
-            .padding(.horizontal, PanelStyle.Space.l)
-            .padding(.vertical, PanelStyle.Space.s)
-
-            if allItems.isEmpty {
-                TierEmptyView(tab: store.tierTab, isBusy: store.isBusy, scanLabel: scanLabel) {
-                    Task { await store.rescan() }
+            HStack(spacing: Theme.Space.s) {
+                Text(allItems.isEmpty
+                     ? settings.tabEmpty(store.tierTab)
+                     : sectionCount(shown: filteredItems.count, total: allItems.count))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textMuted)
+                Spacer(minLength: Theme.Space.s)
+                if store.tierTab != .locked && !allItems.isEmpty {
+                    Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
+                        .buttonStyle(.plain)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.accent)
+                        .disabled(store.isBusy)
+                        .accessibilityIdentifier("cleanup.selectAll")
+                    Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
+                        .buttonStyle(.plain)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textMuted)
+                        .disabled(store.isBusy)
+                        .accessibilityIdentifier("cleanup.selectNone")
                 }
-            } else if filteredItems.isEmpty && !store.findingsQuery.isEmpty {
-                NoMatchesView()
-            } else {
-                List {
-                    if store.tierTab == .locked {
-                        lockedSection(filteredItems)
-                    } else {
-                        deletableSection(filteredItems, tierTotal: allItems.count)
-                    }
-                }
-                .listStyle(.inset)
-                .opacity(listOpacity)
+                SearchField(
+                    placeholder: settings.t("searchFindings"),
+                    text: $store.findingsQuery,
+                    identifier: "cleanup.search"
+                )
+                .frame(maxWidth: 250)
             }
+            .padding(.horizontal, Theme.Space.page)
+            .padding(.vertical, Theme.Space.s)
 
-            Divider()
+            listBody(filtered: filteredItems, all: allItems)
+                .opacity(listOpacity)
+
+            Divider().overlay(Theme.Palette.hairline)
             actionBar
         }
         .onChange(of: store.scannedAt) { _, _ in
             fadeInFindings()
         }
+    }
+
+    @ViewBuilder
+    private func listBody(filtered: [Finding], all: [Finding]) -> some View {
+        if all.isEmpty {
+            TierEmptyView(tab: store.tierTab, isBusy: store.isBusy, scanLabel: scanLabel) {
+                Task { await store.rescan() }
+            }
+        } else if filtered.isEmpty && !store.findingsQuery.isEmpty {
+            NoMatchesView()
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    if store.tierTab == .locked {
+                        lockedHeader(count: filtered.count)
+                    }
+                    ForEach(Array(filtered.enumerated()), id: \.element.id) { index, finding in
+                        FindingRow(
+                            finding: finding,
+                            isSelected: store.selection.contains(finding.id),
+                            onToggle: { store.toggle(finding) }
+                        )
+                        .disabled(store.isBusy)
+                        .staggeredAppear(index)
+                    }
+                }
+                .padding(.horizontal, Theme.Space.page)
+                .padding(.vertical, Theme.Space.s)
+            }
+            .scrollIndicators(.automatic)
+        }
+    }
+
+    private func lockedHeader(count: Int) -> some View {
+        HStack {
+            Text(settings.t("lockedNeverDeleted"))
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textMuted)
+            Spacer()
+            Text("\(count)")
+                .font(Theme.Font.number(size: 11))
+                .foregroundStyle(Theme.Palette.textMuted)
+        }
+        .padding(.vertical, 6)
+        .accessibilityIdentifier("cleanup.locked.header")
     }
 
     private func fadeInFindings() {
@@ -141,34 +202,8 @@ struct DetailView: View {
         let query = store.findingsQuery.lowercased()
         return items.filter { finding in
             finding.ruleId.lowercased().contains(query) ||
-            finding.path.lowercased().contains(query)
-        }
-    }
-
-    private func deletableSection(_ items: [Finding], tierTotal: Int) -> some View {
-        Section {
-            ForEach(items) { finding in
-                FindingRow(
-                    finding: finding,
-                    isSelected: store.selection.contains(finding.id),
-                    onToggle: { store.toggle(finding) }
-                )
-                .disabled(store.isBusy)
-            }
-        } header: {
-            HStack {
-                Text(settings.tabTitle(store.tierTab))
-                Text(sectionCount(shown: items.count, total: tierTotal))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(settings.t("selectAll")) { store.selectAll(in: store.tierTab) }
-                    .disabled(store.isBusy)
-                    .accessibilityIdentifier("cleanup.selectAll")
-                Button(settings.t("selectNone")) { store.selectNone(in: store.tierTab) }
-                    .disabled(store.isBusy)
-                    .accessibilityIdentifier("cleanup.selectNone")
-            }
-            .font(PanelFont.caption)
+            finding.path.lowercased().contains(query) ||
+            RuleText.description(of: finding, lang: settings.language).lowercased().contains(query)
         }
     }
 
@@ -177,31 +212,8 @@ struct DetailView: View {
         return settings.t("filterShowing", ["shown": "\(shown)", "total": "\(total)"])
     }
 
-    private func lockedSection(_ items: [Finding]) -> some View {
-        Section {
-            ForEach(items) { finding in
-                FindingRow(
-                    finding: finding,
-                    isSelected: false,
-                    onToggle: {}
-                )
-                .disabled(true)
-            }
-        } header: {
-            HStack {
-                Text(settings.t("lockedNeverDeleted"))
-                Spacer()
-                Text("\(items.count)")
-            }
-            .font(PanelFont.caption)
-            .accessibilityIdentifier("cleanup.locked.header")
-        } footer: {
-            Text(settings.t("lockedSectionFooter"))
-        }
-    }
-
     private var actionBar: some View {
-        HStack(spacing: PanelStyle.Space.m) {
+        HStack(spacing: Theme.Space.m) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.selectedBytes > 0
                      ? settings.t("selectedLine", [
@@ -209,43 +221,42 @@ struct DetailView: View {
                          "size": ByteFormat.string(store.selectedBytes),
                      ])
                      : settings.t("selectedNone"))
-                    .font(PanelFont.emphasis())
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.Palette.textPrimary)
                     .accessibilityIdentifier("cleanup.selected")
                 if store.selectedBytes > 0 {
                     Text(settings.t("willDelete"))
-                        .font(PanelFont.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textMuted)
                 }
                 if store.selectedLockedCount > 0 {
                     Text(settings.t("lockedExcluded", ["count": settings.lockedCount(store.selectedLockedCount)]))
-                        .font(PanelFont.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.Palette.textMuted)
                 }
                 if let change = store.selectionChange {
                     Text(settings.t("selectionChanged", [
                         "before": settings.itemCount(change.before),
                         "kept": settings.itemCount(change.kept),
                     ]))
-                    .font(PanelFont.caption)
-                    .foregroundStyle(.orange)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.warning)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("cleanup.selectionChange")
                 }
             }
-            Spacer()
+            Spacer(minLength: Theme.Space.s)
             Button(settings.t("reviewAndDelete"), action: onClean)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(!store.canClean)
                 .keyboardShortcut(.return, modifiers: .command)
                 .help(settings.t("reviewAndDeleteHelp"))
                 .accessibilityHint(settings.t("safetyReadOnly"))
                 .accessibilityIdentifier("cleanup.review")
         }
-        .padding(.horizontal, PanelStyle.Space.l)
-        .padding(.vertical, PanelStyle.Space.m)
-        .background(.ultraThinMaterial)
-        .accessibilityElement(children: .contain)
+        .padding(.horizontal, Theme.Space.page)
+        .padding(.vertical, Theme.Space.m)
+        .background(Theme.Palette.surface)
     }
 }
 
@@ -258,17 +269,17 @@ struct TierEmptyView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Theme.Space.m) {
             Image(systemName: tab.symbolName)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(Theme.Palette.textMuted)
             Text(settings.tabEmpty(tab))
-                .font(PanelFont.emphasis())
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
             Button(scanLabel, action: onScan)
-                .controlSize(.large)
+                .buttonStyle(SecondaryButtonStyle())
                 .disabled(isBusy)
                 .accessibilityIdentifier("cleanup.empty.scan")
         }
@@ -282,13 +293,13 @@ struct NoMatchesView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Theme.Space.m) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(Theme.Palette.textMuted)
             Text(settings.t("noMatches"))
-                .font(PanelFont.emphasis())
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
         }
@@ -306,17 +317,18 @@ struct EmptyStateView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Theme.Space.m) {
             Image(systemName: "internaldrive")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(Theme.Palette.textMuted)
             Text(settings.t("nothingScanned"))
-                .font(PanelFont.emphasis(.semibold))
+                .font(Theme.Font.section)
+                .foregroundStyle(Theme.Palette.textPrimary)
             Text(settings.t("emptyStateBody"))
-                .font(PanelFont.body)
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.Palette.textSecondary)
             Button(scanLabel, action: onScan)
-                .controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(isBusy)
                 .accessibilityIdentifier("cleanup.emptyState.scan")
         }
@@ -333,22 +345,23 @@ struct EngineErrorView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Theme.Space.m) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(.orange)
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(Color(nsColor: .systemOrange))
             Text(settings.t("engineUnavailable"))
-                .font(PanelFont.emphasis(.semibold))
+                .font(Theme.Font.section)
+                .foregroundStyle(Theme.Palette.textPrimary)
             errorMessage
             Button(settings.t("retry"), action: onRetry)
-                .controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(isBusy)
                 .accessibilityIdentifier("cleanup.retry")
             Text(settings.t("nothingDeleted"))
-                .font(PanelFont.caption)
-                .foregroundStyle(.tertiary)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.Palette.textMuted)
         }
-        .padding(30)
+        .padding(Theme.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
