@@ -227,7 +227,9 @@ export async function resolvePattern(pattern: string, limits: GlobLimits = GLOB_
       for (const entry of entries) {
         if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
         if (!step.matcher.test(entry.name)) continue;
-        next.push(join(dir, entry.name));
+        const full = join(dir, entry.name);
+        if (isRed(full)) continue;
+        next.push(full);
       }
     }
     current = next;
@@ -272,6 +274,7 @@ const RED_PATTERNS: RegExp[] = [
   /\/Mail(\.v2)?\//i,
   /Mail(\.v2)?$/i,
   /iCloud/i,
+  /CloudStorage(\/|$)/i,
   /-wal$/i,
   /-shm$/i,
   /Preferences$/i,

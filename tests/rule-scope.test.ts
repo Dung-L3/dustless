@@ -132,6 +132,20 @@ describe("glob expansion", () => {
     expect(result.paths).toEqual([join(tree, "a", "b", "c", "node_modules")]);
   });
 
+  test("a red child is skipped before a glob traverses it", async () => {
+    const redTree = join(sandbox, "red-tree");
+    const desktop = join(redTree, "Desktop");
+    const cloud = join(redTree, "CloudStorage");
+    const cache = join(redTree, "Caches");
+    await mkdir(join(desktop, "node_modules"), { recursive: true });
+    await mkdir(join(cloud, "node_modules"), { recursive: true });
+    await mkdir(join(cache, "node_modules"), { recursive: true });
+    const result = await resolvePattern(join(redTree, "*"));
+    expect(result.paths).toEqual([cache]);
+    expect(result.paths).not.toContain(desktop);
+    expect(result.paths).not.toContain(cloud);
+  });
+
   test("a wildcard inside a segment matches that segment only", async () => {
     await mkdir(join(tree, "avd", "Pixel.avd"), { recursive: true });
     await mkdir(join(tree, "avd", "plain"), { recursive: true });
