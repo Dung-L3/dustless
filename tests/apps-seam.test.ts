@@ -90,10 +90,10 @@ describe("the app install test seam can only narrow the uninstall scope", () => 
     const seammed = await listApps({ home, appDirs: [tools] });
     expect(seammed.map((app) => app.bundleId)).toEqual([]);
 
-    const defaults = await listApps({ home });
+    const defaults = await listApps({ home, appDirs: [join(home, "Applications")] });
     expect(defaults.some((app) => app.bundleId === "com.example.evil")).toBe(false);
     expect(defaults.some((app) => app.bundleId === "com.example.nice")).toBe(true);
-  }, 15_000);
+  });
 
   test("the shipped binary cannot uninstall an app outside the default app directories", async () => {
     const home = await sandbox("binary");
@@ -134,6 +134,7 @@ describe("the app install test seam can only narrow the uninstall scope", () => 
         HOME: home,
         USERPROFILE: home,
         XDG_CONFIG_HOME: join(home, ".config"),
+        DUSTLESS_UI_TESTING: "1",
         PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
       },
       "/",
