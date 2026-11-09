@@ -49,7 +49,6 @@ struct ModuleSidebar: View {
             )
         }
         .buttonStyle(.plain)
-        .selectionDisabled()
         .help(title)
         .accessibilityLabel(title)
         .accessibilityIdentifier("sidebar.module.\(module.rawValue)")
@@ -83,7 +82,6 @@ struct ModuleSidebar: View {
             )
         }
         .buttonStyle(.plain)
-        .selectionDisabled()
         .help(title)
         .accessibilityLabel("\(title): \(settings.itemCount(items.count))")
         .accessibilityIdentifier("sidebar.tier.\(tab.rawValue)")
