@@ -59,7 +59,7 @@ const DENY_PATHS = [
   "/Applications",
 ];
 
-function expandHome(path: string, home: string): string {
+export function expandHome(path: string, home: string): string {
   return path.replace(/^~(?=$|[/\\])/, home);
 }
 
@@ -140,7 +140,7 @@ async function readBundleInfo(appPath: string): Promise<{ bundleId: string; name
   return { bundleId: parsed.bundleId, name };
 }
 
-function isSafeBundleId(bundleId: string): boolean {
+export function isSafeBundleId(bundleId: string): boolean {
   if (bundleId.length === 0 || bundleId === ".") return false;
   if (bundleId.includes("/") || bundleId.includes("\\") || bundleId.includes("..")) return false;
   return !/[\u0000-\u001f\u007f]/.test(bundleId);
@@ -156,7 +156,7 @@ function deriveRelatedItems(home: string, bundleId: string): RelatedItem[] {
   }));
 }
 
-function deriveRelatedPaths(home: string, bundleId: string): string[] {
+export function deriveRelatedPaths(home: string, bundleId: string): string[] {
   return deriveRelatedItems(home, bundleId).map((item) => item.path);
 }
 
@@ -189,12 +189,12 @@ async function boundedDirSize(path: string, limit = 20_000): Promise<number | nu
   return total;
 }
 
-function isSystemApp(appPath: string): boolean {
+export function isSystemApp(appPath: string): boolean {
   const resolved = resolve(appPath);
   return resolved.startsWith("/System/Applications" + sep) || resolved === "/System/Applications";
 }
 
-function isAllowedAppDir(appPath: string, appDirs: string[], home: string): boolean {
+export function isAllowedAppDir(appPath: string, appDirs: string[], home: string): boolean {
   const resolved = resolve(appPath);
   for (const dir of appDirs) {
     const expanded = expandHome(dir, home);
@@ -206,7 +206,7 @@ function isAllowedAppDir(appPath: string, appDirs: string[], home: string): bool
   return false;
 }
 
-function isDenied(path: string, home: string): boolean {
+export function isDenied(path: string, home: string): boolean {
   const resolved = resolve(path);
   const resolvedHome = resolve(home);
 
@@ -275,6 +275,19 @@ async function concurrentMap<T, R>(
   return results;
 }
 
+async function measureRelated(home: string, bundleId: string): Promise<RelatedItem[]> {
+  const candidates = deriveRelatedItems(home, bundleId);
+  const measured = await Promise.all(
+    candidates.map(async (item) => {
+      const root = await lstat(item.path).catch(() => null);
+      if (!root) return null;
+      const bytes = root.isFile() || root.isSymbolicLink() ? root.size : await boundedDirSize(item.path);
+      return { ...item, bytes };
+    }),
+  );
+  return measured.filter((item): item is RelatedItem => item !== null);
+}
+
 export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
   const home = opts.home ?? homedir();
   const appDirs = scopedAppDirs(home, opts.appDirs);
@@ -294,13 +307,10 @@ export async function listApps(opts: ListAppsOptions): Promise<AppInfo[]> {
       const info = await readBundleInfo(appPath);
       if (!info) return null;
 
-      const bytes = await dirSize(appPath);
-      const candidates = deriveRelatedItems(home, info.bundleId);
-      const related: RelatedItem[] = [];
-      for (const item of candidates) {
-        if (!(await exists(item.path))) continue;
-        related.push({ ...item, bytes: await boundedDirSize(item.path) });
-      }
+      const [bytes, related] = await Promise.all([
+        dirSize(appPath),
+        measureRelated(home, info.bundleId),
+      ]);
 
       return {
         bundleId: info.bundleId,
@@ -351,7 +361,7 @@ export async function moveToTrash(src: string, trashDir: string, hooks: DeleteHo
   }
 }
 
-async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: Reason | null }> {
+export async function purgePath(src: string, hooks: DeleteHook = {}): Promise<{ status: "purged" | "failed"; bytes: number; detail: Reason | null }> {
   const source = resolve(src);
   const first = realGuard(source);
   if ("refused" in first) return { status: "failed", bytes: 0, detail: { code: refusalCode(first.refused) } };

@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm, stat, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rename, rm, stat, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listApps, uninstall } from "../src/core/apps/index.ts";
+import { uninstallRelated } from "../src/core/apps/leftovers.ts";
 import { assertTempRoot } from "./e2e/harness.ts";
 
 const TMP = tmpdir();
@@ -369,6 +370,204 @@ describe("uninstall", () => {
     const failed = report.outcomes.find((o) => o.path === otherApp.path);
     expect(failed?.status).toBe("failed");
     expect(failed?.detail?.code).toBe("not_a_leftover");
+  });
+});
+
+describe("related-only retry", () => {
+  async function fixture() {
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-retry-")));
+    const dir = join(root, "Applications");
+    const appPath = join(dir, "Retry.app");
+    await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
+    await writeFile(
+      join(appPath, "Contents", "Info.plist"),
+      `<?xml version="1.0"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.retry</string><key>CFBundleName</key><string>Retry</string></dict></plist>`,
+    );
+    await writeFile(join(appPath, "Contents", "MacOS", "Retry"), "fixture\n");
+    const support = join(root, "Library", "Application Support", "com.example.retry");
+    const cache = join(root, "Library", "Caches", "com.example.retry");
+    await mkdir(support, { recursive: true });
+    await mkdir(cache, { recursive: true });
+    await writeFile(join(support, "user.json"), "keep?");
+    await writeFile(join(cache, "cache.bin"), "cache");
+    return { root, dir, appPath, support, cache };
+  }
+
+  test.skipIf(process.platform === "win32")("moves only the failed related item after a partial uninstall", async () => {
+    if (process.getuid?.() === 0) return;
+    const f = await fixture();
+    try {
+      const apps = await listApps({ home: f.root, appDirs: [f.dir] });
+      const target = apps.find((app) => app.bundleId === "com.example.retry")!;
+      const cacheParent = join(f.root, "Library", "Caches");
+      await chmod(cacheParent, 0o500);
+      let first;
+      try {
+        first = await uninstall({
+          home: f.root,
+          appPath: target.path,
+          relatedPaths: target.relatedPaths,
+          confirm: true,
+          appDirs: [f.dir],
+        });
+      } finally {
+        await chmod(cacheParent, 0o700);
+      }
+      expect(first.summary.trashed).toBeGreaterThanOrEqual(2);
+      expect(first.summary.failed).toBe(1);
+      expect(await stat(f.appPath).then(() => true, () => false)).toBe(false);
+      expect(await stat(f.support).then(() => true, () => false)).toBe(false);
+      expect(await stat(f.cache).then(() => true, () => false)).toBe(true);
+
+      const retry = await uninstallRelated({
+        home: f.root,
+        bundleId: target.bundleId,
+        appPath: target.path,
+        relatedPaths: [f.cache],
+        confirm: true,
+        appDirs: [f.dir],
+      });
+      expect(retry.summary.trashed).toBe(1);
+      expect(retry.summary.failed).toBe(0);
+      expect(await stat(f.cache).then(() => true, () => false)).toBe(false);
+      expect(await stat(f.support).then(() => true, () => false)).toBe(false);
+      expect(await stat(f.appPath).then(() => true, () => false)).toBe(false);
+    } finally {
+      await chmod(join(f.root, "Library", "Caches"), 0o700).catch(() => {});
+      await rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses to retry when the application path exists again", async () => {
+    const f = await fixture();
+    try {
+      const report = await uninstallRelated({
+        home: f.root,
+        bundleId: "com.example.retry",
+        appPath: f.appPath,
+        relatedPaths: [f.cache],
+        confirm: true,
+        appDirs: [f.dir],
+      });
+      expect(report.summary.failed).toBe(1);
+      expect(report.outcomes[0]?.detail?.code).toBe("target_changed");
+      expect(await stat(f.appPath).then(() => true, () => false)).toBe(true);
+      expect(await stat(f.cache).then(() => true, () => false)).toBe(true);
+    } finally {
+      await rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses a path that is not a bundle-id leftover", async () => {
+    const f = await fixture();
+    try {
+      const canary = join(f.root, "Documents", "personal.txt");
+      await mkdir(join(f.root, "Documents"), { recursive: true });
+      await writeFile(canary, "do not delete");
+      await rm(f.appPath, { recursive: true, force: true });
+      const report = await uninstallRelated({
+        home: f.root,
+        bundleId: "com.example.retry",
+        appPath: f.appPath,
+        relatedPaths: [canary],
+        confirm: true,
+        appDirs: [f.dir],
+      });
+      expect(report.summary.failed).toBe(1);
+      expect(report.outcomes[0]?.detail?.code).toBe("not_a_leftover");
+      expect(await stat(canary).then(() => true, () => false)).toBe(true);
+    } finally {
+      await rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  test("a second retry skips an item that is already gone", async () => {
+    const f = await fixture();
+    try {
+      await rm(f.appPath, { recursive: true, force: true });
+      const first = await uninstallRelated({
+        home: f.root,
+        bundleId: "com.example.retry",
+        appPath: f.appPath,
+        relatedPaths: [f.cache],
+        confirm: true,
+        appDirs: [f.dir],
+      });
+      expect(first.summary.trashed).toBe(1);
+      const second = await uninstallRelated({
+        home: f.root,
+        bundleId: "com.example.retry",
+        appPath: f.appPath,
+        relatedPaths: [f.cache],
+        confirm: true,
+        appDirs: [f.dir],
+      });
+      expect(second.summary.skipped).toBe(1);
+      expect(second.summary.trashed).toBe(0);
+    } finally {
+      await rm(f.root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("target revalidation", () => {
+  test("a bundle id changed after the inventory was read is refused", async () => {
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-changed-")));
+    try {
+      const dir = join(root, "Applications");
+      const appPath = await createTestApp("com.example.changed", "Changed", dir);
+      const related = join(root, "Library", "Caches", "com.example.changed");
+      await mkdir(related, { recursive: true });
+      await writeFile(join(related, "cache.bin"), "cache");
+      const apps = await listApps({ home: root, appDirs: [dir] });
+      const target = apps.find((app) => app.bundleId === "com.example.changed")!;
+      await writeFile(
+        join(appPath, "Contents", "Info.plist"),
+        `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.apple.changed</string><key>CFBundleName</key><string>Changed</string></dict></plist>`,
+      );
+      const report = await uninstall({
+        home: root,
+        appPath: target.path,
+        relatedPaths: target.relatedPaths,
+        confirm: true,
+        appDirs: [dir],
+      });
+      expect(report.summary.failed).toBe(1);
+      expect(report.outcomes[0]?.detail?.code).toBe("system_app");
+      expect(await stat(appPath).then(() => true, () => false)).toBe(true);
+      expect(await stat(related).then(() => true, () => false)).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an app moved after the inventory was read is refused", async () => {
+    const root = assertTempRoot(await mkdtemp(join(TMP, "dustless-moved-")));
+    try {
+      const dir = join(root, "Applications");
+      const appPath = await createTestApp("com.example.moved", "Moved", dir);
+      const related = join(root, "Library", "Caches", "com.example.moved");
+      await mkdir(related, { recursive: true });
+      await writeFile(join(related, "cache.bin"), "cache");
+      const apps = await listApps({ home: root, appDirs: [dir] });
+      const target = apps.find((app) => app.bundleId === "com.example.moved")!;
+      await rename(appPath, join(root, "Moved.app"));
+      const report = await uninstall({
+        home: root,
+        appPath: target.path,
+        relatedPaths: target.relatedPaths,
+        confirm: true,
+        appDirs: [dir],
+      });
+      expect(report.summary.failed).toBe(1);
+      expect(report.summary.trashed).toBe(0);
+      expect(report.outcomes[0]?.detail?.code).toBe("no_bundle_id");
+      expect(await stat(join(root, "Moved.app")).then(() => true, () => false)).toBe(true);
+      expect(await stat(related).then(() => true, () => false)).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

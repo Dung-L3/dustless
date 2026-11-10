@@ -35,6 +35,7 @@ const TEMPLATES: Record<ReasonCode, string> = {
   bad_bundle_id: "bundle id \"{id}\" không hợp lệ",
   leftover_escapes_home: "từ chối: đường dẫn file liên quan ra ngoài HOME",
   not_a_leftover: "từ chối: không phải file liên quan hợp lệ của ứng dụng này",
+  target_changed: "từ chối: ứng dụng đã thay đổi hoặc đã được cài lại; hãy bắt đầu lại",
   not_found: "bỏ qua: đường dẫn không còn tồn tại",
   moved_to_trash: "đã chuyển vào {path}",
   purged: "đã xoá vĩnh viễn",
