@@ -23,6 +23,7 @@ final class ApplicationsControl: ObservableObject {
     private var resultAppMoved = false
     private var resultIncludedRelated = false
     private var resultUnselectedRelated = false
+    private var resultHasRelated = false
 
     var isWorking: Bool { workingApp != nil }
 
@@ -30,6 +31,7 @@ final class ApplicationsControl: ObservableObject {
         if resultIsRetrySuccess { return "appsRetrySucceeded" }
         if resultIsFailure { return "appsUninstallFailed" }
         if resultIsPartial { return "appsPartialTitle" }
+        if resultAppMoved, !resultHasRelated { return "appsUninstalled" }
         if resultAppMoved && (resultUnselectedRelated || !resultIncludedRelated) {
             return "appsApplicationRemovedTitle"
         }
@@ -39,6 +41,7 @@ final class ApplicationsControl: ObservableObject {
     var resultMessage: L10nText? {
         guard result != nil, !resultIsPartial, !resultIsFailure else { return nil }
         if resultIsRetrySuccess { return L10nText("appsSelectedData") }
+        if resultAppMoved, !resultHasRelated { return nil }
         if resultAppMoved && !resultIncludedRelated { return L10nText("appsApplicationOnly") }
         if resultAppMoved && resultUnselectedRelated { return L10nText("appsUnselectedRelatedKept") }
         return L10nText("appsSelectedData")
@@ -151,6 +154,7 @@ final class ApplicationsControl: ObservableObject {
         resultAppMoved = false
         resultIncludedRelated = false
         resultUnselectedRelated = false
+        resultHasRelated = false
     }
 
     func dismissRetry() {
@@ -173,6 +177,7 @@ final class ApplicationsControl: ObservableObject {
         resultIsFailure = failed > 0 && moved == 0
         resultIsRetrySuccess = retrySuccess
         resultIncludedRelated = !relatedPaths.isEmpty
+        resultHasRelated = !app.relatedItems.isEmpty
         let selected = Set(relatedPaths)
         resultUnselectedRelated = app.relatedItems.contains { !selected.contains($0.path) }
         pendingSheet = nil
