@@ -73,8 +73,8 @@ struct ApplicationsView: View {
                 isRunning: control.isRunning(app),
                 isWorking: control.isWorking,
                 isQuitting: control.isQuitting
-            ) { includeRelated, purge in
-                Task { await control.uninstall(app, includeRelated: includeRelated, purge: purge, store: store) }
+            ) { relatedPaths, purge in
+                Task { await control.uninstall(app, relatedPaths: relatedPaths, purge: purge, store: store) }
             } onCancel: {
                 control.cancel()
             }
@@ -184,17 +184,26 @@ struct ApplicationsView: View {
 
     @ViewBuilder
     private var content: some View {
+        if let retry = control.retry, control.result == nil {
+            ApplicationsLeftoverCard(
+                retry: retry,
+                isWorking: control.isWorking,
+                onRetry: { Task { await control.retryRemaining(store: store) } },
+                onKeep: { control.dismissRetry() }
+            )
+        }
+
         if let report = control.result {
+            let hasRetry = control.retry != nil
             StorageResultCard(
                 report: report,
-                title: settings.t(
-                    control.resultIsFailure
-                        ? "appsUninstallFailed"
-                        : (control.resultIsPartial ? "appsPartialTitle" : "appsUninstalled")
-                ),
+                title: settings.t(control.resultTitleKey),
+                message: control.resultMessage.map(settings.text),
+                retryTitle: hasRetry ? settings.t("appsRetryRemaining") : nil,
+                onRetry: hasRetry ? { Task { await control.retryRemaining(store: store) } } : nil,
                 onClose: { control.clearResult() }
             )
-            .frame(maxHeight: 190)
+            .frame(maxHeight: 260)
         }
 
         if store.isLoadingStorageApps && store.storageApps.isEmpty {
@@ -253,6 +262,56 @@ struct ApplicationsView: View {
                 }
             }
             .scrollIndicators(.automatic)
+        }
+    }
+}
+
+private struct ApplicationsLeftoverCard: View {
+    let retry: ApplicationRetry
+    let isWorking: Bool
+    let onRetry: () -> Void
+    let onKeep: () -> Void
+
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.m) {
+            Image(systemName: "archivebox")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Theme.Palette.warning)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(settings.t("appsLeftoverTitle"))
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .accessibilityIdentifier("applications.leftover.title")
+                Text(settings.t("appsPartialRetryBody", ["count": settings.relatedCount(retry.relatedPaths.count)]))
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Space.s)
+            Button(settings.t("appsKeepRemaining"), action: onKeep)
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(isWorking)
+                .accessibilityIdentifier("applications.leftover.keep")
+            Button(action: onRetry) {
+                HStack(spacing: 5) {
+                    if isWorking {
+                        ProgressView().controlSize(.mini).scaleEffect(0.55).frame(width: 11, height: 11)
+                    }
+                    Text(settings.t("appsRetryRemaining"))
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isWorking)
+            .accessibilityIdentifier("applications.leftover.retry")
+        }
+        .padding(Theme.Space.m)
+        .background(Theme.Palette.warningFill, in: .rect(cornerRadius: Theme.Radius.inner))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.inner, style: .continuous)
+                .stroke(Theme.Palette.warning.opacity(0.3), lineWidth: 1)
         }
     }
 }

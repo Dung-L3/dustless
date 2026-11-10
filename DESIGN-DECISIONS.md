@@ -39,3 +39,15 @@ List entrance uses at most eight items with a 24 ms stagger; later rows appear t
 ## 10. Sidebar width and grouping
 
 Sidebar width is 232 pt. Workspace contains Overview, Cleanup, Storage and Applications; System contains Memory and Network. This is the maximum grouping that stays readable at the 940 pt minimum window width.
+
+## 11. Uninstall has two named scopes
+
+The default is **Remove application** and keeps every related item. **Remove application & selected data** reveals a per-item checklist; unchecked paths never reach the engine. A result that leaves related data is titled **Application removed**, not **Uninstalled**. A partial result keeps the remaining paths and offers a retry that runs against the original bundle identity only after the engine revalidates its templates and canonical paths. This preserves the safety default while making the scope visible.
+
+## 12. Permission waiting is not a fake state
+
+macOS does not expose whether a TCC prompt is visible to the app. After five seconds the scan shows **Waiting for access**, explicitly saying the system *may* be asking. A completed report with denied reads shows **Some folders could not be read** and links to Files & Folders. Dustless never claims that permission was granted, and never reports a complete scan when protected data could not be read.
+
+## 13. Process actions state what they can prove
+
+A protected process has no Stop/Force Stop control. A Stop result means the signal was accepted, not that the process exited; the list refresh is the proof. A Quit result is only success after the exact bundle-path instances disappear; a still-open app shows a warning instead of a checkmark. Force Stop remains a secondary, explicitly labelled action.

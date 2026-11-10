@@ -4,6 +4,9 @@ import SwiftUI
 struct StorageResultCard: View {
     let report: UninstallReport
     let title: String
+    var message: String? = nil
+    var retryTitle: String? = nil
+    var onRetry: (() -> Void)? = nil
     let onClose: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
@@ -12,11 +15,28 @@ struct StorageResultCard: View {
         VStack(alignment: .leading, spacing: PanelStyle.Space.s) {
             header
 
+            if let message {
+                Text(message)
+                    .font(PanelFont.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("storage.result.message")
+            }
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(report.outcomes) { outcome in
                         outcomeRow(outcome)
                     }
+                }
+            }
+
+            if let onRetry, let retryTitle {
+                HStack {
+                    Spacer()
+                    Button(retryTitle, action: onRetry)
+                        .buttonStyle(SecondaryButtonStyle())
+                        .accessibilityIdentifier("applications.result.retry")
                 }
             }
         }

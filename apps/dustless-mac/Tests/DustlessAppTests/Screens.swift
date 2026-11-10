@@ -31,6 +31,7 @@ enum Screens {
             unscannable(),
             engineError(),
             engineErrorMessage(),
+            permission(),
             uninstallSheet(),
             trashSheet(),
             cleanupResult(),
@@ -188,6 +189,26 @@ enum Screens {
         )
     }
 
+
+    private static func permission() -> Screen {
+        Screen(
+            name: "permission",
+            width: 700,
+            height: 220,
+            stable: false,
+            make: { language in
+                let settings = TestData.settings(language)
+                let store = ScanStore(preview: ScanStore.Preview(scanPermission: .required))
+                return AnyView(
+                    ScanPermissionNotice(store: store)
+                        .environmentObject(settings)
+                        .padding(Theme.Space.page)
+                        .frame(width: 700, height: 220, alignment: .topLeading)
+                        .background(Theme.Palette.ink)
+                )
+            }
+        )
+    }
 
     private static func memory() -> Screen {
         Screen(

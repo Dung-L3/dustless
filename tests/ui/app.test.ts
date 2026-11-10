@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -82,6 +82,8 @@ async function seedStorage(app: UiApp) {
   await writeFile(join(bundle, "Contents", "MacOS", "E2EToy"), "fixture\n");
   await mkdir(join(app.home, "Library", "Caches", "dev.dustless.e2e.toy"), { recursive: true });
   await writeFile(join(app.home, "Library", "Caches", "dev.dustless.e2e.toy", "cache.bin"), "cache fixture\n");
+  await mkdir(join(app.home, "Library", "Application Support", "dev.dustless.e2e.toy"), { recursive: true });
+  await writeFile(join(app.home, "Library", "Application Support", "dev.dustless.e2e.toy", "settings.json"), "{}");
 }
 
 async function seedLargeFile(app: UiApp) {
@@ -202,7 +204,76 @@ int main(void) {
   throw new Error("quit fixture did not start");
 }
 
-async function startMemoryFixture() {
+async function startRefusingQuitFixture() {
+  const root = await mkdtemp(join(tmpdir(), "e2e-refuse-"));
+  const app = join(root, "E2E Refuse Quit.app");
+  const macos = join(app, "Contents", "MacOS");
+  await mkdir(macos, { recursive: true });
+  await writeFile(
+    join(app, "Contents", "Info.plist"),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>dev.dustless.e2e.refusequit</string>
+<key>CFBundleName</key><string>E2E Refuse Quit</string>
+<key>CFBundleExecutable</key><string>Refuser</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>`,
+  );
+  const source = join(root, "fixture.m");
+  await writeFile(
+    source,
+    `#import <Cocoa/Cocoa.h>
+@interface Refuser : NSObject <NSApplicationDelegate>
+@end
+@implementation Refuser
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+  return NSTerminateCancel;
+}
+@end
+static Refuser *delegate;
+int main(void) {
+  @autoreleasepool {
+    NSApplication *app = [NSApplication sharedApplication];
+    delegate = [[Refuser alloc] init];
+    [app setDelegate:delegate];
+    [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 320, 220)
+                                                   styleMask:NSWindowStyleMaskTitled
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    [window makeKeyAndOrderFront:nil];
+    [app run];
+  }
+  return 0;
+}`,
+  );
+  const binary = join(macos, "Refuser");
+  const built = Bun.spawnSync(["clang", "-framework", "Cocoa", "-o", binary, source]);
+  if (built.exitCode !== 0) {
+    await rm(root, { recursive: true, force: true });
+    throw new Error(`refuse fixture build failed: ${built.stderr.toString()}`);
+  }
+  const opened = Bun.spawnSync(["open", "-a", app]);
+  if (opened.exitCode !== 0) {
+    await rm(root, { recursive: true, force: true });
+    throw new Error(`refuse fixture open failed: ${opened.stderr.toString()}`);
+  }
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const found = Bun.spawnSync(["pgrep", "-f", binary]);
+    const pid = Number((found.stdout?.toString() ?? "").trim().split("\n")[0]);
+    if (Number.isInteger(pid) && pid > 0) {
+      return { root, app, bundlePath: await realpath(app), pid };
+    }
+    await Bun.sleep(100);
+  }
+  await rm(root, { recursive: true, force: true });
+  throw new Error("refuse-quit fixture did not start");
+}
+
+async function startMemoryFixture(sizeMb = 300) {
   const root = await mkdtemp(join(tmpdir(), "e2e-mem-"));
   const source = join(root, "fixture.c");
   const binary = join(root, "E2EDocker");
@@ -211,7 +282,7 @@ async function startMemoryFixture() {
     `#include <stdlib.h>
 #include <unistd.h>
 int main(void) {
-  size_t n = 300UL * 1024UL * 1024UL;
+  size_t n = ${sizeMb}UL * 1024UL * 1024UL;
   volatile char *p = malloc(n);
   if (!p) return 1;
   for (size_t i = 0; i < n; i += 4096) p[i] = 1;
@@ -577,7 +648,10 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         await app.press("applications.uninstall.dev.dustless.e2e.toy");
         await app.find("applications.confirm");
         await app.press("applications.confirm");
-        await app.find("storage.result.close", 20_000);
+        await app.find("storage.result.title", 20_000);
+        const title = await app.find("storage.result.title");
+        expect(String(title.value ?? "")).toBe("Application removed");
+        await app.find("storage.result.message");
         expect(await exists(bundle)).toBe(false);
         expect(await exists(cache)).toBe(true);
         await app.press("storage.result.close");
@@ -587,6 +661,88 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
       async (app) => {
         await seedStorage(app);
       },
+    );
+  });
+
+  test("removes only the related data the user selected", async () => {
+    await withApp(
+      "applications-selected-data",
+      {},
+      async (app) => {
+        const bundle = join(app.home, "Applications", "E2E Toy.app");
+        const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
+        const support = join(app.home, "Library", "Application Support", "dev.dustless.e2e.toy");
+        await app.click("sidebar.module.applications");
+        await app.find("applications.header");
+        await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.mode.applicationAndData");
+        await app.press("applications.mode.applicationAndData");
+        await app.find(`applications.related.${cache}`);
+        await app.press(`applications.related.${cache}`);
+        await Bun.sleep(200);
+        await app.press("applications.confirm");
+        await app.find("storage.result.title", 20_000);
+        const title = await app.find("storage.result.title");
+        expect(String(title.value ?? "")).toBe("Application removed");
+        await app.find("storage.result.message");
+        expect(await exists(bundle)).toBe(false);
+        expect(await exists(cache)).toBe(true);
+        expect(await exists(support)).toBe(false);
+        await app.screenshot("applications-selected-data");
+      },
+      seedStorage,
+    );
+  });
+
+  test("skips related data that was already moved before confirmation", async () => {
+    await withApp(
+      "applications-related-moved",
+      {},
+      async (app) => {
+        const bundle = join(app.home, "Applications", "E2E Toy.app");
+        const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
+        const movedCache = join(app.outside, "cache-already-moved");
+        await app.click("sidebar.module.applications");
+        await app.find("applications.header");
+        await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.mode.applicationAndData");
+        await app.press("applications.mode.applicationAndData");
+        await rename(cache, movedCache);
+        await app.press("applications.confirm");
+        await app.find("storage.result.title", 20_000);
+        await app.find(`storage.outcome.skipped.${cache}`);
+        expect(await exists(bundle)).toBe(false);
+        expect(await exists(movedCache)).toBe(true);
+        await app.screenshot("applications-related-moved");
+      },
+      seedStorage,
+    );
+  });
+
+  test("refuses a target moved while the confirmation is open", async () => {
+    await withApp(
+      "applications-target-moved",
+      {},
+      async (app) => {
+        const bundle = join(app.home, "Applications", "E2E Toy.app");
+        const moved = join(app.outside, "Moved Toy.app");
+        const cache = join(app.home, "Library", "Caches", "dev.dustless.e2e.toy");
+        await app.click("sidebar.module.applications");
+        await app.find("applications.header");
+        await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
+        await app.press("applications.uninstall.dev.dustless.e2e.toy");
+        await app.find("applications.confirm");
+        await rename(bundle, moved);
+        await app.press("applications.confirm");
+        await app.findLabel("changed or moved after the confirmation", 10_000);
+        await app.pressLabel("Done");
+        expect(await exists(moved)).toBe(true);
+        expect(await exists(cache)).toBe(true);
+        await app.screenshot("applications-target-moved");
+      },
+      seedStorage,
     );
   });
 
@@ -606,7 +762,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
           await app.find("applications.uninstall.dev.dustless.e2e.toy", 20_000);
           await app.press("applications.uninstall.dev.dustless.e2e.toy");
           await app.find("applications.confirm");
-          await app.press("applications.includeRelated");
+          await app.press("applications.mode.applicationAndData");
           await Bun.sleep(200);
           await app.press("applications.confirm");
           await app.find("storage.result.title", 20_000);
@@ -615,6 +771,14 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
           expect(await exists(bundle)).toBe(false);
           expect(await exists(cache)).toBe(true);
           await app.screenshot("applications-partial");
+          await chmod(cachesParent, 0o700);
+          await app.press("applications.result.retry");
+          await app.find("storage.result.title", 20_000);
+          const retryTitle = await app.find("storage.result.title");
+          expect(String(retryTitle.value ?? "")).toBe("Remaining data removed");
+          expect(await exists(cache)).toBe(false);
+          expect(await exists(bundle)).toBe(false);
+          await app.screenshot("applications-partial-retry");
           await app.press("storage.result.close");
           await app.waitGone("storage.result.close");
         } finally {
@@ -714,7 +878,7 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
         expect(await exists(cache)).toBe(true);
         await app.press("applications.uninstall.dev.dustless.e2e.toy");
         await app.find("applications.confirm");
-        await app.press("applications.includeRelated");
+        await app.press("applications.mode.applicationAndData");
         await Bun.sleep(200);
         await app.press("applications.confirm");
         await app.find("storage.result.close", 20_000);
@@ -860,6 +1024,160 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
     } finally {
       if (fixture.child.pid && processAlive(fixture.child.pid)) fixture.child.kill("SIGKILL");
       if (fixture.canary.pid && processAlive(fixture.canary.pid)) fixture.canary.kill("SIGKILL");
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+  test("force stops a compiled fixture with SIGKILL", async () => {
+    const fixture = await startMemoryFixture();
+    try {
+      await withApp("memory-force-stop", {}, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.click("memory.filter.container");
+        await app.find(`memory.group.${fixture.binary}`, 20_000);
+        if (!(await app.exists(`memory.forceStop.menu.${fixture.child.pid}`))) {
+          await app.press(`memory.expand.${fixture.binary}`);
+        }
+        await app.press(`memory.forceStop.menu.${fixture.child.pid}`, 20_000);
+        await app.find(`memory.action.forceStop.${fixture.child.pid}`, 10_000);
+        await app.press(`memory.action.forceStop.${fixture.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
+        const deadline = Date.now() + 10_000;
+        while (processAlive(fixture.child.pid!) && Date.now() < deadline) await Bun.sleep(100);
+        expect(processAlive(fixture.child.pid!)).toBe(false);
+        expect(processAlive(fixture.canary.pid!)).toBe(true);
+        await app.waitGone(`memory.stop.${fixture.child.pid}`, 10_000);
+        await app.screenshot("memory-force-stop");
+      });
+    } finally {
+      if (fixture.child.pid && processAlive(fixture.child.pid)) fixture.child.kill("SIGKILL");
+      if (fixture.canary.pid && processAlive(fixture.canary.pid)) fixture.canary.kill("SIGKILL");
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("reconciles a process that exited before the stop confirmation", async () => {
+    const fixture = await startMemoryFixture();
+    try {
+      await withApp("memory-exited", {}, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.click("memory.filter.container");
+        await app.find(`memory.group.${fixture.binary}`, 20_000);
+        if (!(await app.exists(`memory.stop.${fixture.child.pid}`))) {
+          await app.press(`memory.expand.${fixture.binary}`);
+        }
+        await app.find(`memory.stop.${fixture.child.pid}`, 20_000);
+        fixture.child.kill("SIGKILL");
+        await Bun.sleep(500);
+        await app.press(`memory.stop.${fixture.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
+        await app.waitGone(`memory.stop.${fixture.child.pid}`, 15_000);
+        expect(await app.engineLog()).toContain("ram --kill");
+        expect(processAlive(fixture.child.pid!)).toBe(false);
+        expect(processAlive(fixture.canary.pid!)).toBe(true);
+      });
+    } finally {
+      if (fixture.child.pid && processAlive(fixture.child.pid)) fixture.child.kill("SIGKILL");
+      if (fixture.canary.pid && processAlive(fixture.canary.pid)) fixture.canary.kill("SIGKILL");
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("shows an engine permission denial without claiming the process stopped", async () => {
+    const fixture = await startMemoryFixture();
+    try {
+      await withApp("memory-permission", { denyKill: true }, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.click("memory.filter.container");
+        await app.find(`memory.group.${fixture.binary}`, 20_000);
+        if (!(await app.exists(`memory.stop.${fixture.child.pid}`))) {
+          await app.press(`memory.expand.${fixture.binary}`);
+        }
+        await app.find(`memory.stop.${fixture.child.pid}`, 20_000);
+        await app.press(`memory.stop.${fixture.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
+        const status = await app.find(`memory.status.${fixture.child.pid}`, 10_000);
+        expect(String(status.help ?? status.description ?? "").toLowerCase()).toContain("permission denied");
+        expect(processAlive(fixture.child.pid!)).toBe(true);
+        await app.screenshot("memory-permission");
+      });
+    } finally {
+      if (fixture.child.pid && processAlive(fixture.child.pid)) fixture.child.kill("SIGKILL");
+      if (fixture.canary.pid && processAlive(fixture.canary.pid)) fixture.canary.kill("SIGKILL");
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("stops two independent items at the same time", async () => {
+    const first = await startMemoryFixture(80);
+    const second = await startMemoryFixture(80);
+    try {
+      await withApp("memory-concurrent", {}, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.click("memory.filter.container");
+        await app.typeText("memory.search", String(first.child.pid));
+        await app.find(`memory.group.${first.binary}`, 20_000);
+        if (!(await app.exists(`memory.stop.${first.child.pid}`))) {
+          await app.press(`memory.expand.${first.binary}`);
+        }
+        await app.find(`memory.stop.${first.child.pid}`, 20_000);
+        await app.press(`memory.stop.${first.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
+
+        await app.typeText("memory.search", String(second.child.pid));
+        await app.find(`memory.group.${second.binary}`, 20_000);
+        if (!(await app.exists(`memory.stop.${second.child.pid}`))) {
+          await app.press(`memory.expand.${second.binary}`);
+        }
+        await app.find(`memory.stop.${second.child.pid}`, 20_000);
+        await app.press(`memory.stop.${second.child.pid}`);
+        await app.find("memory.stop.confirm");
+        await app.press("memory.stop.confirm");
+
+        const deadline = Date.now() + 10_000;
+        while ((processAlive(first.child.pid!) || processAlive(second.child.pid!)) && Date.now() < deadline) {
+          await Bun.sleep(100);
+        }
+        expect(processAlive(first.child.pid!)).toBe(false);
+        expect(processAlive(second.child.pid!)).toBe(false);
+        expect(processAlive(first.canary.pid!)).toBe(true);
+        expect(processAlive(second.canary.pid!)).toBe(true);
+        await app.screenshot("memory-concurrent");
+      });
+    } finally {
+      for (const fixture of [first, second]) {
+        if (fixture.child.pid && processAlive(fixture.child.pid)) fixture.child.kill("SIGKILL");
+        if (fixture.canary.pid && processAlive(fixture.canary.pid)) fixture.canary.kill("SIGKILL");
+        await rm(fixture.root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("reports that an app is still open when it refuses to quit", async () => {
+    const fixture = await startRefusingQuitFixture();
+    try {
+      await withApp("memory-refuse-quit", {}, async (app) => {
+        await app.pressMenuItem("Memory");
+        await app.find("memory.header");
+        await app.typeText("memory.search", String(fixture.pid));
+        await app.find("memory.summary");
+        await app.find(`memory.group.${fixture.bundlePath}`, 20_000);
+        await app.find(`memory.quit.${fixture.bundlePath}`, 10_000);
+        await app.press(`memory.quit.${fixture.bundlePath}`);
+        const status = await app.find(`memory.quit.status.${fixture.bundlePath}`, 20_000);
+        expect(processAlive(fixture.pid)).toBe(true);
+        expect(String(status.help ?? status.description ?? "").toLowerCase()).toContain("still open");
+        await app.screenshot("memory-refuse-quit");
+      });
+    } finally {
+      Bun.spawnSync(["pkill", "-f", fixture.root]);
       await rm(fixture.root, { recursive: true, force: true });
     }
   });

@@ -2,9 +2,9 @@
 
 ```sh
 bun run typecheck     # tsc --noEmit over src, tests and scripts
-bun test              # 539 tests, about 25s; 36 skips unless DUSTLESS_UI=1
+bun test              # 555 tests, about 25s; 44 skips unless DUSTLESS_UI=1
 bun run lint          # repository policy checks
-cd apps/dustless-mac && swift test   # 174 Swift tests, about 105s
+cd apps/dustless-mac && swift test   # 179 Swift tests, about 105s
 bun run test:ui       # real macOS app UI suite; needs Accessibility trust; see below
 ```
 
@@ -29,13 +29,14 @@ draws them off screen with `ImageRenderer`. It needs no window server, no
 Accessibility trust and no launched application, so it runs on any macOS
 machine and in CI. The images land in `artifacts/ui-render/` (ignored by git).
 
-The catalogue in `Screens.swift` holds 19 screens: the overview, the cleanup
+The catalogue in `Screens.swift` holds 20 screens: the overview, the cleanup
 screen and its finding list, the confirm sheet, the storage screen and its
 large-file list, the applications screen, the memory panel, the network panel,
 the menu bar popover, the settings window, the unscannable notice, the engine
 error state and its message, the application uninstall sheet, the trash sheet,
 the cleanup result card, the tier badges and the destructive controls. Every
-screen is drawn in Vietnamese, English and Chinese, so 57 images.
+screen is drawn in Vietnamese, English and There is also a permission-required state. Every screen is drawn in Vietnamese,
+English and Chinese, so 60 images.
 
 What the render suite proves:
 
@@ -47,6 +48,8 @@ What the render suite proves:
   and the blocked reason is red, wherever those appear.
 - a glob never traverses a red path such as `Desktop` or `CloudStorage`, so a
   cache rule cannot hang on a cloud-backed folder before the red check.
+- the permission-required card renders the hand-raise state and its actions;
+  the waiting state is a separate live state and is not baked into the render.
 - the primary action's text and the muted metadata meet WCAG AA contrast on
   their actual fills in both Aqua and Dark Aqua, resolved from the live tokens.
   The popover uses the shared dark-on-accent primary style, not the system
@@ -103,7 +106,32 @@ The production launcher is not changed by this branch. The fix belongs there:
 close the inherited descriptors in the child (`POSIX_SPAWN_CLOEXEC_DEFAULT`) or
 read the engine's output from a file.
 
-### The Accessibility suite: `tests/ui`
+### Applications inventory
+
+Measured on the real machine with 32 applications and 70 related items:
+4.3-5.2 s for `dustless apps --json` (median about 4.3 s). A `--no-related`
+trial was not faster, so progressive related loading is not worth a protocol
+change. The dominant cost is the recursive size walk of large `.app` bundles.
+The inventory runs off the main thread, shows its loading state, and uses a
+45-second freshness window in the app; it is not cached inside the engine.
+`measureRelated` avoids a duplicate existence stat and sizes the 12 candidate
+paths concurrently. See `docs/DECISIONS.md` 198.
+
+## TCC permission verification
+
+The permission UI was exercised on the installed app by resetting
+`SystemPolicyDesktopFolder` and `SystemPolicyDownloadsFolder` for
+`dev.dustless.mac`. After five seconds the "Waiting for access" card appeared
+while the macOS prompt was open. Choosing Don't Allow produced "Some folders
+could not be read" with Rescan, Open Files & Folders Settings and Dismiss, and
+the scan's remaining findings stayed visible. The Settings button opened the
+Privacy & Security pane. This is a heuristic: the app cannot observe whether a
+system prompt is actually visible, and the copy says so. The final scan rules
+skip the Desktop/Downloads traversal boundary entirely (decision 200), so a
+default scan no longer needs those prompts; the state remains for any protected
+path that a future rule can reach.
+
+## The Accessibility suite: `tests/ui`
 
 `bun run test:ui` drives the real SwiftUI app through the Accessibility API.
 It builds both the engine and a test-only app bundle (`dev.dustless.e2e`,
@@ -131,6 +159,34 @@ disappearance is asserted. The 30-second wait is deliberate: the release of a cl
 SwiftUI window is what used to make the document fallback run, and shortening
 the wait would stop the case from exercising the regression.
 
+### Skipped tests on macOS
+
+Plain `bun test` reports 44 skips at this commit. They are not hidden failures:
+
+| Count | File / group | Reason |
+| --- | --- | --- |
+| 33 | `tests/ui/app.test.ts` | Interactive UI tests require `DUSTLESS_UI=1`, a GUI session and Accessibility trust; they run with `bun run test:ui` |
+| 5 | `tests/windows-junction.test.ts` | Windows junction semantics; not representable on macOS |
+| 5 | `tests/e2e/awdl.test.ts` | Non-macOS AWDL refusal cases |
+| 1 | `tests/apply-safety.test.ts` | Windows-only process-listing shape |
+
+The UI skips include the Applications, Memory and destructive-safety journeys.
+`bun run test:ui` runs all 33 and is the verification path for them; the hosted
+advisory job remains environment-limited, see `docs/DECISIONS.md` 199.
+
+### Accessibility checks and limits
+
+Every interactive control has a label and an identifier, and
+`tests/ui/identifiers.test.ts` checks the identifiers the suite drives. The
+render suite checks contrast and that no combined element wraps a button.
+Reduce Motion is wired through `Motion.gated` and every animated control reads
+`accessibilityReduceMotion`; a live system-setting toggle could not be written
+in this environment (`com.apple.universalaccess` is not user-writable here), so
+the live Reduce Motion behavior is **NOT VERIFIED**. Synthetic Tab events did
+not move focus between SwiftUI controls in the AX harness, so full keyboard
+traversal is also **NOT VERIFIED**; the keyboard shortcuts are exercised
+through the Go menu instead, as noted above.
+
 Requirements: macOS, Xcode or the Command Line Tools (`swiftc`), and
 Accessibility trust for the terminal or process that starts the tests. Without
 that trust the driver cannot inspect another app's window; `DUSTLESS_UI=1` then
@@ -149,7 +205,11 @@ The suite covers launch and overview, sidebar and Go menu navigation, the
 menu-bar popover, settings persistence, Vietnamese language loading,
 network/AWDL actions through an intercepted engine, app uninstall and Move to
 Trash, cleanup cancel/delete with a real failed deletion, and stopping one
-sandboxed process while a sibling fixture process stays alive. Synthetic
+sandboxed process while a sibling fixture process stays alive. The hardening
+cases add selected-data and bundle-only modes, related-only retry, target
+movement while the sheet is open, already-moved related data, force stop,
+a process that exited first, an intercepted permission denial, two simultaneous
+stops, and a quit request that the app refuses. Synthetic
 keyboard shortcuts are not asserted: posted key
 events were not reliably delivered as menu key equivalents in this harness, so
 the same routes are exercised through the Go menu instead of pretending the

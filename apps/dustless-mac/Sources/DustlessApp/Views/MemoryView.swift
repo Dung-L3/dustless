@@ -8,7 +8,7 @@ struct MemoryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var killResults: [Int: KillStatus] = [:]
-    @State private var quitResults: [String: Bool] = [:]
+    @State private var quitResults: [String: QuitStatus] = [:]
     @State private var pendingStop: PendingStop?
     @State private var stopping: Set<Int> = []
     @State private var quitting: Set<String> = []
@@ -332,12 +332,18 @@ struct MemoryView: View {
                 StatusPill(text: settings.t("memoryLargest"), tone: .warning)
             }
 
-            if let asked = quitResults[group.id] {
-                Image(systemName: asked ? "checkmark.circle.fill" : "xmark.circle.fill")
+            if let quit = quitResults[group.id] {
+                let tint: Color = quit == .quit
+                    ? Theme.Palette.accent
+                    : (quit == .stillOpen ? Theme.Palette.warning : Theme.Palette.danger)
+                let key = quit == .quit
+                    ? "memoryQuitAsked"
+                    : (quit == .stillOpen ? "memoryQuitStillOpen" : "memoryQuitFailed")
+                Image(systemName: quit == .quit ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(asked ? Theme.Palette.accent : Theme.Palette.danger)
-                    .help(settings.t(asked ? "memoryQuitAsked" : "memoryQuitFailed", ["name": group.displayName]))
-                    .accessibilityLabel(settings.t(asked ? "memoryQuitAsked" : "memoryQuitFailed", ["name": group.displayName]))
+                    .foregroundStyle(tint)
+                    .help(settings.t(key, ["name": group.displayName]))
+                    .accessibilityLabel(settings.t(key, ["name": group.displayName]))
                     .accessibilityIdentifier("memory.quit.status.\(group.id)")
             }
 
@@ -372,15 +378,25 @@ struct MemoryView: View {
 
 
     private func askToQuit(_ group: ProcessGroup) {
-        guard let target = AppQuit.target(for: group) else { return }
+        guard let target = AppQuit.target(for: group), let path = group.bundlePath else { return }
         quitting.insert(group.id)
-        quitResults[group.id] = AppQuit.requestQuit(target)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            Task { await store.fetchMemory() }
+        let accepted = AppQuit.requestQuit(target)
+        Task {
+            var exited = false
+            let deadline = Date().addingTimeInterval(8)
+            while Date() < deadline {
+                if RunningAppIdentity.running(bundleId: target.bundleID, appPath: path).isEmpty {
+                    exited = true
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            await store.fetchMemory()
             quitting.remove(group.id)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-            quitResults[group.id] = nil
+            quitResults[group.id] = exited ? .quit : (accepted ? .stillOpen : .requestFailed)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                quitResults[group.id] = nil
+            }
         }
     }
 
@@ -393,7 +409,7 @@ struct MemoryView: View {
     @ViewBuilder
     private func groupIcon(_ group: ProcessGroup) -> some View {
         if let path = group.bundlePath {
-            Image(nsImage: Self.icon(for: path))
+            Image(nsImage: MemoryIconCache.icon(for: path))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 16, height: 16)
@@ -403,17 +419,6 @@ struct MemoryView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 16, height: 16)
         }
-    }
-
-    @MainActor
-    private static var iconCache: [String: NSImage] = [:]
-
-    private static func icon(for path: String) -> NSImage {
-        if let cached = iconCache[path] { return cached }
-        if iconCache.count > 400 { iconCache.removeAll(keepingCapacity: true) }
-        let image = NSWorkspace.shared.icon(forFile: path)
-        iconCache[path] = image
-        return image
     }
 
     private func processRow(_ proc: MemProcess) -> some View {
@@ -475,9 +480,7 @@ struct MemoryView: View {
                 await MainActor.run {
                     killResults[pid] = KillStatus(pid: pid, ok: result.ok, reason: result.reason.map(KillReason.engine))
                 }
-                if result.ok {
-                    await store.fetchMemory()
-                }
+                await store.fetchMemory()
             } catch {
                 let reason = ScanStore.describe(error)
                 await MainActor.run {

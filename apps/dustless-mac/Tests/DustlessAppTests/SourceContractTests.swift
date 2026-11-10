@@ -191,8 +191,18 @@ struct SourceContractTests {
         let text = view + "\n" + sheet
         #expect(text.contains("applications.confirm"), "the application sheet must expose one confirm control")
         #expect(text.contains("applications.cancel"), "the application sheet must expose one cancel control")
-        #expect(text.contains("appsIncludeRelated"), "the sheet must let the user keep related data")
+        #expect(text.contains("applications.mode."), "the sheet must expose the two uninstall modes")
+        #expect(text.contains("applications.related."), "the sheet must let the user review each related item")
         #expect(text.contains("isRunning"), "the sheet must know whether the app is running")
+        let result = try String(contentsOf: viewsDirectory.appendingPathComponent("StorageResultCard.swift"), encoding: .utf8)
+        #expect(result.contains("applications.result.retry"), "a partial uninstall must expose its retry action")
+    }
+
+    @Test func aProtectedMemoryRowOffersNoStopAction() throws {
+        let file = viewsDirectory.appendingPathComponent("MemoryProcessRow.swift")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(text.contains("if protected {"), "protected rows must branch before rendering actions")
+        #expect(text.contains("memoryProtectedHelp"), "the protected row must explain why it has no action")
     }
 
     @Test func thePopoverPrimaryActionUsesTheSharedAccentText() throws {

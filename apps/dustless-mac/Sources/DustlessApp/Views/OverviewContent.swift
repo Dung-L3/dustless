@@ -14,15 +14,17 @@ struct OverviewContent: View {
                 engineErrorCard(error)
             }
 
+            ScanPermissionNotice(store: store)
+
             if let report = store.report {
                 if blockedCount > 0 || report.unscannableSummary.total > 0 {
                     attentionCard(report)
                 }
                 largestFindings(report)
                 moduleShortcuts
-            } else if store.isBusy {
+            } else if store.isBusy && store.scanPermission != .waiting {
                 scanningHint
-            } else {
+            } else if store.scanPermission == .none {
                 emptyHint
             }
         }

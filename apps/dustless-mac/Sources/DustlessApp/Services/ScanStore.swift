@@ -29,6 +29,7 @@ final class ScanStore: ObservableObject {
         var storageLargeFiles: [LargeFile] = []
         var selected: Set<String> = []
         var engineError: L10nText?
+        var scanPermission: ScanPermission = .none
     }
 
     struct SelectionChange {
@@ -44,6 +45,7 @@ final class ScanStore: ObservableObject {
     @Published private(set) var diskSpace: DiskSpace?
     @Published private(set) var engineError: L10nText?
     @Published private(set) var busyMessage: L10nText?
+    @Published private(set) var scanPermission: ScanPermission = .none
     @Published var showingConfirmation = false
     @Published var showingCleanupResult = false
     @Published var selection: Set<String> = []
@@ -70,6 +72,9 @@ final class ScanStore: ObservableObject {
     private(set) var storageFilesLoadedAt: Date?
 
     private var cli: DustlessCLI?
+    private var permissionWaitTask: Task<Void, Never>?
+    private var memoryRefreshQueued = false
+    private var storageAppsRefreshQueued = false
 
     init(preview: Preview? = nil) {
         guard let preview else { return }
@@ -83,6 +88,7 @@ final class ScanStore: ObservableObject {
         storageLargeFiles = preview.storageLargeFiles
         selection = preview.selected
         engineError = preview.engineError
+        scanPermission = preview.scanPermission
         phase = preview.report == nil ? .idle : .ready
         memoryPhase = preview.memoryReport == nil ? .idle : .loaded
         storagePhase = .loaded
@@ -131,21 +137,40 @@ final class ScanStore: ObservableObject {
         guard phase != .scanning && phase != .resolvingEngine else { return }
         phase = .resolvingEngine
         engineError = nil
+        scanPermission = .none
+        permissionWaitTask?.cancel()
         busyMessage = L10nText("busyLocating")
         do {
             let cli = try DustlessCLI.resolve()
             self.cli = cli
             phase = .scanning
             busyMessage = L10nText("busyScanning")
+            schedulePermissionWait()
             let report = try await cli.scan()
+            permissionWaitTask?.cancel()
             apply(report, keepsApply: false)
+            scanPermission = report.unscannableSummary.noAccess > 0 ? .required : .none
             busyMessage = nil
             phase = .ready
         } catch {
+            permissionWaitTask?.cancel()
             if report == nil { cli = nil }
             engineError = Self.describe(error)
             busyMessage = nil
             phase = report == nil ? .idle : .ready
+        }
+    }
+
+    func dismissPermissionNotice() {
+        if scanPermission == .required { scanPermission = .none }
+    }
+
+    private func schedulePermissionWait() {
+        permissionWaitTask?.cancel()
+        permissionWaitTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled, let self, self.phase == .scanning else { return }
+            self.scanPermission = .waiting
         }
     }
 
@@ -212,19 +237,25 @@ final class ScanStore: ObservableObject {
     }
 
     func fetchMemory() async {
-        guard memoryPhase != .loading else { return }
-        memoryPhase = .loading
-        memoryError = nil
-        do {
-            let cli = try DustlessCLI.resolve()
-            let report = try await cli.ram()
-            self.memoryReport = report
-            memoryLoadedAt = Date()
-            memoryPhase = .loaded
-        } catch {
-            memoryError = Self.describe(error)
-            memoryPhase = memoryReport == nil ? .failed : .loaded
+        if memoryPhase == .loading {
+            memoryRefreshQueued = true
+            return
         }
+        memoryPhase = .loading
+        repeat {
+            memoryRefreshQueued = false
+            memoryError = nil
+            do {
+                let cli = try DustlessCLI.resolve()
+                let report = try await cli.ram()
+                self.memoryReport = report
+                memoryLoadedAt = Date()
+                memoryPhase = .loaded
+            } catch {
+                memoryError = Self.describe(error)
+                memoryPhase = memoryReport == nil ? .failed : .loaded
+            }
+        } while memoryRefreshQueued
     }
 
     func dismissMemoryError() {
@@ -298,17 +329,23 @@ final class ScanStore: ObservableObject {
     }
 
     func fetchStorageApps() async {
-        guard !isLoadingStorageApps else { return }
-        isLoadingStorageApps = true
-        storageAppsError = nil
-        do {
-            let cli = try DustlessCLI.resolve()
-            let fetched = try await cli.apps()
-            storageApps = fetched.sorted { $0.bytes > $1.bytes }
-            storageAppsLoadedAt = Date()
-        } catch {
-            storageAppsError = Self.describe(error)
+        if isLoadingStorageApps {
+            storageAppsRefreshQueued = true
+            return
         }
+        isLoadingStorageApps = true
+        repeat {
+            storageAppsRefreshQueued = false
+            storageAppsError = nil
+            do {
+                let cli = try DustlessCLI.resolve()
+                let fetched = try await cli.apps()
+                storageApps = fetched.sorted { $0.bytes > $1.bytes }
+                storageAppsLoadedAt = Date()
+            } catch {
+                storageAppsError = Self.describe(error)
+            }
+        } while storageAppsRefreshQueued
         isLoadingStorageApps = false
     }
 
@@ -332,6 +369,12 @@ final class ScanStore: ObservableObject {
 
     func removeStorageFile(atPath path: String) {
         storageLargeFiles.removeAll { $0.path == path }
+    }
+
+    enum ScanPermission: Equatable {
+        case none
+        case waiting
+        case required
     }
 
     static func describe(_ error: Error) -> L10nText {

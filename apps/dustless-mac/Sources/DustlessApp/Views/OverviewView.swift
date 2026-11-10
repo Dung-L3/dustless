@@ -35,7 +35,9 @@ struct OverviewView: View {
     }
 
     private var provenance: String {
-        if store.report == nil, store.isBusy { return settings.t("scanningShort") }
+        if store.report == nil, store.isBusy {
+            return settings.t(store.scanPermission == .waiting ? "scanPermissionShort" : "scanningShort")
+        }
         return settings.provenance(store.report, scannedAt: store.scannedAt, engineFailed: store.engineError != nil)
     }
 
@@ -111,6 +113,7 @@ struct OverviewView: View {
 
     private var heroHint: String {
         if store.report != nil { return settings.t("reclaimableHelp") }
+        if store.scanPermission == .waiting { return settings.t("scanPermissionWaitingBody") }
         if store.isBusy { return settings.t("busyScanning") }
         return store.engineError == nil ? settings.t("overviewNoScan") : settings.t("engineUnavailable")
     }
@@ -126,7 +129,11 @@ struct OverviewView: View {
                         if store.isBusy {
                             ProgressView().controlSize(.small).scaleEffect(0.7)
                         }
-                        Text(store.isBusy ? settings.t("scanningShort") : settings.t("scanNow"))
+                        Text(
+                            store.isBusy
+                                ? settings.t(store.scanPermission == .waiting ? "scanPermissionShort" : "scanningShort")
+                                : settings.t("scanNow")
+                        )
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
