@@ -773,8 +773,12 @@ describe.skipIf(!testApp)("Dustless macOS UI", () => {
           await app.screenshot("applications-partial");
           await chmod(cachesParent, 0o700);
           await app.press("applications.result.retry");
-          await app.find("storage.result.title", 20_000);
-          const retryTitle = await app.find("storage.result.title");
+          const retryDeadline = Date.now() + 20_000;
+          let retryTitle = await app.find("storage.result.title");
+          while (String(retryTitle.value ?? "") !== "Remaining data removed" && Date.now() < retryDeadline) {
+            await Bun.sleep(100);
+            retryTitle = await app.find("storage.result.title");
+          }
           expect(String(retryTitle.value ?? "")).toBe("Remaining data removed");
           expect(await exists(cache)).toBe(false);
           expect(await exists(bundle)).toBe(false);
