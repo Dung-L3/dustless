@@ -62,6 +62,18 @@ export type UninstallOutcome = {
   detail: Reason | null;
 };
 
+export type UninstallRelatedOptions = {
+  home: string;
+  bundleId: string;
+  appPath: string;
+  relatedPaths: string[];
+  confirm: boolean;
+  appDirs?: string[];
+  purge?: boolean;
+  trashDir?: string;
+  beforeDelete?: () => void | Promise<void>;
+};
+
 export type UninstallReport = {
   outcomes: UninstallOutcome[];
   summary: {

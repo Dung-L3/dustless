@@ -89,7 +89,14 @@ export function createRam(deps: RamDeps = {}) {
 
     const before = await getMemoryInfo();
     const signal = options.sigkill ? "SIGKILL" : "SIGTERM";
-    await kill(pid, signal);
+    try {
+      await kill(pid, signal);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? "error";
+      if (code === "ESRCH") return { ok: false, reason: "process not found" };
+      if (code === "EPERM" || code === "EACCES") return { ok: false, reason: "permission denied" };
+      return { ok: false, reason: `could not signal process: ${String((err as Error).message ?? err)}` };
+    }
     await new Promise((resolve) => setTimeout(resolve, 200));
     const after = await getMemoryInfo();
     const reclaimed = Math.max(0, after.available - before.available);

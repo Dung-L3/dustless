@@ -55,6 +55,7 @@ export type ReasonCode =
   | "bad_bundle_id"
   | "leftover_escapes_home"
   | "not_a_leftover"
+  | "target_changed"
   | "not_found"
   | "moved_to_trash"
   | "purged";

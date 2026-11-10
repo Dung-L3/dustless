@@ -136,14 +136,17 @@ describe("glob expansion", () => {
     const redTree = join(sandbox, "red-tree");
     const desktop = join(redTree, "Desktop");
     const cloud = join(redTree, "CloudStorage");
+    const downloads = join(redTree, "Downloads");
     const cache = join(redTree, "Caches");
     await mkdir(join(desktop, "node_modules"), { recursive: true });
     await mkdir(join(cloud, "node_modules"), { recursive: true });
+    await mkdir(join(downloads, "node_modules"), { recursive: true });
     await mkdir(join(cache, "node_modules"), { recursive: true });
     const result = await resolvePattern(join(redTree, "*"));
     expect(result.paths).toEqual([cache]);
     expect(result.paths).not.toContain(desktop);
     expect(result.paths).not.toContain(cloud);
+    expect(result.paths).not.toContain(downloads);
   });
 
   test("a wildcard inside a segment matches that segment only", async () => {

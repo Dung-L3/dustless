@@ -27,7 +27,8 @@ export const HELP = `dustless ${VERSION} — dọn cache máy dev, không xóa m
   dustless awdl [--json]        trạng thái AWDL (AirDrop); --off | --on để tắt/bật
   dustless ram [--list]         quản lý bộ nhớ (chỉ xem, không tự động hành động)
   dustless apps [--json]        liệt kê ứng dụng .app
-  dustless apps --uninstall <path> --confirm [--purge] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
+  dustless apps --uninstall <path> --confirm [--purge] [--related-file <json>] [--json]  gỡ ứng dụng (di chuyển đến Thùng rác)
+  dustless apps --uninstall-related <bundle id> --app <path> --related-file <json> --confirm [--purge]  dọn dữ liệu còn sót sau gỡ một phần
   dustless largefiles [--json] [--min-size 200mb] [--limit 50]  liệt kê tệp lớn nhất trong thư mục home
   dustless largefiles --delete <path> --confirm [--json]  chuyển một tệp sang Thùng rác (không xóa vĩnh viễn; từ chối danh sách đỏ)
   dustless version | help
@@ -88,7 +89,7 @@ const COMMAND_FLAGS: Record<string, readonly string[]> = {
   net: ["advanced", "flush-dns", "reset-dns", "renew-dhcp", "clear-arp", "reset-mtu", "flush-routing", "dry-run", "force", "print-privilege"],
   awdl: ["on", "off", "print-privilege"],
   ram: ["list", "kill", "confirm", "force", "sigkill", "filter", "sort"],
-  apps: ["uninstall", "confirm", "purge", "bundle-only", "trash-dir"],
+  apps: ["uninstall", "uninstall-related", "app", "related-file", "confirm", "purge", "bundle-only", "trash-dir"],
   largefiles: ["min-size", "limit", "delete", "confirm", "trash-dir"],
   mcp: [],
   version: [],

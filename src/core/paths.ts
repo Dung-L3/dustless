@@ -228,7 +228,7 @@ export async function resolvePattern(pattern: string, limits: GlobLimits = GLOB_
         if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
         if (!step.matcher.test(entry.name)) continue;
         const full = join(dir, entry.name);
-        if (isRed(full)) continue;
+        if (isRed(full) || entry.name.toLowerCase() === "downloads") continue;
         next.push(full);
       }
     }

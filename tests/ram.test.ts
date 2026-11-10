@@ -225,6 +225,26 @@ describe("kill", () => {
     expect(signals).toHaveLength(0);
   });
 
+  test("a process that exits between listing and signalling is reported as not found", async () => {
+    const ram = createRam({
+      exec: fakeExec(psResponse([{ pid: 1234, name: "Chrome", mem: 400 * KIB * KIB, command: "/Chrome" }])),
+      kill: () => { const err = new Error("no such process") as NodeJS.ErrnoException; err.code = "ESRCH"; throw err; },
+    });
+    const result = await ram.killProcess(1234, { confirm: true });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("process not found");
+  });
+
+  test("a permission denial is a structured refusal, not an engine crash", async () => {
+    const ram = createRam({
+      exec: fakeExec(psResponse([{ pid: 1234, name: "Chrome", mem: 400 * KIB * KIB, command: "/Chrome" }])),
+      kill: () => { const err = new Error("operation not permitted") as NodeJS.ErrnoException; err.code = "EPERM"; throw err; },
+    });
+    const result = await ram.killProcess(1234, { confirm: true, sigkill: true });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("permission denied");
+  });
+
   test("real kill is never invoked in tests", async () => {
     let called = false;
     const ram = createRam({

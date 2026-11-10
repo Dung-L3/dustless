@@ -1,6 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 import { homeAppDirs, listApps, uninstall } from "../core/apps/index.ts";
+import { uninstallRelated } from "../core/apps/leftovers.ts";
 import type { UninstallReport } from "../core/apps/types.ts";
 import { DEFAULT_MIN_SIZE, deleteLargeFile, findLargeFiles } from "../core/largefiles/index.ts";
 import { describeReason } from "../core/messages.ts";
@@ -35,11 +37,40 @@ async function printUninstall(report: UninstallReport): Promise<number> {
   return report.summary.failed > 0 ? 1 : 0;
 }
 
+async function relatedFile(): Promise<string[] | undefined> {
+  const file = opt("related-file");
+  if (!file) return undefined;
+  const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+  if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== "string")) {
+    throw new Error("--related-file phải là một mảng JSON các đường dẫn");
+  }
+  return parsed;
+}
+
 export async function runApps(_rest: string[]): Promise<number> {
   const home = homedir();
   const confirm = flag("confirm");
   const purge = flag("purge");
   const trashDir = opt("trash-dir");
+
+  if (flag("uninstall-related")) {
+    const bundleId = required("uninstall-related", "dustless apps --uninstall-related <bundle id> --app <đường dẫn .app> --related-file <json> --confirm");
+    const appPath = required("app", "dustless apps --uninstall-related <bundle id> --app <đường dẫn .app> --related-file <json> --confirm");
+    const selected = await relatedFile();
+    if (!selected) throw new Error("--uninstall-related cần --related-file <json>");
+    return await printUninstall(
+      await uninstallRelated({
+        home,
+        bundleId,
+        appPath,
+        relatedPaths: selected,
+        confirm,
+        appDirs: appDirs(),
+        purge,
+        trashDir,
+      }),
+    );
+  }
 
   if (flag("uninstall")) {
     const uninstallPath = required("uninstall", "dustless apps --uninstall <đường dẫn .app> --confirm");
@@ -53,11 +84,12 @@ export async function runApps(_rest: string[]): Promise<number> {
       }
       return 1;
     }
+    const selected = await relatedFile();
     return await printUninstall(
       await uninstall({
         home,
         appPath: target.path,
-        relatedPaths: flag("bundle-only") ? [] : target.relatedPaths,
+        relatedPaths: flag("bundle-only") ? [] : (selected ?? target.relatedPaths),
         confirm,
         appDirs: appDirs(),
         purge,
