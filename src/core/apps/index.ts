@@ -279,6 +279,8 @@ async function measureRelated(home: string, bundleId: string): Promise<RelatedIt
   const candidates = deriveRelatedItems(home, bundleId);
   const measured = await Promise.all(
     candidates.map(async (item) => {
+      const present = await stat(item.path).catch(() => null);
+      if (!present) return null;
       const root = await lstat(item.path).catch(() => null);
       if (!root) return null;
       const bytes = root.isFile() || root.isSymbolicLink() ? root.size : await boundedDirSize(item.path);
