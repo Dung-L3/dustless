@@ -211,15 +211,24 @@ func windowOwner(at point: CGPoint) -> pid_t? {
     return nil
 }
 
+func frameAfterRaising(_ element: AXUIElement, pid: pid_t) -> (CGPoint, CGSize)? {
+    activate(pid)
+    let app = AXUIElementCreateApplication(pid)
+    raiseWindow(app)
+    for _ in 0..<10 {
+        if let box = frame(element) { return box }
+        usleep(50_000)
+    }
+    return frame(element)
+}
+
 func click(_ element: AXUIElement, pid: pid_t) {
-    guard let (point, size) = frame(element) else {
+    guard let (point, size) = frame(element) ?? frameAfterRaising(element, pid: pid) else {
         if pressAncestors(element) { return }
         fail("element has no frame")
     }
     let target = CGPoint(x: point.x + size.width / 2, y: point.y + size.height / 2)
-    activate(pid)
     let app = AXUIElementCreateApplication(pid)
-    raiseWindow(app)
     guard let windows = attribute(app, kAXWindowsAttribute as String) as? [AXUIElement],
           !windows.isEmpty else {
         fail("test app has no window; refusing to click")
@@ -376,6 +385,11 @@ func main() {
         activate(pid)
         click(element, pid: pid)
         print(json(["clicked": true]))
+    case "focused":
+        guard let element = attribute(app, kAXFocusedUIElementAttribute as String) as! AXUIElement? else {
+            fail("no focused element", code: 3)
+        }
+        print(json(elementInfo(element)))
     case "set":
         guard let element = waitForElement(app, options: options) else { fail("element not found", code: 3) }
         guard let value = options.value("value") else { fail("missing --value", code: 2) }

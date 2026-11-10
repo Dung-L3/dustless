@@ -45,6 +45,7 @@ export type DriverResult = Record<string, unknown> & {
 export type LaunchOptions = {
   label: string;
   intercepted?: "net" | "awdl" | "both";
+  denyKill?: boolean;
   language?: "en" | "vi" | "zh";
   appearance?: "system" | "light" | "dark";
 };
@@ -155,6 +156,10 @@ real="$(cd "$(dirname "$0")" && pwd)/dustless-real"
 state_dir="\${DUSTLESS_E2E_STATE:-/tmp}"
 fixtures="\${DUSTLESS_E2E_FIXTURES:-}"
 intercept="\${DUSTLESS_E2E_INTERCEPT:-}"
+if [ "\${DUSTLESS_E2E_DENY_KILL:-}" = "1" ] && [ "\${1:-}" = "ram" ] && [ "\${2:-}" = "--kill" ]; then
+  printf '{"ok":false,"reason":"permission denied"}\n'
+  exit 1
+fi
 case "$intercept:$1" in
   net:net|both:net)
     case "\${2:-}" in
@@ -255,6 +260,7 @@ export class UiApp {
       DUSTLESS_E2E_LOG: this.log,
       DUSTLESS_E2E_STATE: this.state,
       DUSTLESS_E2E_FIXTURES: FIXTURES,
+      ...(this.launchOptions.denyKill ? { DUSTLESS_E2E_DENY_KILL: "1" } : {}),
       DUSTLESS_UI_TESTING: "1",
       DUSTLESS_APPS_DIRS: join(this.home, "Applications"),
       PATH: process.env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -367,6 +373,10 @@ export class UiApp {
     await this.driver(["press", "--label", label, "--timeout", String(timeout / 1000)]);
   }
 
+  async findLabel(label: string, timeout = 10_000): Promise<DriverResult> {
+    return this.driver(["wait", "--label", label, "--timeout", String(timeout / 1000)]);
+  }
+
   async click(identifier: string, timeout = 10_000): Promise<void> {
     await this.driver(["click", "--id", identifier, "--timeout", String(timeout / 1000)]);
   }
@@ -385,6 +395,16 @@ export class UiApp {
 
   async pressMenuItem(item: string): Promise<void> {
     await this.driver(["menu", "--item", item]);
+  }
+
+  async focused(): Promise<DriverResult> {
+    return this.driver(["focused"]);
+  }
+
+  async pressKey(key: string, modifiers?: string): Promise<void> {
+    var args = ["key", "--key", key];
+    if (modifiers) args = [...args, "--modifiers", modifiers];
+    await this.driver(args);
   }
 
   async closeWindow(): Promise<void> {

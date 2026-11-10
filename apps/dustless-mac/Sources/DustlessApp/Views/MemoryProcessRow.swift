@@ -59,14 +59,23 @@ struct MemoryProcessRow: View {
                 .font(Theme.Font.number(size: 12))
                 .frame(minWidth: 64, alignment: .trailing)
 
-            forceMenu
-            stopButton
+            if protected {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textMuted)
+                    .help(settings.t("memoryProtectedHelp"))
+                    .accessibilityLabel(settings.t("memoryProtectedHelp"))
+                    .accessibilityIdentifier("memory.protected.\(proc.pid)")
+            } else {
+                forceMenu
+                stopButton
+            }
         }
         .padding(.vertical, 4)
     }
 
     private var protected: Bool {
-        proc.root || proc.name.lowercased().contains("dustless")
+        proc.isProtectedMemoryTarget
     }
 
     private var rowDescription: String {
@@ -85,11 +94,13 @@ struct MemoryProcessRow: View {
             } label: {
                 Label(settings.t("memoryStopAction"), systemImage: "stop.circle")
             }
+            .accessibilityIdentifier("memory.action.stop.\(proc.pid)")
             Button {
                 onForceStop(proc)
             } label: {
                 Label(settings.t("memoryForceStopNamed", ["name": proc.name]), systemImage: "exclamationmark.octagon.fill")
             }
+            .accessibilityIdentifier("memory.action.forceStop.\(proc.pid)")
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 11, weight: .medium))

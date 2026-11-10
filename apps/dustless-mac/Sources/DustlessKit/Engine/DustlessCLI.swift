@@ -188,11 +188,41 @@ public struct DustlessCLI: Sendable {
     public func uninstallApp(
         path: String,
         purge: Bool = false,
-        includeRelated: Bool = true
+        relatedPaths: [String]? = nil
     ) async throws -> UninstallReport {
         var args = ["apps", "--uninstall", path, "--confirm", "--json"]
         if purge { args.append("--purge") }
-        if !includeRelated { args.append("--bundle-only") }
+        var selection: URL?
+        if let relatedPaths {
+            if relatedPaths.isEmpty {
+                args.append("--bundle-only")
+            } else {
+                let written = try writeSelection(relatedPaths)
+                selection = written
+                args.append(contentsOf: ["--related-file", written.path])
+            }
+        }
+        defer { if let selection { try? FileManager.default.removeItem(at: selection) } }
+        return try await decode(UninstallReport.self, from: run(args))
+    }
+
+    public func uninstallRelated(
+        bundleId: String,
+        appPath: String,
+        relatedPaths: [String],
+        purge: Bool = false
+    ) async throws -> UninstallReport {
+        let selection = try writeSelection(relatedPaths)
+        defer { try? FileManager.default.removeItem(at: selection) }
+        var args = [
+            "apps",
+            "--uninstall-related", bundleId,
+            "--app", appPath,
+            "--related-file", selection.path,
+            "--confirm",
+            "--json",
+        ]
+        if purge { args.append("--purge") }
         return try await decode(UninstallReport.self, from: run(args))
     }
 

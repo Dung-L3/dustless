@@ -208,7 +208,8 @@ struct MenuBarContent: View {
     }
 
     private var busyText: String {
-        store.busyMessage.map { settings.text($0) } ?? settings.t("scanningShort")
+        if store.scanPermission == .waiting { return settings.t("scanPermissionShort") }
+        return store.busyMessage.map { settings.text($0) } ?? settings.t("scanningShort")
     }
 
     @ViewBuilder

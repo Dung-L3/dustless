@@ -16,6 +16,10 @@ struct DetailView: View {
                 busyBanner(message)
             }
 
+            ScanPermissionNotice(store: store)
+                .padding(.horizontal, Theme.Space.page)
+                .padding(.top, Theme.Space.s)
+
             if let report = store.report {
                 if let error = store.engineError {
                     staleBanner(error)

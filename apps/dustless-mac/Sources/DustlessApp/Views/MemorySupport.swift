@@ -1,8 +1,34 @@
+import AppKit
 import DustlessKit
 import SwiftUI
 
 typealias MemProcess = DustlessKit.ProcessInfo
 typealias MemCategory = DustlessKit.Category
+
+extension DustlessKit.ProcessInfo {
+    var isProtectedMemoryTarget: Bool {
+        root || name.lowercased().contains("dustless")
+    }
+}
+
+@MainActor
+enum MemoryIconCache {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for path: String) -> NSImage {
+        if let cached = cache[path] { return cached }
+        if cache.count > 400 { cache.removeAll(keepingCapacity: true) }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        cache[path] = image
+        return image
+    }
+}
+
+enum QuitStatus {
+    case quit
+    case stillOpen
+    case requestFailed
+}
 
 enum MemCategoryFilter: String, CaseIterable, Identifiable {
     case all

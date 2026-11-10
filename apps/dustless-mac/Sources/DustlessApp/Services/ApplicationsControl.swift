@@ -2,17 +2,47 @@ import AppKit
 import DustlessKit
 import Foundation
 
+struct ApplicationRetry: Equatable {
+    let app: InstalledApp
+    let relatedPaths: [String]
+    let purge: Bool
+}
+
 @MainActor
 final class ApplicationsControl: ObservableObject {
     @Published var pendingSheet: InstalledApp?
     @Published private(set) var result: UninstallReport?
     @Published private(set) var resultIsPartial = false
     @Published private(set) var resultIsFailure = false
+    @Published private(set) var retry: ApplicationRetry?
     @Published private(set) var workingApp: String?
     @Published private(set) var isQuitting = false
     @Published private(set) var error: L10nText?
 
+    private var resultIsRetrySuccess = false
+    private var resultAppMoved = false
+    private var resultIncludedRelated = false
+    private var resultUnselectedRelated = false
+
     var isWorking: Bool { workingApp != nil }
+
+    var resultTitleKey: String {
+        if resultIsRetrySuccess { return "appsRetrySucceeded" }
+        if resultIsFailure { return "appsUninstallFailed" }
+        if resultIsPartial { return "appsPartialTitle" }
+        if resultAppMoved && (resultUnselectedRelated || !resultIncludedRelated) {
+            return "appsApplicationRemovedTitle"
+        }
+        return "appsUninstalled"
+    }
+
+    var resultMessage: L10nText? {
+        guard result != nil, !resultIsPartial, !resultIsFailure else { return nil }
+        if resultIsRetrySuccess { return L10nText("appsSelectedData") }
+        if resultAppMoved && !resultIncludedRelated { return L10nText("appsApplicationOnly") }
+        if resultAppMoved && resultUnselectedRelated { return L10nText("appsUnselectedRelatedKept") }
+        return L10nText("appsSelectedData")
+    }
 
     func isRunning(_ app: InstalledApp) -> Bool {
         !RunningAppIdentity.running(bundleId: app.bundleId, appPath: app.path).isEmpty
@@ -30,7 +60,7 @@ final class ApplicationsControl: ObservableObject {
 
     func uninstall(
         _ app: InstalledApp,
-        includeRelated: Bool,
+        relatedPaths: [String],
         purge: Bool,
         store: ScanStore
     ) async {
@@ -44,10 +74,17 @@ final class ApplicationsControl: ObservableObject {
         }
 
         if !(await quitIfNeeded(app)) {
-            let message = error
-            pendingSheet = nil
-            error = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.error = message }
+            await fail(message: error)
+            return
+        }
+        guard RunningAppIdentity.running(bundleId: app.bundleId, appPath: app.path).isEmpty else {
+            await fail(message: L10nText("appsQuitFailed", ["name": app.name]))
+            return
+        }
+
+        guard FileManager.default.fileExists(atPath: app.path),
+              Bundle(url: URL(fileURLWithPath: app.path))?.bundleIdentifier == app.bundleId else {
+            await fail(message: L10nText("appsTargetChanged"))
             return
         }
 
@@ -56,23 +93,49 @@ final class ApplicationsControl: ObservableObject {
             let report = try await cli.uninstallApp(
                 path: app.path,
                 purge: purge,
-                includeRelated: includeRelated
+                relatedPaths: relatedPaths
             )
-            result = report
-            let moved = report.summary.trashed + report.summary.purged
-            resultIsPartial = report.summary.failed > 0 && moved > 0
-            resultIsFailure = report.summary.failed > 0 && moved == 0
-            pendingSheet = nil
-            if let appOutcome = report.outcomes.first,
-               appOutcome.status == .trashed || appOutcome.status == .purged {
-                store.removeStorageApp(atPath: app.path)
-            }
+            apply(
+                report,
+                app: app,
+                relatedPaths: relatedPaths,
+                purge: purge,
+                retrySuccess: false,
+                store: store
+            )
             await store.fetchStorageApps()
             await store.fetchStorageVolumes()
         } catch {
-            let message = ScanStore.describe(error)
-            pendingSheet = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.error = message }
+            await fail(message: ScanStore.describe(error))
+        }
+    }
+
+    func retryRemaining(store: ScanStore) async {
+        guard !isWorking, let retry else { return }
+        workingApp = retry.app.path
+        error = nil
+        isQuitting = false
+        defer { workingApp = nil }
+
+        do {
+            let cli = try DustlessCLI.resolve()
+            let report = try await cli.uninstallRelated(
+                bundleId: retry.app.bundleId,
+                appPath: retry.app.path,
+                relatedPaths: retry.relatedPaths,
+                purge: retry.purge
+            )
+            apply(
+                report,
+                app: retry.app,
+                relatedPaths: retry.relatedPaths,
+                purge: retry.purge,
+                retrySuccess: report.summary.failed == 0,
+                store: store
+            )
+            await store.fetchStorageApps()
+        } catch {
+            await fail(message: ScanStore.describe(error))
         }
     }
 
@@ -84,6 +147,60 @@ final class ApplicationsControl: ObservableObject {
         result = nil
         resultIsPartial = false
         resultIsFailure = false
+        resultIsRetrySuccess = false
+        resultAppMoved = false
+        resultIncludedRelated = false
+        resultUnselectedRelated = false
+    }
+
+    func dismissRetry() {
+        retry = nil
+        clearResult()
+    }
+
+    private func apply(
+        _ report: UninstallReport,
+        app: InstalledApp,
+        relatedPaths: [String],
+        purge: Bool,
+        retrySuccess: Bool,
+        store: ScanStore
+    ) {
+        result = report
+        let moved = report.summary.trashed + report.summary.purged
+        let failed = report.summary.failed
+        resultIsPartial = failed > 0 && moved > 0
+        resultIsFailure = failed > 0 && moved == 0
+        resultIsRetrySuccess = retrySuccess
+        resultIncludedRelated = !relatedPaths.isEmpty
+        let selected = Set(relatedPaths)
+        resultUnselectedRelated = app.relatedItems.contains { !selected.contains($0.path) }
+        pendingSheet = nil
+
+        let appOutcome = report.outcomes.first {
+            RunningAppIdentity.isSamePath($0.path, app.path)
+        }
+        resultAppMoved = appOutcome?.status == .trashed || appOutcome?.status == .purged
+
+        if resultAppMoved {
+            store.removeStorageApp(atPath: app.path)
+        }
+
+        let failedRelated = report.outcomes
+            .filter { $0.status == .failed && !RunningAppIdentity.isSamePath($0.path, app.path) }
+            .map(\.path)
+        if resultAppMoved, !failedRelated.isEmpty {
+            retry = ApplicationRetry(app: app, relatedPaths: failedRelated, purge: purge)
+        } else {
+            retry = nil
+        }
+    }
+
+    private func fail(message: L10nText?) async {
+        pendingSheet = nil
+        error = nil
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        error = message
     }
 
     private func quitIfNeeded(_ app: InstalledApp) async -> Bool {
