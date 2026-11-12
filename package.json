@@ -17,7 +17,7 @@
     "installer:win": "bun scripts/make-win-installer.ts"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3",
+    "@types/bun": "^1.4.4",
     "typescript": "^5.9.0"
   },
   "engines": {
